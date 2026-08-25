@@ -500,3 +500,116 @@ body {
   background: rgba(8, 9, 12, 0.5);
   z-index: 15;
 }
+
+/* ------------------------------------------------------------------ */
+/* Tablet — the neutral shared display (§12)                           */
+/* ------------------------------------------------------------------ */
+
+/* Same palette as the phones. It sits in the middle of the same table, and a
+   brighter shared screen would light the room differently as phases change —
+   the same argument as §13.1, just at a bigger size. */
+.tablet {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px;
+  gap: 8px;
+}
+
+.tablet__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tablet__phase {
+  font-family: var(--font);
+  font-size: 26px;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+
+.tablet__sub {
+  font-size: 14px;
+  color: var(--ink-dim);
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+.tablet__timer {
+  font-family: var(--font);
+  font-size: 34px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+}
+
+.tablet__timer--paused {
+  color: var(--gold);
+}
+
+.tablet__table {
+  flex: 1;
+  min-height: 0;
+  width: min(100%, 620px);
+  margin: 0 auto;
+}
+
+.tablet .seat {
+  width: 96px;
+}
+
+.tablet .seat__card {
+  width: 62px;
+  height: 88px;
+}
+
+.tablet .seat__card::after {
+  width: 26px;
+  height: 26px;
+}
+
+.tablet .seat__name {
+  font-size: 15px;
+  max-width: 96px;
+}
+
+.tablet .seat__role {
+  font-size: 13px;
+}
+
+.tablet .centercard {
+  width: 44px;
+  height: 62px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Lobby                                                               */
+/* ------------------------------------------------------------------ */
+
+.lobbywrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 18px;
+}
+
+.lobby {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.lobby .table {
+  width: min(100%, 300px);
+  margin: 0 auto;
+}
+
+/* Seat numbers sit on a FACE-DOWN card here, not on the bone-coloured revealed
+   one, so they need the light ink rather than the dark. */
+.lobby .seat__role {
+  color: var(--ink-dim);
+  font-size: 13px;
+}
