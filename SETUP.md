@@ -146,6 +146,13 @@ export const firebaseConfig = {
 };
 ```
 
+**The store is already written.** `src/firestore/roomstore.ts` implements the
+same interfaces the referee already runs against, so once `config.ts` exists the
+only remaining work is calling `connect(firebaseConfig)` and handing the referee
+a `FirestoreRoomStore` instead of an `InMemoryRoomStore`. There is a test
+asserting the two stay in step, because if they drift the whole test suite keeps
+passing while the app breaks.
+
 ## 10.5 Connect the CLI and deploy the rules
 
 ```bash
@@ -177,11 +184,12 @@ If the first one is allowed, stop and tell me — that's the leak.
 ## What I need back from you
 
 1. ~~**Task 9 output**~~ — ✅ done, 33/33 passing.
-2. **The project ID** (not the whole config unless you want me to wire it).
+2. **The project ID** (or just drop the config into `src/firebase/config.ts`
+   yourself — there is a `config.example.ts` to copy).
 3. **The Firestore region** you picked.
 
-With those I can wire the orchestration layer to a real database. Until then I
-can keep building against the in-memory adapter, which needs nothing from you.
+Everything else is built and tested against the in-memory store, so this is the
+last thing standing between the repo and a playable game.
 
 ## Cost
 
