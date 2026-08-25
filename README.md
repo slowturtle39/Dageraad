@@ -88,14 +88,47 @@ once the Alpha Wolf has resolved.
 
 ### The anti-leak invariant
 
-`schedule.ts` computes everything from the **active role set alone**, which is
-public. It must never read the deal, who holds what, or what anyone chose.
+**Every timing constant is derived from the public active-role list. Nothing in
+the timing path may read the deal.** `schedule.ts` already obeys this; the
+orchestration layer must too.
 
-The case this protects: if the Alpha Wolf is in the active set but its card sits
-in the *centre*, nobody performs that action — so the step must still be spent,
-and still take the same wall-clock time. Otherwise a short wait tells the
-Mystieke Wolf exactly where the Alpha Wolf is. **Mode 1 is not leak-safe until
-the orchestration layer pads each step to a fixed duration.** Not yet built.
+The active role *set* is public — everyone knows whether the Alpha Wolf is in
+this game. What is secret is whether her card was **dealt to a player or is in
+the centre**, and that is what timing leaks: if nobody is playing her, a naive
+implementation resolves that step instantly, and the short wait tells the
+Mystieke Wolf exactly where the card is.
+
+**A fixed-length window IS the padding** — no time is added, because the window
+is needed anyway. A window whose role turned out to be in the centre simply
+passes with nobody tapping, and looks identical from outside.
+
+Each role's reveal lands when **its own** dependency clears, not at the end of
+the night. The Alpha Wolf's action is a single tap (the card is always the
+centre wolf card), and nothing before the Mystieke Wolf mutates anything else —
+so she has her card by about second 9 and is done. Target timeline for the
+default set, mode 1:
+
+| t | What |
+|---|---|
+| 0 | Deal. Everyone reads their role and taps in parallel. Droomwolf sees the wolves at once. |
+| ~8s | Alpha Wolf window closes. Swap applies. |
+| ~9s | **Mystieke Wolf sees her card — done.** Dubbelganger sees what it copied. |
+| 9→21s | Dubbelganger's second decision. |
+| ~21s | Heks sees her centre card. |
+| 21→31s | Heks picks her target. |
+| ~32s | Dorpsgek applies. Medium sees her card. |
+| 32→38s | Medium's Looier swap, if it came up. |
+
+Roles needing a second decision need padding on **both** halves: the reveal they
+wait on lands at a fixed offset, *and* their window exists at fixed length even
+when nobody plays the role they depend on.
+
+Durations self-calibrate from measured submission latency, but must stay
+**public per-role constants frozen at room creation** — per-player, or adapting
+mid-night, is the leak itself. Calibrate on p90 of submitted samples. A host
+pause button covers AFK players; discard paused windows from telemetry.
+
+**Not yet built** — this is the orchestration layer, and it's the next task.
 
 ---
 
@@ -134,7 +167,7 @@ Heks acting later still picks from the original three. Enforced structurally by
 
 ## Not built yet
 
-- Orchestration layer (round/step timing, the step padding above)
+- Orchestration layer (the fixed timeline above, latency telemetry, host pause)
 - Firestore schema + security rules — needs an Opus pass
 - Any UI; the chess-puzzle filler; the tablet display
 - `onderzoeker` (reveal-then-decide; would add a third round), Curator + artifacts
