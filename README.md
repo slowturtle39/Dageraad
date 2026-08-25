@@ -128,7 +128,52 @@ Durations self-calibrate from measured submission latency, but must stay
 mid-night, is the leak itself. Calibrate on p90 of submitted samples. A host
 pause button covers AFK players; discard paused windows from telemetry.
 
-**Not yet built** — this is the orchestration layer, and it's the next task.
+Built in `timeline.ts`, calibration in `telemetry.ts`, audited by
+`timeline.test.ts`. Actual output for the default set:
+
+```
+MODE 1 (dependency)  total 40s      MODE 2 (tworound)  total 22s
+  0s→8s   everyone taps               0s→8s   everyone taps
+  9s→21s  dubbelganger                9s→21s  dubbelganger
+  22s→32s heks
+  33s→39s medium                    reveals: 9s  droomwolf, alphawolf,
+                                              mystiekewolf, dubbelganger
+reveals: 9s  droomwolf, alphawolf            22s  heks, leerlingziener,
+                mystiekewolf, dubbelganger        dorpsgek, medium
+         22s heks
+         33s leerlingziener, dorpsgek, medium
+```
+
+### The physical tell — and why the table view must not change colour
+
+Server-side timing rigor does nothing about the leak happening *in the room*.
+If most players finish tapping at 8s and only the Dubbelganger is still tapping
+at second 20, anyone glancing around the table has their identity for free.
+This affects **both modes** — mode 2's round 2 is the Dubbelganger alone too.
+
+Cover: **tapping a player shows their historical stats**, and that is the
+*default* night screen — you land on the seating circle once you've chosen (or
+immediately, if you have no action), so tapping is the table's resting state
+rather than something a bored player might not bother with. A second decision
+prompt appears *over* that same surface.
+
+Hard UI constraints that make or break it:
+
+- **The night table view and the day table view must look the same.** No colour
+  swap on state change — the glow off someone's face changes even if they never
+  look at the screen, and that is itself a tell.
+- **The action prompt must overlay the table view, not replace it.** A different
+  layout or colour is readable from across the table without reading a word.
+- **Stats are historical only.** Wins, per-role win rate, vote accuracy. The
+  moment it shows anything about tonight it is a worse problem than the one it
+  solves.
+- Stay as close as possible to the physical game's art style.
+
+Residual risk worth naming: this covers *phone activity*, not human behaviour.
+Someone deliberating looks different from someone idly scrolling. True of the
+physical game too, and outside the app's control.
+
+A chess-puzzle filler can be added later if stats alone don't hold attention.
 
 ---
 
@@ -167,7 +212,7 @@ Heks acting later still picks from the original three. Enforced structurally by
 
 ## Not built yet
 
-- Orchestration layer (the fixed timeline above, latency telemetry, host pause)
+- Host pause button + wiring the timeline to real clocks/Firestore
 - Firestore schema + security rules — needs an Opus pass
 - Any UI; the chess-puzzle filler; the tablet display
 - `onderzoeker` (reveal-then-decide; would add a third round), Curator + artifacts

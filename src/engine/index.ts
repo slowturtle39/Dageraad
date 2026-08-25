@@ -6,3 +6,5 @@ export * from './resolve.js';
 export * from './schedule.js';
 export * from './dayphase.js';
 export * from './presets.js';
+export * from './timeline.js';
+export * from './telemetry.js';
