@@ -2,14 +2,13 @@
 
 Companion app for *Dageraad: 1 Nacht Weerwolven & Waaghalzen* with our house rules.
 
-Current state: **resolution engine, day phase, night timeline, Firestore rules.**
-**Start with `SETUP.md`.** Original line follows:
-resolution engine, day phase, and night timeline — complete and
-tested.** No UI, no Firebase wiring yet.
+Current state: **engine, timeline, orchestration, UI and Firestore rules all
+built and tested.** Not yet wired to a live Firebase project — see `SETUP.md`.
 
 ```bash
 npm install
-npm test        # 41 tests
+npm test        # 113 tests
+npm run dev     # the demo: phone / tablet / lobby, nl + en
 npm run typecheck
 ```
 
@@ -58,7 +57,28 @@ src/engine/
   timeline.ts   the fixed night timeline (anti-leak)
   telemetry.ts  latency capture + duration calibration
   dayphase.ts   voting, tie/abstain/Bodyguard rules, win conditions
+  suspicion.ts  private suspicion tracker scoring
   presets.ts    default role set + the two mode configs
+
+src/orchestration/    (knows about time; still knows nothing about Firebase)
+  replay.ts     replay-until-blocked, so the engine can stay synchronous
+  referee.ts    the night loop: windows, deadlines, timed reveal release
+  dayrunner.ts  discussion timer, suspense extension, vote window
+  clock.ts      Clock interface + FakeClock + PausableClock (host pause)
+  store.ts      RoomStore interface + InMemoryRoomStore
+
+src/ui/               (one palette, night and day — see below)
+  table.ts      the seating circle, the home screen in every phase
+  sheet.ts      prompts and panels drawn OVER the table, never instead
+  stats.ts      tap-a-player history; the night phase's cover traffic
+  voting.ts     vote + results sheets
+  lobby.ts      seating arrangement (functionally required, not decoration)
+  tablet.ts     the neutral shared display
+  i18n.ts       nl default, en per device
+
+src/firestore/
+  schema.ts     document shapes, mirroring the rules
+  rules.spec.ts rules tests, written as attacks
 ```
 
 ### Two rules everything else hangs off
@@ -209,17 +229,21 @@ src/firestore/schema.ts      document shapes, mirroring the rules
 src/firestore/rules.spec.ts  rules tests, written as attacks
 ```
 
-### ⚠️ THE RULES ARE UNVERIFIED — RUN THEM BEFORE TRUSTING THEM
+### ✅ Rules verified — 33/33 passing (Windows, 2026-08-25)
 
 ```bash
 npm run test:rules     # boots the emulator, runs the attack suite
 ```
 
-They were written but **never executed**: the sandbox they were authored in
-blocks the emulator jar download. The test suite exists and typechecks, but a
-rule that denies everything and a rule that allows everything both look fine
-until you run them. Treat these as a reviewed draft, not a tested artefact.
-First run needs internet (it downloads the emulator).
+Every `assertFails` attack case was correctly denied — no permissive-rule leaks
+— and no legitimate action is blocked by an over-strict rule. The
+`PERMISSION_DENIED` lines in the emulator log are expected; they are the attacks
+being refused.
+
+Needs **Java 11+** (the emulator is a Java program) and internet on first run.
+The script invokes firebase-tools and vitest through `node` directly rather than
+the `node_modules/.bin` shims, because npm 11 on Windows does not always create
+them.
 
 ### The shape of the problem
 
@@ -279,11 +303,15 @@ is a test asserting the write is rejected.
 
 ## Not built yet
 
-- Host pause button + wiring the timeline to real clocks/Firestore
-- Firestore schema + security rules — needs an Opus pass
-- Any UI; the chess-puzzle filler; the tablet display
-- `onderzoeker` (reveal-then-decide; would add a third round), Curator + artifacts
-- Eyes-closed / AI narrator mode — deprioritized on purpose
+- **Firebase wiring.** Everything runs against `InMemoryRoomStore`; a
+  `FirestoreRoomStore` implementing the same six methods drops in once the
+  project exists. See `SETUP.md`.
+- **Curator + artifacts.** The placement mechanic is trivial, but the artifact
+  list and their effects are specified nowhere, and inventing house rules Milan
+  would then have to unpick is worse than leaving it. Needs his spec.
+- **Profile pictures.** Names and initials work; photo upload does not.
+- **Eyes-closed / AI narrator mode.** Deprioritised on purpose — the AI is more
+  work and the group prefers the phone mode because it is faster.
 
 ## When Firebase is needed
 
