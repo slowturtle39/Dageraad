@@ -2,12 +2,12 @@
 
 Companion app for *Dageraad: 1 Nacht Weerwolven & Waaghalzen* with our house rules.
 
-Current state: **night-phase resolution engine + day phase, complete and tested.**
-No UI, no Firebase wiring yet.
+Current state: **resolution engine, day phase, and night timeline — complete and
+tested.** No UI, no Firebase wiring yet.
 
 ```bash
 npm install
-npm test        # 19 tests
+npm test        # 41 tests
 npm run typecheck
 ```
 
@@ -52,7 +52,9 @@ src/engine/
   state.ts      card/slot model, swaps, the Dorpsgek rotation
   appliers.ts   per-role night actions, as generators
   resolve.ts    canonical-order replay driver
-  schedule.ts   round + dependency scheduling (anti-leak)
+  schedule.ts   round scheduling (delegates gate logic to timeline.ts)
+  timeline.ts   the fixed night timeline (anti-leak)
+  telemetry.ts  latency capture + duration calibration
   dayphase.ts   voting, tie/abstain/Bodyguard rules, win conditions
   presets.ts    default role set + the two mode configs
 ```
@@ -89,8 +91,8 @@ once the Alpha Wolf has resolved.
 ### The anti-leak invariant
 
 **Every timing constant is derived from the public active-role list. Nothing in
-the timing path may read the deal.** `schedule.ts` already obeys this; the
-orchestration layer must too.
+the timing path may read the deal.** `timeline.ts` owns this logic; nothing else
+may reimplement it.
 
 The active role *set* is public — everyone knows whether the Alpha Wolf is in
 this game. What is secret is whether her card was **dealt to a player or is in
