@@ -98,6 +98,18 @@ export interface NightState {
   revealedCards: Set<CardId>;
   /** Extra center slot holding the Alpha Wolf's wolf card, if in play. */
   alphaWolfSlot: SlotIndex | null;
+  /**
+   * Seats that COUNT AS a role without their card having changed.
+   *
+   * The Onderzoeker is the only source of this: on seeing a Weerwolf or Looier
+   * card they must stop looking and they themselves become that role/team,
+   * while the player they looked at keeps it too. Both are that role at dawn.
+   *
+   * This is deliberately a third thing alongside originalRole (drives turns)
+   * and the current card (drives everything else). Trying to express it by
+   * moving cards would silently rewrite another player's role.
+   */
+  assumedRole: Record<SeatIndex, RoleId>;
 }
 
 /**
@@ -116,6 +128,8 @@ export type PrivateInfo =
   /** Told they were picked by the Rechter; first day statement must be true. */
   | { kind: 'judged'; step: number }
   | { kind: 'own-final-card'; step: number; role: RoleId }
+  /** The Onderzoeker has become the role they uncovered. */
+  | { kind: 'became-role'; step: number; role: RoleId }
   /**
    * Confirms an action executed, WITHOUT revealing card faces. Used for roles
    * the physical game keeps blind (Alpha Wolf, Dronkaard): they already chose

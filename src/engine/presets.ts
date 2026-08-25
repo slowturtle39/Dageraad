@@ -22,8 +22,7 @@ export const DEFAULT_ACTIVE_ROLES: RoleId[] = [
 export const OPTIONAL_ROLES: RoleId[] = [
   'schildwacht', 'weerwolf', 'volgeling', 'vrijmetselaar', 'ziener',
   'rechter', 'onrustoker', 'dronkaard', 'slapeloze', 'schoneslaapster',
-  'bodyguard', 'jager', 'dorpeling', 'looier',
-  // 'onderzoeker' — not implemented yet; would add a third round when active.
+  'bodyguard', 'jager', 'dorpeling', 'looier', 'onderzoeker',
 ];
 
 export const TWO_ROUND_CONFIG: GameConfig = {

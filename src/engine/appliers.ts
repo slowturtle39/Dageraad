@@ -346,6 +346,50 @@ const medium: Applier = function* (ctx) {
   }
 };
 
+/**
+ * Onderzoeker (Paranormal Investigator), printed rulebook behaviour.
+ *
+ * Views other players' cards one at a time. On seeing a Weerwolf or a Looier
+ * they MUST stop, and they themselves become that role/team — the player they
+ * looked at keeps it too, so both end the night as that role. Otherwise they
+ * may look at a second card.
+ *
+ * This is the §6.0 interaction the concept doc calls out: becoming the Looier
+ * is not a card swap, so it is recorded as an assumed role rather than by
+ * moving anything. Moving a card here would silently rewrite the other player.
+ *
+ * Genuinely reveal-then-decide — the second look depends on what the first one
+ * showed — so an active Onderzoeker adds a window to the night.
+ */
+const onderzoeker: Applier = function* (ctx) {
+  const seen: SeatIndex[] = [];
+
+  for (const step of ['pi-first', 'pi-second'] as const) {
+    const choice = yield ask(
+      ctx,
+      step,
+      { kind: 'seat', exclude: [ctx.actor, ...seen], optional: true },
+      step === 'pi-second' ? { dependsOnReveal: true } : {},
+    );
+    const target = seatOf(choice);
+    if (target === null) {
+      if (seen.length === 0) ctx.info(ctx.actor, { kind: 'no-action', step: ctx.step });
+      return;
+    }
+
+    const role = viewSlot(ctx, target);
+    if (!role) return;
+    seen.push(target);
+    ctx.info(ctx.actor, { kind: 'saw-card', step: ctx.step, slot: target, role });
+
+    if (isWolfRole(role) || role === 'looier') {
+      ctx.state.assumedRole[ctx.actor] = role;
+      ctx.info(ctx.actor, { kind: 'became-role', step: ctx.step, role });
+      return; // must stop looking
+    }
+  }
+};
+
 /** Sees their own final card. Both are the same action at different slots. */
 const peekOwnFinalCard: Applier = function* (ctx) {
   ctx.info(ctx.actor, {
@@ -410,8 +454,11 @@ export const APPLIERS: Partial<Record<RoleId, Applier>> = {
   dorpsgek,
   dronkaard,
   medium,
+  onderzoeker,
   slapeloze: peekOwnFinalCard,
   schoneslaapster: peekOwnFinalCard,
-  // onderzoeker: TODO — reveal-then-decide; adds a third round when active.
-  // curator + artifacts: TODO — separate subsystem.
+  // curator + artifacts: NOT IMPLEMENTED. The placement mechanic is easy, but
+  // the artifact list and their effects are not specified anywhere in the
+  // concept doc and I am not going to invent a set of house rules Milan would
+  // then have to unpick. Needs his spec first; see README "Not built yet".
 };

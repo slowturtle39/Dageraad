@@ -122,6 +122,7 @@ export function createNightState(deal: DealInput): NightState {
     shieldedSlots: new Set(),
     revealedCards: new Set(),
     alphaWolfSlot,
+    assumedRole: {},
   };
 }
 
@@ -133,15 +134,20 @@ export function cloneNightState(state: NightState): NightState {
     originalRole: [...state.originalRole],
     shieldedSlots: new Set(state.shieldedSlots),
     revealedCards: new Set(state.revealedCards),
+    assumedRole: { ...state.assumedRole },
   };
 }
 
 /**
  * §6.0: team membership is evaluated from the FINAL card a player holds,
  * never the role they were dealt.
+ *
+ * The one exception is an assumed role (the Onderzoeker becoming what they
+ * uncovered). That is not a card movement, so it cannot live in `slots`, and it
+ * must win over the card actually sitting in front of them.
  */
 export function finalRoleOf(state: NightState, seat: SeatIndex): RoleId {
-  return roleAt(state, seat);
+  return state.assumedRole[seat] ?? roleAt(state, seat);
 }
 
 /** Seats whose current card is an actual Weerwolf, as of right now. */
@@ -151,7 +157,7 @@ export function wolfSeats(
 ): SeatIndex[] {
   const seats: SeatIndex[] = [];
   for (let seat = 0; seat < state.seatCount; seat++) {
-    if (isWolf(roleAt(state, seat))) seats.push(seat);
+    if (isWolf(finalRoleOf(state, seat))) seats.push(seat);
   }
   return seats;
 }

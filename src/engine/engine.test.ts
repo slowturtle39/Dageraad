@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG, TWO_ROUND_CONFIG,
   centerSlot, computeRoundSchedule, createNightState, defaultNightOrder,
-  resolveDay, resolveNight, roleAt, voteAccuracy, voteOutcomes,
+  resolveDay, resolveNight, roleAt, voteAccuracy, voteOutcomes, finalRoleOf,
 } from './index.js';
 import type { AnswerProvider } from './resolve.js';
 import type { Choice, GameConfig, RoleId } from './types.js';
@@ -413,5 +413,77 @@ describe('Bodyguard: a vote that causes the village to lose is tracked separatel
     const res = resolveDay(state, cast);
     // Pointed at a villager -> plain 'incorrect', never 'caused-village-loss'.
     expect(voteOutcomes(state, cast, res)[0]).toBe('incorrect');
+  });
+});
+
+describe('Onderzoeker (§6.0 assumed roles)', () => {
+  it('stops on a wolf and becomes one, while the target keeps it too', () => {
+    const state = deal(
+      ['onderzoeker', 'weerwolf', 'dorpeling'],
+      ['jager', 'jager', 'jager'],
+    );
+    const res = run(state, ['onderzoeker'], answers({
+      '0:pi-first': seat(1),
+      '0:pi-second': seat(2),   // should never be asked
+    }));
+
+    expect(res.privateInfo[0]!).toContainEqual(
+      expect.objectContaining({ kind: 'became-role', role: 'weerwolf' }),
+    );
+    // Must stop looking — the second decision is never reached.
+    expect(res.decisions.some((d) => d.key === 'pi-second')).toBe(false);
+
+    // Their CARD is untouched; they simply count as a wolf now. Both are wolves.
+    expect(roleAt(res.state, 0)).toBe('onderzoeker');
+    expect(finalRoleOf(res.state, 0)).toBe('weerwolf');
+    expect(finalRoleOf(res.state, 1)).toBe('weerwolf');
+  });
+
+  it('becoming the Looier means they win only by being lynched', () => {
+    const state = deal(
+      ['onderzoeker', 'looier', 'weerwolf'],
+      ['jager', 'jager', 'jager'],
+    );
+    const res = run(state, ['onderzoeker'], answers({ '0:pi-first': seat(1) }));
+    expect(finalRoleOf(res.state, 0)).toBe('looier');
+
+    // Lynching the assumed-Looier triggers the full Looier ruling: they win
+    // alone and everybody else loses.
+    const day = resolveDay(res.state, [
+      { voter: 1, target: 0, abstain: false },
+      { voter: 2, target: 0, abstain: false },
+    ]);
+    expect(day.teamsWon).toEqual({ village: false, wolf: false, solo: true });
+  });
+
+  it('may look at a second card when the first is harmless', () => {
+    const state = deal(
+      ['onderzoeker', 'dorpeling', 'ziener'],
+      ['jager', 'jager', 'jager'],
+    );
+    const res = run(state, ['onderzoeker'], answers({
+      '0:pi-first': seat(1),
+      '0:pi-second': seat(2),
+    }));
+    const cards = res.privateInfo[0]!.filter((i) => i.kind === 'saw-card');
+    expect(cards).toHaveLength(2);
+    expect(res.state.assumedRole[0]).toBeUndefined();
+  });
+
+  it('its second look is reveal-dependent, so it earns its own window', () => {
+    const state = deal(
+      ['onderzoeker', 'dorpeling', 'ziener'],
+      ['jager', 'jager', 'jager'],
+    );
+    const res = run(state, ['onderzoeker'], answers({
+      '0:pi-first': seat(1), '0:pi-second': seat(2),
+    }));
+    expect(res.decisions.find((d) => d.key === 'pi-second')!.dependsOnReveal).toBe(true);
+  });
+
+  it('adds a third window to the default set when active', () => {
+    const withPI = [...DEFAULT_ACTIVE_ROLES, 'onderzoeker'] as RoleId[];
+    expect(computeRoundSchedule(DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG).rounds).toBe(2);
+    expect(computeRoundSchedule(withPI, TWO_ROUND_CONFIG).rounds).toBe(3);
   });
 });
