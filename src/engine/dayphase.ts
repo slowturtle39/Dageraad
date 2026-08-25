@@ -163,52 +163,107 @@ function finish(
 }
 
 /**
+ * How a single vote scored (§10).
+ *
+ * `caused-village-loss` is deliberately its own category rather than being
+ * folded into 'incorrect'. It is the Bodyguard case Milan asked to track
+ * separately: their target actually WAS lynched and the village lost as a
+ * result. That is a materially different event from an ordinary wrong guess —
+ * the vote had consequences — and collapsing it into a boolean would make it
+ * unrecoverable from the stored results.
+ */
+export type VoteOutcome =
+  | 'correct'
+  | 'incorrect'
+  | 'caused-village-loss'
+  | 'inconsequential'
+  | 'not-scored';
+
+/** Convenience for leaderboards: does this outcome count toward accuracy? */
+export function isScored(outcome: VoteOutcome): boolean {
+  return outcome === 'correct'
+    || outcome === 'incorrect'
+    || outcome === 'caused-village-loss';
+}
+
+export function isCorrect(outcome: VoteOutcome): boolean {
+  return outcome === 'correct';
+}
+
+/**
  * §10 vote accuracy, scored against the voter's OWN win condition rather than
  * "did you point at a wolf" — a wolf voting for a fellow wolf scores as wrong.
  *
  * The Bodyguard is scored by CONSEQUENCE rather than by target, because their
  * power is defensive and doesn't attach to a vote target (Milan, 2026-08-25):
- *   - target wasn't lynched  -> null, the vote was inconsequential
- *   - target was lynched, village won  -> correct
- *   - target was lynched, village lost -> incorrect
+ *   - target wasn't lynched            -> 'inconsequential'
+ *   - target was lynched, village won  -> 'correct'
+ *   - target was lynched, village lost -> 'caused-village-loss'
  *
- * Needs the resolved day to know what actually happened, hence the `result`.
+ * Needs the resolved day to know what actually happened, hence `result`.
  */
-export function voteAccuracy(
+export function voteOutcomes(
   state: NightState,
   votes: Vote[],
   result: DayResult,
-): Record<SeatIndex, boolean | null> {
-  const out: Record<SeatIndex, boolean | null> = {};
+): Record<SeatIndex, VoteOutcome> {
+  const out: Record<SeatIndex, VoteOutcome> = {};
+
   for (const vote of votes) {
     const own = finalRoleOf(state, vote.voter);
 
     if (vote.target === null) {
-      out[vote.voter] = null;
+      out[vote.voter] = 'not-scored';
       continue;
     }
 
     if (own === 'bodyguard') {
-      out[vote.voter] = result.eliminated.includes(vote.target)
-        ? result.teamsWon.village
-        : null;
+      if (!result.eliminated.includes(vote.target)) {
+        out[vote.voter] = 'inconsequential';
+      } else {
+        out[vote.voter] = result.teamsWon.village
+          ? 'correct'
+          : 'caused-village-loss';
+      }
       continue;
     }
 
     const targetRole = finalRoleOf(state, vote.target);
     switch (teamOf(own)) {
       case 'village':
-        out[vote.voter] = isWolfRole(targetRole);
+        out[vote.voter] = isWolfRole(targetRole) ? 'correct' : 'incorrect';
         break;
       case 'wolf':
-        out[vote.voter] = !isWolfRole(targetRole) && targetRole !== 'looier';
+        out[vote.voter] =
+          !isWolfRole(targetRole) && targetRole !== 'looier'
+            ? 'correct'
+            : 'incorrect';
         break;
       case 'solo':
         // The Looier's only correct play is getting themself voted out, which
         // their own vote cannot achieve. Not scoreable.
-        out[vote.voter] = null;
+        out[vote.voter] = 'not-scored';
         break;
     }
+  }
+  return out;
+}
+
+/**
+ * Boolean view of the above, for callers that only want accuracy.
+ * `null` covers both 'inconsequential' and 'not-scored'; a
+ * 'caused-village-loss' reads as false here, so use voteOutcomes() when you
+ * need to tell the two apart.
+ */
+export function voteAccuracy(
+  state: NightState,
+  votes: Vote[],
+  result: DayResult,
+): Record<SeatIndex, boolean | null> {
+  const outcomes = voteOutcomes(state, votes, result);
+  const out: Record<SeatIndex, boolean | null> = {};
+  for (const [seat, outcome] of Object.entries(outcomes)) {
+    out[Number(seat)] = isScored(outcome) ? isCorrect(outcome) : null;
   }
   return out;
 }

@@ -2,6 +2,7 @@ import type {
   CardId, GameConfig, PrivateInfo, RoleId, SeatIndex, Choice, NightEvent,
 } from '../engine/types.js';
 import type { Timeline } from '../engine/timeline.js';
+import type { VoteOutcome } from '../engine/dayphase.js';
 
 /**
  * Firestore document shapes. These mirror firestore.rules exactly — if you add
@@ -125,8 +126,14 @@ export interface ResultDoc {
   originalRole: RoleId;
   won: boolean;
   votedFor: string | null;
-  /** null rather than false when a window timed out (§10) — not a wrong answer. */
-  voteWasCorrect: boolean | null;
+  /**
+   * Full categorical outcome, NOT a boolean. `caused-village-loss` has to stay
+   * distinguishable from an ordinary wrong guess — it is the Bodyguard case
+   * Milan wants tracked — and once a boolean is written here that distinction
+   * is gone for good. `inconsequential` and `not-scored` likewise must not be
+   * stored as `false`: a timed-out window is not a wrong answer (§10).
+   */
+  voteOutcome: VoteOutcome;
   suspicionAccuracy: number | null;
   recordedAt: number;
 }

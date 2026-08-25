@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG, TWO_ROUND_CONFIG,
   centerSlot, computeRoundSchedule, createNightState, defaultNightOrder,
-  resolveDay, resolveNight, roleAt, voteAccuracy,
+  resolveDay, resolveNight, roleAt, voteAccuracy, voteOutcomes,
 } from './index.js';
 import type { AnswerProvider } from './resolve.js';
 import type { Choice, GameConfig, RoleId } from './types.js';
@@ -358,5 +358,60 @@ describe('Bodyguard vote accuracy — scored by consequence (§10)', () => {
     ];
     const res = resolveDay(state, cast);
     expect(voteAccuracy(state, cast, res)[0]).toBe(res.eliminated.includes(1) ? true : null);
+  });
+});
+
+describe('Bodyguard: a vote that causes the village to lose is tracked separately', () => {
+  it("distinguishes 'caused-village-loss' from an ordinary wrong guess", () => {
+    // Bodyguard votes for an innocent, that innocent IS lynched, village loses.
+    const state = deal(['bodyguard', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
+    const cast = [
+      { voter: 0, target: 2, abstain: false },
+      { voter: 1, target: 2, abstain: false },
+      { voter: 2, target: 1, abstain: false },
+    ];
+    const res = resolveDay(state, cast);
+    expect(res.eliminated).toEqual([2]);
+    expect(res.teamsWon.village).toBe(false);
+
+    // The distinction the boolean view cannot carry.
+    expect(voteOutcomes(state, cast, res)[0]).toBe('caused-village-loss');
+    expect(voteAccuracy(state, cast, res)[0]).toBe(false);
+  });
+
+  it("scores 'inconsequential' when the target was never lynched", () => {
+    const state = deal(['bodyguard', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
+    const cast = [
+      { voter: 0, target: 1, abstain: false },
+      { voter: 1, target: 2, abstain: false },
+      { voter: 2, target: 0, abstain: false },
+    ];
+    const res = resolveDay(state, cast);
+    // Three-way split -> tie -> nobody lynched.
+    expect(res.eliminated).toEqual([]);
+    expect(voteOutcomes(state, cast, res)[0]).toBe('inconsequential');
+    expect(voteAccuracy(state, cast, res)[0]).toBeNull();
+  });
+
+  it("scores 'correct' when the target was lynched and the village won", () => {
+    const state = deal(['bodyguard', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
+    const cast = [
+      { voter: 0, target: 1, abstain: false },
+      { voter: 2, target: 1, abstain: false },
+    ];
+    const res = resolveDay(state, cast);
+    expect(res.teamsWon.village).toBe(true);
+    expect(voteOutcomes(state, cast, res)[0]).toBe('correct');
+  });
+
+  it('a normal villager still scores by target, not consequence', () => {
+    const state = deal(['ziener', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
+    const cast = [
+      { voter: 0, target: 2, abstain: false },
+      { voter: 2, target: 1, abstain: false },
+    ];
+    const res = resolveDay(state, cast);
+    // Pointed at a villager -> plain 'incorrect', never 'caused-village-loss'.
+    expect(voteOutcomes(state, cast, res)[0]).toBe('incorrect');
   });
 });

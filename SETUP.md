@@ -47,9 +47,14 @@ that it's cached and works offline.
 ## 9.3 What you should see
 
 ```
-✓ src/firestore/rules.spec.ts (26 tests)
+✓ src/firestore/rules.spec.ts (33 tests)
 Test Files  1 passed (1)
 ```
+
+**Status: ✅ PASSED on Windows, 2026-08-25.** All 33 tests green — every
+`assertFails` attack case correctly denied, no permissive-rule leaks, and no
+legitimate action blocked. The `PERMISSION_DENIED` lines in the emulator log are
+expected; they are the attacks being refused.
 
 The suite is written as **attacks**, not happy paths. Each test is something one
 of your friends could try with devtools open. The five that matter most are
@@ -79,6 +84,7 @@ strict breaks the app loudly; a rule that's too permissive leaks silently.
 | `download failed, status 403` | No internet, or a proxy blocking `storage.googleapis.com` |
 | `port 8080 is not open` | Something else is using 8080 — change it in `firebase.json` under `emulators.firestore.port`, and in the `port` in `rules.spec.ts` |
 | Hangs at "Starting emulators" | Usually Java; try `npx firebase emulators:start --only firestore` alone to see the real error |
+| `'firebase' is not recognized` (Windows) | npm 11 sometimes doesn't create `node_modules\.bin\firebase.cmd`. **Already fixed** — `test:rules` now invokes both binaries through `node` directly rather than relying on the shims, which works on every platform. |
 
 ---
 
@@ -170,7 +176,7 @@ If the first one is allowed, stop and tell me — that's the leak.
 
 ## What I need back from you
 
-1. **Task 9 output** — pass, or the failing test names.
+1. ~~**Task 9 output**~~ — ✅ done, 33/33 passing.
 2. **The project ID** (not the whole config unless you want me to wire it).
 3. **The Firestore region** you picked.
 
