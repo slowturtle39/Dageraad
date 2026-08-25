@@ -1,0 +1,109 @@
+import { ROLES } from '../engine/roles.js';
+import type { RoleId, SeatIndex } from '../engine/types.js';
+
+/**
+ * The seating circle — the app's home screen, night AND day.
+ *
+ * It is deliberately the same view in every phase (§5.4). Players land here as
+ * soon as they have made their choice, or immediately if they have no action,
+ * so tapping around the table is the resting state rather than a signal. Any
+ * prompt is drawn as a sheet OVER this, never instead of it.
+ *
+ * Nothing rendered here may depend on the viewer's own role, except their own
+ * seat marker. If a future change makes the table look different for the
+ * Dubbelganger than for a Dorpeling, that difference is visible across the
+ * table and the whole cover story collapses.
+ */
+
+export interface SeatView {
+  seat: SeatIndex;
+  name: string;
+  /** Only set for a card genuinely revealed in play — the Medium's flip (§12). */
+  revealedRole?: RoleId;
+  shielded?: boolean;
+  isSelf?: boolean;
+  selected?: boolean;
+  disabled?: boolean;
+}
+
+export interface TableView {
+  seats: SeatView[];
+  centerCount: number;
+  /** Whether the Alpha Wolf's extra wolf card is in play — public information. */
+  hasAlphaWolfCard: boolean;
+  onSeatTap?: (seat: SeatIndex) => void;
+}
+
+const NL = (role: RoleId) => ROLES[role]?.nl ?? role;
+
+export function renderTable(view: TableView): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'table';
+
+  const ring = document.createElement('div');
+  ring.className = 'table__ring';
+  el.append(ring);
+
+  const center = document.createElement('div');
+  center.className = 'table__center';
+  for (let i = 0; i < view.centerCount; i++) {
+    const c = document.createElement('div');
+    c.className = 'centercard';
+    center.append(c);
+  }
+  if (view.hasAlphaWolfCard) {
+    const wolf = document.createElement('div');
+    // Shown separately because it IS separate: the Heks and Leerlingziener
+    // choose among the three only, never this one, even after the Alpha Wolf
+    // has parked somebody's old card here.
+    wolf.className = 'centercard centercard--wolf';
+    wolf.title = 'Alfawolf-kaart';
+    center.append(wolf);
+  }
+  el.append(center);
+
+  const n = view.seats.length;
+  view.seats.forEach((s, i) => {
+    // Seat 0 at the bottom (where you sit), going clockwise — so the on-screen
+    // circle matches the real table you're looking at (§13).
+    const angle = Math.PI / 2 + (i / n) * Math.PI * 2;
+    const x = 50 + Math.cos(angle) * 39;
+    const y = 50 + Math.sin(angle) * 39;
+
+    const btn = document.createElement('button');
+    btn.className = 'seat';
+    if (s.isSelf) btn.classList.add('seat--self');
+    if (s.selected) btn.classList.add('seat--selected');
+    if (s.disabled) btn.classList.add('seat--disabled');
+    btn.style.left = `${x}%`;
+    btn.style.top = `${y}%`;
+    btn.type = 'button';
+
+    const card = document.createElement('div');
+    card.className = 'seat__card';
+    if (s.revealedRole) {
+      card.classList.add('seat__card--revealed');
+      const label = document.createElement('span');
+      label.className = 'seat__role';
+      label.textContent = NL(s.revealedRole);
+      card.append(label);
+    }
+    if (s.shielded) {
+      card.classList.add('seat__card--shielded');
+      const badge = document.createElement('span');
+      badge.className = 'seat__badge';
+      badge.title = 'Beschermd door de Schildwacht';
+      card.append(badge);
+    }
+
+    const name = document.createElement('span');
+    name.className = 'seat__name';
+    name.textContent = s.name;
+
+    btn.append(card, name);
+    btn.addEventListener('click', () => view.onSeatTap?.(s.seat));
+    el.append(btn);
+  });
+
+  return el;
+}

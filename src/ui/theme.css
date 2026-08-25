@@ -1,0 +1,502 @@
+/*
+ * Dageraad — visual theme.
+ *
+ * THE HARD CONSTRAINT (Milan, 2026-08-25): the night table view and the day
+ * table view must look the SAME. No colour swap on a phase change. The glow off
+ * someone's face changes even if they never look at their screen, and that
+ * change is itself a tell — it would give away the moment a phase turns, and
+ * worse, a lit-up screen during a follow-up window would identify who is acting.
+ *
+ * So there is exactly ONE palette here and no light mode, no `prefers-color-
+ * scheme` block, no per-phase accent. A phase change may alter TEXT, never
+ * luminance. If you are about to add `--bg-day`, don't.
+ *
+ * Style follows the printed game: dark, warm, a bit woodcut. Bone-coloured
+ * cards, aged gold, muted blood red for the wolf side.
+ */
+
+:root {
+  /* Single palette. Same at 3am as at noon. */
+  --bg: #14161d;
+  --bg-deep: #0e1015;
+  --bg-raised: #1c1f28;
+  --bg-sunken: #101219;
+
+  --ink: #e6dcc8;
+  --ink-dim: #9a917f;
+  --ink-faint: #6b6558;
+
+  --bone: #d9cdb8;
+  --bone-shadow: #b3a78f;
+
+  --gold: #c9a227;
+  --gold-dim: #8a701b;
+  --blood: #8c3b3b;
+  --moss: #4a6350;
+
+  --line: #2a2e39;
+  --line-soft: #22262f;
+
+  --radius: 10px;
+  --radius-lg: 16px;
+
+  /* Deliberately uniform: a brighter "active" state would be visible across
+     the table. Emphasis is done with border and letter-spacing, not light. */
+  --shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+
+  --font: ui-serif, Georgia, "Times New Roman", serif;
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  overscroll-behavior: none;
+}
+
+body {
+  /* A faint vignette, fixed, so the overall luminance never shifts. */
+  background-image: radial-gradient(
+    ellipse 120% 90% at 50% 45%,
+    #1a1d26 0%,
+    var(--bg) 45%,
+    var(--bg-deep) 100%
+  );
+  background-attachment: fixed;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ------------------------------------------------------------------ */
+/* Top bar                                                             */
+/* ------------------------------------------------------------------ */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.topbar__phase {
+  font-family: var(--font);
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  color: var(--ink-dim);
+}
+
+.topbar__timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  color: var(--ink-dim);
+  letter-spacing: 0.04em;
+}
+
+.topbar__timer--paused {
+  color: var(--gold);
+}
+
+/* ------------------------------------------------------------------ */
+/* The table                                                           */
+/* ------------------------------------------------------------------ */
+
+/* The circle must stay a CIRCLE, not stretch into an ellipse on a tall phone,
+   and it must sit clear of the sheet — your own seat is at the bottom of the
+   ring and would otherwise be hidden underneath it. */
+.tablewrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  transition: none;
+}
+
+/* With a sheet open, pull the ring to the top of the free space and shrink it
+   so all eight seats stay visible and tappable. No opacity or colour change —
+   moving is fine, dimming is not (§13.1). */
+/* Centre the ring in the space the sheet leaves, rather than pinning it to the
+   top and stranding a dead band above the sheet. */
+.tablewrap--sheet {
+  align-items: center;
+  padding-bottom: 46%;
+}
+
+.tablewrap--sheet .table {
+  width: min(74%, 300px);
+}
+
+.table {
+  position: relative;
+  width: min(100%, 380px);
+  aspect-ratio: 1 / 1;
+  max-height: 100%;
+}
+
+.table__ring {
+  position: absolute;
+  inset: 14%;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+}
+
+.table__center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.seat {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 62px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.seat__card {
+  width: 38px;
+  height: 53px;
+  border-radius: 6px;
+  background: linear-gradient(160deg, #2a2f3b, #1a1e26);
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  position: relative;
+  box-shadow: var(--shadow);
+}
+
+/* The card back's motif. Same for every face-down card — never role-specific. */
+.seat__card::after {
+  content: "";
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--gold-dim);
+  border-radius: 50%;
+  opacity: 0.5;
+}
+
+.seat__card--revealed {
+  background: linear-gradient(160deg, var(--bone), var(--bone-shadow));
+  border-color: var(--bone-shadow);
+}
+
+.seat__card--revealed::after {
+  display: none;
+}
+
+.seat__card--shielded {
+  border-color: var(--moss);
+}
+
+.seat__role {
+  font-family: var(--font);
+  font-size: 9px;
+  line-height: 1.1;
+  text-align: center;
+  color: #23262e;
+  padding: 0 2px;
+  font-weight: 600;
+}
+
+.seat__name {
+  font-size: 10px;
+  color: var(--ink-dim);
+  max-width: 62px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.seat--self .seat__name {
+  color: var(--ink);
+}
+
+.seat--self .seat__card {
+  border-color: var(--gold-dim);
+}
+
+/* Selection is shown with a ring, not with brightness. */
+.seat--selected .seat__card {
+  border-color: var(--gold);
+  border-width: 2px;
+}
+
+.seat--disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.seat__badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--moss);
+  border: 1px solid var(--bg);
+}
+
+.centercard {
+  width: 26px;
+  height: 37px;
+  border-radius: 5px;
+  background: linear-gradient(160deg, #262b35, #171a21);
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+}
+
+.centercard::after {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--gold-dim);
+  border-radius: 50%;
+  opacity: 0.4;
+}
+
+.centercard--wolf {
+  border-color: color-mix(in srgb, var(--blood) 60%, var(--line));
+}
+
+/* ------------------------------------------------------------------ */
+/* Overlay — prompts and stats sit ON the table, never replacing it    */
+/* ------------------------------------------------------------------ */
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--line);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: 18px 18px max(18px, env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.5);
+  max-width: 560px;
+  margin: 0 auto;
+  max-height: 58%;
+  overflow-y: auto;
+}
+
+.sheet__grip {
+  width: 34px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line);
+  margin: 0 auto 14px;
+}
+
+.sheet__title {
+  font-family: var(--font);
+  font-size: 17px;
+  margin: 0 0 4px;
+  color: var(--ink);
+}
+
+.sheet__sub {
+  font-size: 13px;
+  color: var(--ink-dim);
+  margin: 0 0 14px;
+  line-height: 1.45;
+}
+
+.sheet__note {
+  font-size: 12px;
+  color: var(--ink-faint);
+  line-height: 1.45;
+  margin: 12px 0 0;
+  border-left: 2px solid var(--line);
+  padding-left: 10px;
+}
+
+.btn {
+  display: block;
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg-sunken);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  margin-top: 8px;
+  text-align: left;
+}
+
+.btn--primary {
+  border-color: var(--gold-dim);
+  color: var(--gold);
+}
+
+.btn--ghost {
+  background: none;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------------ */
+/* Stats                                                               */
+/* ------------------------------------------------------------------ */
+
+.stats__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  margin-top: 2px;
+}
+
+.stats__avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  font-family: var(--font);
+  color: var(--ink-dim);
+  flex: none;
+}
+
+.stats__name {
+  font-family: var(--font);
+  font-size: 17px;
+}
+
+.stats__meta {
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.stats__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.stat {
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+
+.stat__value {
+  font-family: var(--font);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.stat__label {
+  font-size: 10px;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+}
+
+.rolerow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line-soft);
+  font-size: 13px;
+}
+
+.rolerow__name {
+  flex: 1;
+  color: var(--ink-dim);
+}
+
+.rolerow__bar {
+  width: 68px;
+  height: 5px;
+  border-radius: 3px;
+  background: #2f3440;
+  overflow: hidden;
+  flex: none;
+}
+
+.rolerow__fill {
+  height: 100%;
+  background: var(--gold);
+  opacity: 0.75;
+}
+
+.rolerow__n {
+  width: 38px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+  font-size: 12px;
+  flex: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Bottom bar                                                          */
+/* ------------------------------------------------------------------ */
+
+.bottombar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line-soft);
+}
+
+.bottombar .btn {
+  margin-top: 0;
+  text-align: center;
+  font-size: 13px;
+  padding: 10px;
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 9, 12, 0.5);
+  z-index: 15;
+}
