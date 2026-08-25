@@ -199,6 +199,69 @@ Heks acting later still picks from the original three. Enforced structurally by
 
 ---
 
+## Firestore layer
+
+```
+firestore.rules              security rules
+src/firestore/schema.ts      document shapes, mirroring the rules
+src/firestore/rules.spec.ts  rules tests, written as attacks
+```
+
+### ⚠️ THE RULES ARE UNVERIFIED — RUN THEM BEFORE TRUSTING THEM
+
+```bash
+npm run test:rules     # boots the emulator, runs the attack suite
+```
+
+They were written but **never executed**: the sandbox they were authored in
+blocks the emulator jar download. The test suite exists and typechecks, but a
+rule that denies everything and a rule that allows everything both look fine
+until you run them. Treat these as a reviewed draft, not a tested artefact.
+First run needs internet (it downloads the emulator).
+
+### The shape of the problem
+
+On the free plan the referee genuinely must read every player's card, and no
+rule can change that. What the rules do is ensure **nobody else can**, and that
+**a player cannot make themselves the referee**.
+
+`refereeUid` is immutable after room creation, and that is the single
+load-bearing rule in the file. A player who could write it would promote
+themselves and read the entire deal. Five tests cover it specifically,
+including that neither the host nor the current referee can reassign it.
+
+### Decisions worth knowing about
+
+**There are no mutable stats counters anywhere.** Per-game outcomes are
+append-only documents under the room; profile stats are aggregated client-side
+by reading them. That removes "who is allowed to increment my win count" as a
+question entirely and makes history tamper-evident. `profiles` uses an explicit
+key allowlist, so a client cannot smuggle a `wins` field in.
+
+**Late writes are blocked by matching `windowIndex`,** not by trusting clocks.
+A submission is accepted only while the room is still on the window it was
+made for.
+
+**No-self-vote is enforced in the rules,** not just the UI, so a hand-crafted
+write cannot do it either. Votes stay unreadable by other players until the
+phase reaches `results` — otherwise the last person to vote sees the tally
+before deciding.
+
+**Calibration samples are keyed by role name and never carry a uid.** Attaching
+one would turn that collection into a public record of who played what; there
+is a test asserting the write is rejected.
+
+### Known residual risks
+
+- A malicious **referee** sees everything. Inherent to the free plan; use the
+  tablet. Moving the engine into a Cloud Function is the only real fix.
+- A malicious referee could also **write false results**. Append-only makes it
+  visible, not impossible.
+- Votes don't validate that the target is actually a player in the room; the
+  engine ignores nonsense targets.
+- Any signed-in user can read any room document if they know its ID. Room IDs
+  are random, so this is enumeration-resistant rather than access-controlled.
+
 ## Open rules questions
 
 - **All wolves in the centre.** §8 doesn't cover it. Standard One Night handling

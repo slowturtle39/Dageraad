@@ -1,0 +1,209 @@
+rules_version = '2';
+
+// ============================================================================
+// Dageraad — Firestore security rules
+//
+// THE SITUATION THESE RULES EXIST IN (see README "Trust model"):
+// We are on the free Spark plan, so there are no Cloud Functions. Resolution
+// runs in a browser at the table — the REFEREE, ideally the neutral tablet.
+// That means the referee genuinely must be able to read every player's card,
+// and no rule can change that. What these rules do is make sure NOBODY ELSE
+// can, and that a player cannot make themselves the referee.
+//
+// THE SINGLE MOST IMPORTANT RULE IN THIS FILE is that `refereeUid` is immutable
+// after room creation. If a player could write it, they would promote
+// themselves and read the entire deal. Everything else is defence in depth.
+//
+// Design notes:
+//  - There are NO mutable stats counters. Per-game results are append-only
+//    documents under the room; profile stats are aggregated client-side by
+//    reading them. That removes "who is allowed to increment my win count"
+//    as a question entirely, and makes history tamper-evident.
+//  - Late writes are blocked by matching a submission's windowIndex against
+//    the room's current one, rather than by trusting clocks.
+//  - No-self-vote is enforced here as well as in the UI (§7).
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- utils
+    function signedIn() {
+      return request.auth != null;
+    }
+    function uid() {
+      return request.auth.uid;
+    }
+    function roomDoc(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data;
+    }
+    function isReferee(roomId) {
+      return signedIn() && roomDoc(roomId).refereeUid == uid();
+    }
+    function isHost(roomId) {
+      return signedIn() && roomDoc(roomId).hostUid == uid();
+    }
+    function inPhase(roomId, p) {
+      return roomDoc(roomId).phase == p;
+    }
+    function changed(field) {
+      return !(field in resource.data)
+        || request.resource.data[field] != resource.data[field];
+    }
+
+    // ---------------------------------------------------------------- rooms
+    // The room document is PUBLIC to anyone with the link, by design: it holds
+    // the active role list, the seating order, the phase, and the computed
+    // timeline. All of that is information everyone at the table already has,
+    // and the timeline is deliberately derived from the public role set alone
+    // (see timeline.ts) so publishing it leaks nothing.
+    match /rooms/{roomId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.hostUid == uid()
+        // The creator may hand the referee role to the tablet, but it must be
+        // set at creation and can never move afterwards.
+        && request.resource.data.refereeUid is string
+        && request.resource.data.phase == 'lobby';
+
+      // ***** THE LOAD-BEARING RULE *****
+      // Nobody may ever reassign the referee or the host. A player who could
+      // set refereeUid to themselves would gain read access to every card in
+      // the game. This is the difference between "private" and "not".
+      allow update: if signedIn()
+        && (isHost(roomId) || isReferee(roomId))
+        && !changed('refereeUid')
+        && !changed('hostUid');
+
+      allow delete: if isHost(roomId);
+
+      // ------------------------------------------------------------ players
+      // Public per-player info: display name, avatar, seat. Everyone can read
+      // this — it is what the shared tablet and the seating circle render.
+      match /players/{playerUid} {
+        allow read: if signedIn();
+
+        // You may only add yourself, and only while the room is still open.
+        allow create: if signedIn()
+          && playerUid == uid()
+          && inPhase(roomId, 'lobby');
+
+        // You may edit your own display name/avatar in the lobby. Seat order is
+        // the host's to arrange, and is frozen once the game starts, because
+        // the Dorpsgek's shift depends on a stable adjacency (§13).
+        allow update: if signedIn()
+          && inPhase(roomId, 'lobby')
+          && (playerUid == uid() || isHost(roomId));
+
+        allow delete: if signedIn()
+          && inPhase(roomId, 'lobby')
+          && (playerUid == uid() || isHost(roomId));
+      }
+
+      // ------------------------------------------------------------ private
+      // A player's dealt role, current card, and everything they have privately
+      // learned. THIS IS THE SECRET DATA.
+      match /private/{playerUid} {
+        // Only you, and the referee who has to compute the night.
+        allow read: if signedIn()
+          && (playerUid == uid() || isReferee(roomId));
+
+        // Only the referee writes. A player must never be able to edit their
+        // own role, or to fabricate a reveal.
+        allow write: if isReferee(roomId);
+      }
+
+      // -------------------------------------------------------------- engine
+      // The full night state: every card, every slot, the whole deal. Referee
+      // only. Nothing else in the app should ever read this.
+      match /engine/{docId} {
+        allow read, write: if isReferee(roomId);
+      }
+
+      // --------------------------------------------------------- submissions
+      // Night choices. A player writes their own; only the referee reads them,
+      // because knowing who someone targeted often reveals what they are.
+      match /submissions/{playerUid} {
+        allow read: if signedIn()
+          && (playerUid == uid() || isReferee(roomId));
+
+        // You may write or change your choice ONLY while the window you
+        // submitted for is still the room's current window. This is what stops
+        // a late write after seeing a reveal, without trusting client clocks.
+        allow create, update: if signedIn()
+          && playerUid == uid()
+          && inPhase(roomId, 'night')
+          && request.resource.data.windowIndex == roomDoc(roomId).nightWindowIndex;
+
+        allow delete: if false;
+      }
+
+      // -------------------------------------------------------------- votes
+      // Voting is simultaneous (§7), so a vote must stay hidden until everyone
+      // has cast one — otherwise the last voter sees the tally first.
+      match /votes/{playerUid} {
+        allow read: if signedIn()
+          && (playerUid == uid()
+              || isReferee(roomId)
+              || inPhase(roomId, 'results'));
+
+        allow create, update: if signedIn()
+          && playerUid == uid()
+          && inPhase(roomId, 'voting')
+          // §7: never allowed to vote for yourself. Enforced here as well as
+          // in the UI, so a hand-crafted write cannot do it either.
+          && request.resource.data.target != uid();
+
+        allow delete: if false;
+      }
+
+      // ------------------------------------------------------------- results
+      // Per-game outcome per player, written once by the referee when the game
+      // ends. APPEND-ONLY: never updatable, never deletable. Profile stats are
+      // aggregated from these client-side, which is why there are no mutable
+      // win counters anywhere in this schema.
+      match /results/{playerUid} {
+        allow read: if signedIn();
+        allow create: if isReferee(roomId) && inPhase(roomId, 'results');
+        allow update, delete: if false;
+      }
+    }
+
+    // ------------------------------------------------------------- profiles
+    // Persistent identity. Readable by anyone signed in, because tapping a
+    // player to see their history is the night phase's cover traffic (§5.4) —
+    // it has to work for everyone at the table.
+    match /profiles/{profileUid} {
+      allow read: if signedIn();
+
+      // You own your name and picture. Note there are deliberately no stats
+      // fields here to write: stats live in the append-only results documents.
+      allow create, update: if signedIn()
+        && profileUid == uid()
+        && request.resource.data.keys().hasOnly(
+             ['displayName', 'avatar', 'language', 'createdAt', 'updatedAt']
+           );
+
+      allow delete: if signedIn() && profileUid == uid();
+    }
+
+    // ---------------------------------------------------------- calibration
+    // Timing samples feeding window-duration calibration (telemetry.ts).
+    // Append-only. Contains no role information — only how long a decision
+    // took, keyed by role NAME, never by who was playing it.
+    match /calibration/{sampleId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(
+             ['role', 'key', 'latencyMs', 'outcome', 'paused', 'sessionId', 'createdAt']
+           );
+      allow update, delete: if false;
+    }
+
+    // Anything not matched above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
