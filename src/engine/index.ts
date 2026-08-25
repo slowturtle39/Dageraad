@@ -8,3 +8,4 @@ export * from './dayphase.js';
 export * from './presets.js';
 export * from './timeline.js';
 export * from './telemetry.js';
+export * from './suspicion.js';
