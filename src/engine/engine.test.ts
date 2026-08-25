@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG, TWO_ROUND_CONFIG,
   centerSlot, computeRoundSchedule, createNightState, defaultNightOrder,
-  resolveDay, resolveNight, roleAt,
+  resolveDay, resolveNight, roleAt, voteAccuracy,
 } from './index.js';
 import type { AnswerProvider } from './resolve.js';
 import type { Choice, GameConfig, RoleId } from './types.js';
@@ -278,5 +278,85 @@ describe('day phase (§7, §8)', () => {
     expect(res.eliminated).toEqual([1]);
     expect(res.teamsWon.solo).toBe(true);
     expect(res.seatWon[1]).toBe(true);
+  });
+});
+
+describe('win conditions (§8, ruled 2026-08-25)', () => {
+  const votes = (...v: [number, number | null][]) =>
+    v.map(([voter, target]) => ({ voter, target, abstain: false }));
+
+  it('a Looier win means everyone else loses — even a wolf who also died', () => {
+    // Jager is lynched alongside the Looier and shoots a wolf: a wolf died, so
+    // ordinarily the village would win. The Looier overrides that.
+    const state = deal(['looier', 'jager', 'weerwolf'], ['jager', 'jager', 'jager']);
+    const res = resolveDay(state, [
+      { voter: 1, target: 0, abstain: false },
+      { voter: 2, target: 0, abstain: false },
+    ]);
+    expect(res.eliminated).toEqual([0]);
+    expect(res.teamsWon).toEqual({ village: false, wolf: false, solo: true });
+  });
+
+  it('with every wolf in the centre, the village wins only by lynching nobody', () => {
+    const state = deal(
+      ['dorpeling', 'ziener', 'jager'],
+      ['weerwolf', 'weerwolf', 'alphawolf'],
+    );
+    const tied = resolveDay(state, votes([0, 1], [1, 0]));
+    expect(tied.outcome).toBe('tie');
+    expect(tied.teamsWon.village).toBe(true);
+    expect(tied.teamsWon.wolf).toBe(false);
+  });
+
+  it('lynching an innocent with no wolves in play means nobody wins', () => {
+    const state = deal(
+      ['dorpeling', 'ziener', 'jager'],
+      ['weerwolf', 'weerwolf', 'alphawolf'],
+    );
+    const res = resolveDay(state, votes([0, 1], [2, 1]));
+    expect(res.eliminated).toContain(1);
+    expect(res.teamsWon).toEqual({ village: false, wolf: false, solo: false });
+  });
+
+  it('wolves can never win a game where no player holds a wolf card', () => {
+    const state = deal(['dorpeling', 'ziener'], ['weerwolf', 'jager', 'jager']);
+    expect(resolveDay(state, votes([0, 1], [1, 0])).teamsWon.wolf).toBe(false);
+  });
+});
+
+describe('Bodyguard vote accuracy — scored by consequence (§10)', () => {
+  it('is null when their target was not lynched', () => {
+    const state = deal(['bodyguard', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
+    const cast = [
+      { voter: 0, target: 2, abstain: false },
+      { voter: 1, target: 2, abstain: false },
+      { voter: 2, target: 1, abstain: false },
+    ];
+    const res = resolveDay(state, cast);
+    expect(res.eliminated).toEqual([2]);
+    // Bodyguard voted for seat 2, who WAS lynched — village lost, so incorrect.
+    expect(voteAccuracy(state, cast, res)[0]).toBe(false);
+  });
+
+  it('is correct when their target was lynched and the village won', () => {
+    const state = deal(['bodyguard', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
+    const cast = [
+      { voter: 0, target: 1, abstain: false },
+      { voter: 2, target: 1, abstain: false },
+    ];
+    const res = resolveDay(state, cast);
+    expect(res.teamsWon.village).toBe(true);
+    expect(voteAccuracy(state, cast, res)[0]).toBe(true);
+  });
+
+  it('is null — inconsequential — when nobody was lynched at all', () => {
+    const state = deal(['bodyguard', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
+    const cast = [
+      { voter: 0, target: 1, abstain: false },
+      { voter: 1, target: 2, abstain: false },
+      { voter: 2, target: 1, abstain: false },
+    ];
+    const res = resolveDay(state, cast);
+    expect(voteAccuracy(state, cast, res)[0]).toBe(res.eliminated.includes(1) ? true : null);
   });
 });

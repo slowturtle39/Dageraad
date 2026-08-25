@@ -122,12 +122,31 @@ function finish(
   const looierDied = eliminated.some((s) => finalRole(s) === 'looier');
   const anyWolfAmongPlayers = seats.some((s) => isWolfRole(finalRole(s)));
 
-  // §8. NOTE: the doc does not cover the case where every wolf card ended up in
-  // the centre, so no player is a wolf. Standard One Night handling is applied
-  // here — the village wins only if nobody is lynched — and this is flagged in
-  // the README as an open rule to confirm with the group.
-  const villageWon = anyWolfAmongPlayers ? wolfDied : eliminated.length === 0;
-  const wolvesWon = anyWolfAmongPlayers && !wolfDied;
+  // §8, RULED 2026-08-25.
+  //
+  // A Looier win beats everything: if the Looier is lynched they win ALONE and
+  // both other teams lose, even if a wolf died in the same vote (which the
+  // Jager can cause). This is checked first because it short-circuits the rest.
+  //
+  // If every wolf card ended up in the centre, no player is a wolf: the wolves
+  // cannot win at all, and the village wins only if nobody is lynched — so a
+  // village that lynches an innocent loses a game containing no wolves, and
+  // nobody wins that round. That makes the abstain mechanic load-bearing.
+  //
+  // All of this is judged on FINAL cards (§6.0); dealt roles are irrelevant.
+  let villageWon: boolean;
+  let wolvesWon: boolean;
+
+  if (looierDied) {
+    villageWon = false;
+    wolvesWon = false;
+  } else if (anyWolfAmongPlayers) {
+    villageWon = wolfDied;
+    wolvesWon = !wolfDied;
+  } else {
+    villageWon = eliminated.length === 0;
+    wolvesWon = false;
+  }
 
   const teamsWon: Record<Team, boolean> = {
     village: villageWon,
@@ -147,20 +166,35 @@ function finish(
  * §10 vote accuracy, scored against the voter's OWN win condition rather than
  * "did you point at a wolf" — a wolf voting for a fellow wolf scores as wrong.
  *
- * The Bodyguard is deliberately absent: §10 flags what "correct" even means for
- * them as an open question, so they score null rather than a guessed value.
+ * The Bodyguard is scored by CONSEQUENCE rather than by target, because their
+ * power is defensive and doesn't attach to a vote target (Milan, 2026-08-25):
+ *   - target wasn't lynched  -> null, the vote was inconsequential
+ *   - target was lynched, village won  -> correct
+ *   - target was lynched, village lost -> incorrect
+ *
+ * Needs the resolved day to know what actually happened, hence the `result`.
  */
 export function voteAccuracy(
   state: NightState,
   votes: Vote[],
+  result: DayResult,
 ): Record<SeatIndex, boolean | null> {
   const out: Record<SeatIndex, boolean | null> = {};
   for (const vote of votes) {
     const own = finalRoleOf(state, vote.voter);
-    if (own === 'bodyguard' || vote.target === null) {
+
+    if (vote.target === null) {
       out[vote.voter] = null;
       continue;
     }
+
+    if (own === 'bodyguard') {
+      out[vote.voter] = result.eliminated.includes(vote.target)
+        ? result.teamsWon.village
+        : null;
+      continue;
+    }
+
     const targetRole = finalRoleOf(state, vote.target);
     switch (teamOf(own)) {
       case 'village':

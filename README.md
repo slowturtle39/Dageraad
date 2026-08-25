@@ -2,7 +2,9 @@
 
 Companion app for *Dageraad: 1 Nacht Weerwolven & Waaghalzen* with our house rules.
 
-Current state: **resolution engine, day phase, and night timeline — complete and
+Current state: **resolution engine, day phase, night timeline, Firestore rules.**
+**Start with `SETUP.md`.** Original line follows:
+resolution engine, day phase, and night timeline — complete and
 tested.** No UI, no Firebase wiring yet.
 
 ```bash
