@@ -13,7 +13,7 @@ import {
   type SeatResult, type Unsubscribe,
 } from './backend.js';
 import {
-  seatingForNextRound, seedForJoiner, standings,
+  seatingForNextRound, standings,
   type RoundRecord, type SessionMember,
 } from './session.js';
 
@@ -78,7 +78,7 @@ export class MemoryWorld {
         timeline: null,
         seating: playing ? [uid] : [],
         members: playing
-          ? [{ uid, joinedAtRound: 1, leftAtRound: null, seeded: 0 }]
+          ? [{ uid, joinedAtRound: 1, leftAtRound: null }]
           : [],
         standings: [],
         publicEvents: [],
@@ -207,9 +207,12 @@ class MemoryBackend implements Backend {
     // Joining mid-evening: seated at the NEXT round, seeded with the score of
     // whoever is currently last (Milan, 2026-08-26). In the lobby that is
     // round 1 and a seed of zero, which is the same code path.
+    //
+    // The seed itself is NOT written down. `joinedAtRound` is the entire record
+    // of it, and `standings()` recomputes the floor from the rounds before that
+    // one — which is what stops a joining device dictating its own score.
     const inLobby = r.view.phase === 'lobby';
     const nextRound = inLobby ? 1 : r.view.round + 1;
-    const seeded = inLobby ? 0 : seedForJoiner(r.view.standings);
 
     r.players.set(this.uid, {
       uid: this.uid,
@@ -220,7 +223,7 @@ class MemoryBackend implements Backend {
     });
     r.view.members = [
       ...r.view.members,
-      { uid: this.uid, joinedAtRound: nextRound, leftAtRound: null, seeded },
+      { uid: this.uid, joinedAtRound: nextRound, leftAtRound: null },
     ];
 
     // In the lobby they sit down immediately; mid-round they wait, because

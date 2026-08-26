@@ -3,6 +3,7 @@ import type {
 } from '../engine/types.js';
 import type { Timeline } from '../engine/timeline.js';
 import type { VoteOutcome } from '../engine/dayphase.js';
+import type { RoundResult } from '../app/session.js';
 
 /**
  * Firestore document shapes. These mirror firestore.rules exactly — if you add
@@ -12,6 +13,8 @@ import type { VoteOutcome } from '../engine/dayphase.js';
  * Layout:
  *   /rooms/{roomId}                    public room state
  *   /rooms/{roomId}/players/{uid}      public: name, avatar, seat
+ *   /rooms/{roomId}/members/{uid}      who is in the evening, and for how long
+ *   /rooms/{roomId}/rounds/{n}         append-only record of one finished game
  *   /rooms/{roomId}/private/{uid}      SECRET: dealt role, card, reveals
  *   /rooms/{roomId}/engine/state       SECRET: the entire deal (referee only)
  *   /rooms/{roomId}/submissions/{uid}  night choices (owner writes, referee reads)
@@ -37,6 +40,17 @@ export interface RoomDoc {
    */
   refereeUid: string;
   phase: RoomPhase;
+  /**
+   * Which game of the evening this is, counting from 1 (0 in the lobby).
+   *
+   * A room is a SESSION, not a single game (see session.ts). This field is
+   * load-bearing for scoring, not just for display: the rules pin a joining
+   * member's `joinedAtRound` to it, and that is the only thing a latecomer's
+   * seed is computed from. It is therefore MONOTONIC — the rules refuse a
+   * write that moves it backwards, because rewinding it would let the referee
+   * re-seed somebody against a floor that has already been superseded.
+   */
+  currentRound: number;
   /**
    * Advanced by the referee as each night window closes. A submission is only
    * accepted when its windowIndex matches this, which blocks a late write after
@@ -138,6 +152,54 @@ export interface ResultDoc {
   recordedAt: number;
 }
 
+/**
+ * Who is in the evening, and for which stretch of it.
+ *
+ * THE FIELD THAT IS NOT HERE IS THE POINT. This used to carry `seeded`: the
+ * number of points a latecomer's scoreboard row starts at, written by the
+ * joining client into a document that same client owns. `seeded: 9999` typed
+ * into devtools was a first-place finish for the evening, and no security rule
+ * could reject it — rules can answer "may you write this document", not "was
+ * 9999 the right floor at round four", which needs the whole evening replayed.
+ *
+ * The seed is now DERIVED (session.ts `standings`) from `joinedAtRound` and
+ * the append-only round records. Both are out of the joiner's hands: the rules
+ * pin `joinedAtRound` to the room's `currentRound` at the instant of the
+ * write, and rounds are referee-written and create-only. What is left in this
+ * document is which round you arrived and which round you left, and neither of
+ * those is worth points.
+ *
+ * The rules allowlist these keys exactly, so a re-added `seeded` field is
+ * rejected at the database rather than quietly ignored by one client.
+ */
+export interface SessionMemberDoc {
+  /** Equal to the document id. Redundant on purpose — see roomstore.ts. */
+  uid: string;
+  /** Pinned by the rules to the room's currentRound at the time of the write. */
+  joinedAtRound: number;
+  /** The LAST round they play, not the first they miss. Null while still here. */
+  leftAtRound: number | null;
+}
+
+/**
+ * One finished game of the evening. APPEND-ONLY, referee-written.
+ *
+ * The document id is the round number as a string, and the rules check that it
+ * matches the `round` field — so a round can be recorded once and only once,
+ * and cannot be smuggled in a second time under another id.
+ *
+ * This is the other half of what replaced the stored seed: the scoreboard, and
+ * every latecomer's seed with it, is rebuilt from these documents alone.
+ */
+export interface RoundDoc {
+  round: number;
+  activeRoles: RoleId[];
+  seatCount: number;
+  outcome: string;
+  results: RoundResult[];
+  recordedAt: number;
+}
+
 /** Persistent identity. The rules allowlist these keys exactly — no stats here. */
 export interface ProfileDoc {
   displayName: string;
@@ -174,6 +236,11 @@ export const paths = {
   vote: (roomId: string, uid: string) => `rooms/${roomId}/votes/${uid}`,
   results: (roomId: string) => `rooms/${roomId}/results`,
   result: (roomId: string, uid: string) => `rooms/${roomId}/results/${uid}`,
+  members: (roomId: string) => `rooms/${roomId}/members`,
+  member: (roomId: string, uid: string) => `rooms/${roomId}/members/${uid}`,
+  rounds: (roomId: string) => `rooms/${roomId}/rounds`,
+  /** Keyed by round number, so recording the same round twice is a collision. */
+  round: (roomId: string, round: number) => `rooms/${roomId}/rounds/${round}`,
   profile: (uid: string) => `profiles/${uid}`,
   calibration: () => 'calibration',
 } as const;

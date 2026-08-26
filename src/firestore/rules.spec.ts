@@ -38,7 +38,7 @@ beforeAll(async () => {
 afterAll(async () => { await env?.cleanup(); });
 
 /** Seed a room mid-night with Alice and Bob seated and dealt. */
-async function seed(phase = 'night', nightWindowIndex = 0) {
+async function seed(phase = 'night', nightWindowIndex = 0, currentRound = 1) {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
@@ -47,8 +47,14 @@ async function seed(phase = 'night', nightWindowIndex = 0) {
       refereeUid: REF,
       phase,
       nightWindowIndex,
+      currentRound,
       activeRoles: ['droomwolf', 'alphawolf', 'mystiekewolf', 'dubbelganger'],
     });
+    for (const uid of [ALICE, BOB]) {
+      await setDoc(doc(db, 'rooms', ROOM, 'members', uid), {
+        uid, joinedAtRound: 1, leftAtRound: null,
+      });
+    }
     for (const uid of [ALICE, BOB]) {
       await setDoc(doc(db, 'rooms', ROOM, 'players', uid), {
         displayName: uid, seatIndex: uid === ALICE ? 0 : 1,
@@ -400,6 +406,300 @@ describe('unknown collections are denied by default', () => {
     await assertFails(setDoc(doc(as(ALICE), 'anything', 'x'), { a: 1 }));
     await assertFails(
       setDoc(doc(as(REF), 'rooms', ROOM, 'somethingNew', 'x'), { a: 1 }),
+    );
+  });
+});
+
+/* ==================================================================== */
+
+describe('the seed a latecomer starts on cannot be typed', () => {
+  // THE GAP THIS CLOSES. A player arriving mid-evening starts level with
+  // whoever is currently last, so they join at the back of the pack rather
+  // than below it. That number used to live in a `seeded` field on their own
+  // member document — a document they own and can write. `seeded: 9999` from
+  // devtools won the evening outright, and no rule in this file could tell
+  // that write apart from an honest one: rules answer "may you write this",
+  // never "was 9999 the correct floor at round four", which needs the whole
+  // evening replayed. So the field is gone; the seed is derived from
+  // joinedAtRound plus the append-only rounds (session.ts).
+
+  const CARL = 'carl-uid';
+
+  it('refuses a member document carrying a seed at all', async () => {
+    // If this ever passes, the scoreboard is decorative.
+    await seed('day', 0, 4);
+    await assertFails(
+      setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
+        uid: CARL, joinedAtRound: 4, leftAtRound: null, seeded: 9999,
+      }),
+    );
+  });
+
+  it('refuses any field the schema does not name, seed-shaped or not', async () => {
+    await seed('day', 0, 4);
+    await assertFails(
+      setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
+        uid: CARL, joinedAtRound: 4, leftAtRound: null, points: 9999,
+      }),
+    );
+    await assertFails(
+      setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
+        uid: CARL, joinedAtRound: 4, leftAtRound: null, wins: 12,
+      }),
+    );
+  });
+
+  it('accepts an honest join at the round actually being played', async () => {
+    await seed('day', 0, 4);
+    await assertSucceeds(
+      setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
+        uid: CARL, joinedAtRound: 4, leftAtRound: null,
+      }),
+    );
+  });
+
+  it('refuses a join claiming a round the evening has not reached', async () => {
+    // joinedAtRound is now the ONLY input a joiner has to their own seed, so
+    // claiming round 99 is the same attack as the old seeded: 9999 — it seeds
+    // you against a floor that does not exist yet.
+    await seed('day', 0, 4);
+    await assertFails(
+      setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
+        uid: CARL, joinedAtRound: 99, leftAtRound: null,
+      }),
+    );
+  });
+
+  it('refuses a join backdated to an earlier round', async () => {
+    // The mirror image, and worth blocking too: backdating would credit
+    // somebody with an evening they were not at.
+    await seed('day', 0, 4);
+    await assertFails(
+      setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
+        uid: CARL, joinedAtRound: 1, leftAtRound: null,
+      }),
+    );
+  });
+
+  it('refuses a joinedAtRound that is not a whole number', async () => {
+    await seed('day', 0, 4);
+    await assertFails(
+      setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
+        uid: CARL, joinedAtRound: 4.0001, leftAtRound: null,
+      }),
+    );
+  });
+
+  it('refuses a member document whose uid is not its own id', async () => {
+    await seed('day', 0, 4);
+    await assertFails(
+      setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
+        uid: ALICE, joinedAtRound: 4, leftAtRound: null,
+      }),
+    );
+  });
+
+  it('refuses joining on somebody else\'s behalf', async () => {
+    await seed('day', 0, 4);
+    await assertFails(
+      setDoc(doc(as(CARL), 'rooms', ROOM, 'members', ALICE), {
+        uid: ALICE, joinedAtRound: 4, leftAtRound: null,
+      }),
+    );
+  });
+
+  it('lets the host add somebody whose phone died', async () => {
+    await seed('day', 0, 4);
+    await assertSucceeds(
+      setDoc(doc(as(HOST), 'rooms', ROOM, 'members', CARL), {
+        uid: CARL, joinedAtRound: 4, leftAtRound: null,
+      }),
+    );
+  });
+
+  it('refuses to let an existing member re-seed themselves later', async () => {
+    // Alice joined at round 1 on a floor of zero. Moving her joinedAtRound to
+    // round 4 would re-seed her at the current floor — the same points-grab as
+    // the old forgeable field, wearing a different hat.
+    await seed('day', 0, 4);
+    await assertFails(
+      updateDoc(doc(as(ALICE), 'rooms', ROOM, 'members', ALICE), {
+        joinedAtRound: 4,
+      }),
+    );
+  });
+
+  it('refuses to let a seed be smuggled in on an update', async () => {
+    await seed('day', 0, 4);
+    await assertFails(
+      updateDoc(doc(as(ALICE), 'rooms', ROOM, 'members', ALICE), {
+        seeded: 9999,
+      }),
+    );
+  });
+
+  it('refuses to let anyone delete a membership', async () => {
+    // The rounds you played happened. Deleting the document that says you were
+    // here is the tidiest way to rewrite an evening, so nobody may.
+    await seed('day', 0, 4);
+    await assertFails(deleteDoc(doc(as(ALICE), 'rooms', ROOM, 'members', ALICE)));
+    await assertFails(deleteDoc(doc(as(HOST), 'rooms', ROOM, 'members', ALICE)));
+    await assertFails(deleteDoc(doc(as(REF), 'rooms', ROOM, 'members', ALICE)));
+  });
+});
+
+describe('going home, and coming back', () => {
+  it('accepts leaving at the round now being played', async () => {
+    await seed('day', 0, 4);
+    await assertSucceeds(
+      updateDoc(doc(as(ALICE), 'rooms', ROOM, 'members', ALICE), {
+        leftAtRound: 4,
+      }),
+    );
+  });
+
+  it('refuses backdating a departure to erase rounds you played', async () => {
+    await seed('day', 0, 4);
+    await assertFails(
+      updateDoc(doc(as(ALICE), 'rooms', ROOM, 'members', ALICE), {
+        leftAtRound: 2,
+      }),
+    );
+  });
+
+  it('lets somebody come back without changing what they joined on', async () => {
+    await seed('day', 0, 4);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'members', ALICE), {
+        uid: ALICE, joinedAtRound: 1, leftAtRound: 3,
+      });
+    });
+    await assertSucceeds(
+      updateDoc(doc(as(ALICE), 'rooms', ROOM, 'members', ALICE), {
+        leftAtRound: null,
+      }),
+    );
+  });
+
+  it('refuses a return that also moves the join round', async () => {
+    // Coming back must re-use the original joinedAtRound, or stepping out for
+    // one round becomes a way to top your score up off the bottom of the table.
+    await seed('day', 0, 4);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'members', ALICE), {
+        uid: ALICE, joinedAtRound: 1, leftAtRound: 3,
+      });
+    });
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'members', ALICE), {
+        uid: ALICE, joinedAtRound: 4, leftAtRound: null,
+      }),
+    );
+  });
+
+  it('refuses to send somebody else home', async () => {
+    await seed('day', 0, 4);
+    await assertFails(
+      updateDoc(doc(as(BOB), 'rooms', ROOM, 'members', ALICE), {
+        leftAtRound: 4,
+      }),
+    );
+  });
+});
+
+describe('round records are the scoreboard, so they are append-only', () => {
+  const ROUND = { round: 4, activeRoles: ['weerwolf'], seatCount: 4,
+    outcome: 'eliminated', results: [], recordedAt: 1 };
+
+  it('the referee can record the round that was just played', async () => {
+    await seed('results', 0, 4);
+    await assertSucceeds(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'rounds', '4'), ROUND),
+    );
+  });
+
+  it('a player cannot record a round — that is writing your own score', async () => {
+    await seed('results', 0, 4);
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'rounds', '4'), ROUND),
+    );
+  });
+
+  it('not even the host can', async () => {
+    await seed('results', 0, 4);
+    await assertFails(
+      setDoc(doc(as(HOST), 'rooms', ROOM, 'rounds', '4'), ROUND),
+    );
+  });
+
+  it('refuses a record filed under an id that is not its round number', async () => {
+    // Create-only stops a round being overwritten; binding the id is what
+    // stops the same round being recorded twice under a second name.
+    await seed('results', 0, 4);
+    await assertFails(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'rounds', 'extra'), ROUND),
+    );
+    await assertFails(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'rounds', '5'), ROUND),
+    );
+  });
+
+  it('refuses a record for a round the evening is not on', async () => {
+    await seed('results', 0, 4);
+    await assertFails(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'rounds', '9'), { ...ROUND, round: 9 }),
+    );
+  });
+
+  it('refuses extra fields — a round carries results, not totals', async () => {
+    await seed('results', 0, 4);
+    await assertFails(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'rounds', '4'), { ...ROUND, points: 99 }),
+    );
+  });
+
+  it('cannot be edited or deleted afterwards, by anyone', async () => {
+    await seed('results', 0, 4);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'rounds', '4'), ROUND);
+    });
+    await assertFails(
+      updateDoc(doc(as(REF), 'rooms', ROOM, 'rounds', '4'), { outcome: 'won' }),
+    );
+    await assertFails(
+      updateDoc(doc(as(ALICE), 'rooms', ROOM, 'rounds', '4'), { outcome: 'won' }),
+    );
+    await assertFails(deleteDoc(doc(as(REF), 'rooms', ROOM, 'rounds', '4')));
+    await assertFails(deleteDoc(doc(as(HOST), 'rooms', ROOM, 'rounds', '4')));
+  });
+
+  it('is readable by everyone — the scoreboard is built from it client-side', async () => {
+    await seed('results', 0, 4);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'rounds', '4'), ROUND);
+    });
+    await assertSucceeds(getDoc(doc(as(ALICE), 'rooms', ROOM, 'rounds', '4')));
+    await assertSucceeds(getDoc(doc(as(BOB), 'rooms', ROOM, 'members', ALICE)));
+  });
+});
+
+describe('the round counter only ever goes forward', () => {
+  it('the referee can advance it, which is the legitimate case', async () => {
+    await seed('results', 0, 4);
+    await assertSucceeds(
+      updateDoc(doc(as(REF), 'rooms', ROOM), { currentRound: 5 }),
+    );
+  });
+
+  it('nobody can wind it back', async () => {
+    // Rewinding would let a member be admitted again against a floor the
+    // evening has already moved past — the derived seed's one soft spot.
+    await seed('results', 0, 4);
+    await assertFails(
+      updateDoc(doc(as(REF), 'rooms', ROOM), { currentRound: 2 }),
+    );
+    await assertFails(
+      updateDoc(doc(as(HOST), 'rooms', ROOM), { currentRound: 2 }),
     );
   });
 });

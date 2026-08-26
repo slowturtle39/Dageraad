@@ -5,8 +5,8 @@ import {
   type RoundRecord, type RoundResult, type SessionMember,
 } from './session.js';
 
-function member(uid: string, joined = 1, left: number | null = null, seeded = 0): SessionMember {
-  return { uid, joinedAtRound: joined, leftAtRound: left, seeded };
+function member(uid: string, joined = 1, left: number | null = null): SessionMember {
+  return { uid, joinedAtRound: joined, leftAtRound: left };
 }
 
 function result(
@@ -103,9 +103,12 @@ describe('seeding a player who joins late', () => {
       round(1, [result('a', true), result('b', false)]),
       round(2, [result('a', true), result('b', false)]),
     ];
-    const seed = seedForJoiner(standings(started, rounds));
-    const withLatecomer = [...started, member('c', 3, null, seed)];
+    const withLatecomer = [...started, member('c', 3)];
     const table = standings(withLatecomer, rounds);
+
+    // The preview the lobby shows and the number the scoreboard derives are
+    // the same rule; if they ever disagree the lobby is lying to the joiner.
+    expect(seedForJoiner(standings(started, rounds))).toBe(2);
 
     const c = table.find((s) => s.uid === 'c')!;
     expect(c.points).toBe(2);          // level with the player in last place
@@ -115,7 +118,7 @@ describe('seeding a player who joins late', () => {
   });
 
   it('only ever counts rounds the latecomer actually played', () => {
-    const members = [member('a'), member('b'), member('c', 2, null, 1)];
+    const members = [member('a'), member('b'), member('c', 2)];
     const rounds = [
       round(1, [result('a', true), result('b', false)]),
       round(2, [result('a', false), result('b', false), result('c', true)]),
@@ -166,5 +169,106 @@ describe('whether a round can start at all', () => {
   it('caps the table', () => {
     expect(canStartRound(12)).toBeNull();
     expect(canStartRound(13)).toMatch(/Maximaal 12/);
+  });
+});
+
+describe('the seed is derived from the rounds, never stored', () => {
+  // The bug this replaces: `seeded` used to be a field on the member document,
+  // written by the joining client into a document that client owns. From
+  // devtools, `seeded: 9999` was a first-place finish, and no security rule
+  // could tell that write from an honest one — rules cannot replay an evening
+  // to know what the floor was at round four.
+
+  it('ignores a seed smuggled onto the member document', () => {
+    const honest = [member('a'), member('b'), member('c', 3)];
+    const rounds = [
+      round(1, [result('a', true), result('b', false)]),   // a:3  b:1
+      round(2, [result('a', true), result('b', false)]),   // a:6  b:2
+    ];
+
+    // Exactly the write a player with devtools would attempt. The field is not
+    // in the type any more, and it is not in the arithmetic either.
+    const forged = honest.map((m) =>
+      m.uid === 'c' ? ({ ...m, seeded: 9999, points: 9999 } as SessionMember) : m,
+    );
+
+    const table = standings(forged, rounds);
+    const c = table.find((s) => s.uid === 'c')!;
+    expect(c.seeded).toBe(2);
+    expect(c.points).toBe(2);
+    expect(table[0]!.uid).toBe('a');   // not the forger
+    expect(standings(forged, rounds)).toEqual(standings(honest, rounds));
+  });
+
+  it('seeds at the floor of the round they arrived, not the floor now', () => {
+    // c joins at round 3 when the floor is 2, then everyone plays round 3.
+    // Recomputing later must still say 2 — the seed is a fact about round 3.
+    const members = [member('a'), member('b'), member('c', 3)];
+    const early = [
+      round(1, [result('a', true), result('b', false)]),
+      round(2, [result('a', true), result('b', false)]),
+    ];
+    expect(standings(members, early).find((s) => s.uid === 'c')!.seeded).toBe(2);
+
+    const later = [
+      ...early,
+      round(3, [result('a', false), result('b', false), result('c', true)]),
+    ];
+    const c = standings(members, later).find((s) => s.uid === 'c')!;
+    expect(c.seeded).toBe(2);
+    expect(c.points).toBe(2 + DEFAULT_SCORING.win);
+  });
+
+  it('seeds two people arriving together from the same floor', () => {
+    // Computed before either is admitted. Otherwise the second would seed off
+    // the first and land below somebody who walked in at the same moment.
+    const members = [member('a'), member('b'), member('c', 3), member('d', 3)];
+    const rounds = [
+      round(1, [result('a', true), result('b', false)]),
+      round(2, [result('a', true), result('b', false)]),
+    ];
+    const table = standings(members, rounds);
+    expect(table.find((s) => s.uid === 'c')!.seeded).toBe(2);
+    expect(table.find((s) => s.uid === 'd')!.seeded).toBe(2);
+  });
+
+  it('does not let a player who has gone home drag the floor down', () => {
+    // b finished on 1 point and left after round 1. A newcomer at round 3
+    // joins the table that is actually there, which is a alone on 6.
+    const members = [member('a'), member('b', 1, 1), member('c', 3)];
+    const rounds = [
+      round(1, [result('a', true), result('b', false)]),
+      round(2, [result('a', true)]),
+    ];
+    expect(standings(members, rounds).find((s) => s.uid === 'c')!.seeded).toBe(6);
+  });
+
+  it('starts the first round at zero for everyone', () => {
+    const table = standings([member('a'), member('b')], []);
+    expect(table.map((s) => s.seeded)).toEqual([0, 0]);
+    expect(table.map((s) => s.points)).toEqual([0, 0]);
+  });
+
+  it('puts somebody who joined for a round not yet played on the board', () => {
+    // They are here. A scoreboard that omits them until the deal happens
+    // reads as "you are not in this evening", which is the opposite of true.
+    const members = [member('a'), member('c', 4)];
+    const rounds = [round(1, [result('a', true)])];
+    const c = standings(members, rounds).find((s) => s.uid === 'c');
+    expect(c).toBeDefined();
+    expect(c!.roundsPlayed).toBe(0);
+  });
+
+  it('is stable under recomputation, which is the whole point', () => {
+    const members = [member('a'), member('b'), member('c', 2), member('d', 3)];
+    const rounds = [
+      round(1, [result('a', true), result('b', false)]),
+      round(2, [result('a', false), result('b', true), result('c', false)]),
+      round(3, [result('a', true), result('c', true), result('d', false)]),
+    ];
+    const once = standings(members, rounds);
+    expect(standings(members, rounds)).toEqual(once);
+    // ...and independent of the order the members happen to arrive in.
+    expect(standings([...members].reverse(), rounds)).toEqual(once);
   });
 });

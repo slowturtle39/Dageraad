@@ -46,6 +46,8 @@ export interface RoundRecord {
  * (Milan, 2026-08-26): not rewarded for arriving late, not punished for it
  * either — they simply join at the back of the pack rather than below it.
  *
+ * It is DERIVED here, never read off the member document. See `standings`.
+ *
  * `points` is what the scoreboard shows. `roundsPlayed` and `wins` are the
  * honest record and count ONLY rounds they were actually dealt into, which is
  * why they are tracked separately rather than inferred from points.
@@ -60,14 +62,41 @@ export interface SessionStanding {
   active: boolean;
 }
 
+/**
+ * Who is in the evening, and for which stretch of it.
+ *
+ * NOTE WHAT IS NOT HERE: a `seeded` field. It used to be one, written by the
+ * joining client into a document that client owns — which made the number the
+ * scoreboard starts you at a number you could type. `seeded: 9999` from
+ * devtools was a first-place finish, and no security rule could tell that
+ * write apart from an honest one, because the rules cannot replay an evening
+ * to know what the floor was at round four.
+ *
+ * So the seed is no longer stored anywhere. It is recomputed from
+ * `joinedAtRound` plus the append-only round records, both of which the joiner
+ * cannot forge: the rules pin `joinedAtRound` to the room's current round at
+ * the moment of the write, and round records are referee-written and
+ * create-only. Same discipline as the results documents — the two fields a
+ * player controls are which round they arrived and which round they left, and
+ * neither of those is worth points.
+ */
 export interface SessionMember {
   uid: string;
   /** Round number at which they joined. 1 for everyone who started the evening. */
   joinedAtRound: number;
   /** Round at which they left, or null if still here. */
   leftAtRound: number | null;
-  /** Points they were handed on arrival — the lowest standing at the time. */
-  seeded: number;
+}
+
+/** The round a member arrived for, defended against a nonsense value. */
+function joinedAt(m: SessionMember): number {
+  return Math.max(1, Math.floor(m.joinedAtRound));
+}
+
+/** Is this member at the table for `round`? leftAtRound is their LAST round. */
+function presentAt(m: SessionMember, round: number): boolean {
+  return joinedAt(m) <= round
+    && (m.leftAtRound === null || m.leftAtRound >= round);
 }
 
 /**
@@ -78,6 +107,10 @@ export interface SessionMember {
  * would let a latecomer overtake people who sat through the rounds that built
  * that average, and seeding at zero makes joining late a punishment nobody
  * would accept twice.
+ *
+ * This is the PREVIEW — what the lobby shows somebody about to join. The
+ * authoritative version is the same rule applied inside `standings`, walking
+ * the rounds in order. Nothing persists what this returns.
  */
 export function seedForJoiner(standings: SessionStanding[]): number {
   const active = standings.filter((s) => s.active);
@@ -106,6 +139,12 @@ export const DEFAULT_SCORING: ScoringRules = { win: 3, loss: 1, soloWin: 5 };
  * be right at every single write; this only has to be right once, and it makes
  * a mis-scored round fixable by correcting the round rather than by hunting
  * down the counter it already polluted.
+ *
+ * The walk is round by round rather than member-then-round, and that ordering
+ * is the point: a latecomer's seed is the floor of the table AT THE ROUND THEY
+ * ARRIVED, which is only knowable with the rounds before it already applied.
+ * Doing it this way is what lets the seed stop being a stored, forgeable field
+ * — the evening's own history is the only input.
  */
 export function standings(
   members: SessionMember[],
@@ -114,30 +153,67 @@ export function standings(
 ): SessionStanding[] {
   const out = new Map<string, SessionStanding>();
 
-  for (const m of members) {
-    out.set(m.uid, {
-      uid: m.uid,
-      points: m.seeded,
-      seeded: m.seeded,
-      roundsPlayed: 0,
-      wins: 0,
-      active: m.leftAtRound === null,
-    });
+  const byRound = new Map<number, RoundRecord[]>();
+  for (const rec of rounds) {
+    const n = Math.floor(rec.round);
+    const at = byRound.get(n);
+    if (at) at.push(rec);
+    else byRound.set(n, [rec]);
   }
 
-  for (const round of rounds) {
-    for (const r of round.results) {
-      const standing = out.get(r.uid);
-      // A result for somebody who is not a member is not a crash — a player can
-      // leave and their finished rounds still happened, and dropping the row
-      // here would silently rewrite the evening's history.
-      if (!standing) continue;
-      standing.roundsPlayed += 1;
-      if (r.won) {
-        standing.wins += 1;
-        standing.points += r.finalRole === 'looier' ? rules.soloWin : rules.win;
-      } else {
-        standing.points += rules.loss;
+  // Far enough to admit everyone, including somebody who joined for a round
+  // that has not been played yet — they belong on the scoreboard on zero
+  // rounds, not missing from it.
+  const lastRound = Math.max(
+    0,
+    ...rounds.map((rec) => Math.floor(rec.round)),
+    ...members.map(joinedAt),
+  );
+
+  /** The lowest total among people already at the table for `round`. */
+  const floorAt = (round: number): number => {
+    const seated = members
+      .filter((m) => joinedAt(m) < round && presentAt(m, round))
+      .map((m) => out.get(m.uid)?.points)
+      .filter((p): p is number => p !== undefined);
+    return seated.length === 0 ? 0 : Math.min(...seated);
+  };
+
+  for (let round = 1; round <= lastRound; round++) {
+    // Everyone arriving for this round is seeded from the SAME floor, computed
+    // before any of them is admitted — otherwise two people walking in together
+    // would seed off each other and the second would land below the first.
+    const arriving = members.filter(
+      (m) => joinedAt(m) === round && !out.has(m.uid),
+    );
+    if (arriving.length > 0) {
+      const seeded = floorAt(round);
+      for (const m of arriving) {
+        out.set(m.uid, {
+          uid: m.uid,
+          points: seeded,
+          seeded,
+          roundsPlayed: 0,
+          wins: 0,
+          active: m.leftAtRound === null,
+        });
+      }
+    }
+
+    for (const rec of byRound.get(round) ?? []) {
+      for (const r of rec.results) {
+        const standing = out.get(r.uid);
+        // A result for somebody who is not a member is not a crash — a player
+        // can leave and their finished rounds still happened, and dropping the
+        // row here would silently rewrite the evening's history.
+        if (!standing) continue;
+        standing.roundsPlayed += 1;
+        if (r.won) {
+          standing.wins += 1;
+          standing.points += r.finalRole === 'looier' ? rules.soloWin : rules.win;
+        } else {
+          standing.points += rules.loss;
+        }
       }
     }
   }
@@ -164,10 +240,7 @@ export function seatingForNextRound(
   nextRound: number,
 ): string[] {
   const present = new Set(
-    members
-      .filter((m) => m.joinedAtRound <= nextRound)
-      .filter((m) => m.leftAtRound === null || m.leftAtRound >= nextRound)
-      .map((m) => m.uid),
+    members.filter((m) => presentAt(m, nextRound)).map((m) => m.uid),
   );
 
   // Keep everyone who is staying in the seat they already had, so the table

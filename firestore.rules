@@ -21,6 +21,12 @@ rules_version = '2';
 //    as a question entirely, and makes history tamper-evident.
 //  - Late writes are blocked by matching a submission's windowIndex against
 //    the room's current one, rather than by trusting clocks.
+//  - THE SCOREBOARD IS NOT STORED. A latecomer's seed used to be a `seeded`
+//    field on their own member document, which meant the number their score
+//    starts at was a number they could type. It is now derived from
+//    `joinedAtRound` and the append-only round records — see the members and
+//    rounds blocks below, and session.ts for the arithmetic. The same reason
+//    there are no win counters: a value a rule cannot check must not exist.
 //  - No-self-vote is enforced here as well as in the UI (§7).
 // ============================================================================
 
@@ -50,6 +56,14 @@ service cloud.firestore {
       return !(field in resource.data)
         || request.resource.data[field] != resource.data[field];
     }
+    function roundNeverRewinds() {
+      return !('currentRound' in request.resource.data)
+        || !('currentRound' in resource.data)
+        || request.resource.data.currentRound >= resource.data.currentRound;
+    }
+    function currentRound(roomId) {
+      return roomDoc(roomId).currentRound;
+    }
 
     // ---------------------------------------------------------------- rooms
     // The room document is PUBLIC to anyone with the link, by design: it holds
@@ -74,7 +88,12 @@ service cloud.firestore {
       allow update: if signedIn()
         && (isHost(roomId) || isReferee(roomId))
         && !changed('refereeUid')
-        && !changed('hostUid');
+        && !changed('hostUid')
+        // currentRound only ever goes forward. It is what a joining member's
+        // `joinedAtRound` is pinned to, and therefore the sole input to their
+        // seed: rewinding it would let the referee re-admit somebody against a
+        // floor the evening has already moved past.
+        && roundNeverRewinds();
 
       allow delete: if isHost(roomId);
 
@@ -182,6 +201,95 @@ service cloud.firestore {
       match /results/{playerUid} {
         allow read: if signedIn();
         allow create: if isReferee(roomId) && inPhase(roomId, 'results');
+        allow update, delete: if false;
+      }
+
+      // ------------------------------------------------------------ members
+      // Who is in the EVENING, as opposed to who is seated in the round now
+      // being played. A room is a session (session.ts): people arrive at round
+      // three and leave after round five, and neither should end the night.
+      //
+      // ***** WHY THERE IS NO `seeded` FIELD *****
+      // A latecomer starts level with whoever is currently last, so they join
+      // at the back of the pack rather than below it. That number used to be
+      // written HERE, by the arriving client, into a document that client owns.
+      // Which meant the score the evening starts you on was a score you could
+      // type: `seeded: 9999` from devtools won the night, and nothing in this
+      // file could refuse it — a rule can decide who may write a document, not
+      // whether 9999 was the correct floor at round four, which needs the whole
+      // evening replayed and rules cannot replay anything.
+      //
+      // So it is not stored. It is recomputed from `joinedAtRound` and the
+      // round records below, neither of which the joiner controls. The key
+      // allowlist is what keeps it that way: re-adding the field is rejected
+      // at the database, not merely ignored by whichever client remembered to.
+      match /members/{memberUid} {
+        allow read: if signedIn();
+
+        // You add yourself; the host may add somebody whose phone died.
+        // `joinedAtRound` is pinned to the room's CURRENT round — this single
+        // comparison is what makes the derived seed unforgeable, because
+        // joining is the only moment a player has any say over it at all.
+        allow create: if signedIn()
+          && (memberUid == uid() || isHost(roomId))
+          && request.resource.data.keys().hasOnly(
+               ['uid', 'joinedAtRound', 'leftAtRound']
+             )
+          && request.resource.data.uid == memberUid
+          && request.resource.data.joinedAtRound is int
+          && request.resource.data.joinedAtRound == currentRound(roomId)
+          && request.resource.data.leftAtRound == null;
+
+        // The only legitimate update is going home: null -> a round number,
+        // once, and never a round already in the past. Backdating a departure
+        // would erase rounds you actually played, and `joinedAtRound` must
+        // never move at all — it is the seed.
+        allow update: if signedIn()
+          && (memberUid == uid() || isHost(roomId))
+          && request.resource.data.keys().hasOnly(
+               ['uid', 'joinedAtRound', 'leftAtRound']
+             )
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.joinedAtRound == resource.data.joinedAtRound
+          && (
+               // going home
+               (resource.data.leftAtRound == null
+                 && request.resource.data.leftAtRound is int
+                 && request.resource.data.leftAtRound >= currentRound(roomId))
+               // ...or coming back, which re-uses the ORIGINAL joinedAtRound
+               // and therefore the original seed. Otherwise stepping out for a
+               // round would be a way to top your score up off the bottom.
+               || (resource.data.leftAtRound != null
+                 && request.resource.data.leftAtRound == null)
+             );
+
+        // Membership is history. A round you played happened whether or not
+        // you are still in the room, and the scoreboard is rebuilt from it.
+        allow delete: if false;
+      }
+
+      // ------------------------------------------------------------- rounds
+      // One finished game of the evening. APPEND-ONLY, exactly like /results
+      // and for a stronger reason: these documents are now the ONLY input to
+      // the scoreboard, so an editable round is an editable score.
+      //
+      // The document id is the round number, and it must match the `round`
+      // field. Create-only already stops a round being overwritten; binding
+      // the id stops the same round being recorded twice under a second id.
+      match /rounds/{roundId} {
+        allow read: if signedIn();
+
+        allow create: if isReferee(roomId)
+          && request.resource.data.keys().hasOnly(
+               ['round', 'activeRoles', 'seatCount', 'outcome', 'results',
+                'recordedAt']
+             )
+          && request.resource.data.round is int
+          && request.resource.data.round == currentRound(roomId)
+          && roundId == string(request.resource.data.round)
+          && request.resource.data.results is list
+          && request.resource.data.seatCount is int;
+
         allow update, delete: if false;
       }
     }
