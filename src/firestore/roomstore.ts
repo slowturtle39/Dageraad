@@ -152,15 +152,24 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
 
   private seatCache: Map<string, SeatIndex> | null = null;
 
-  /** uid -> seat. Seating is frozen once the game starts, so cache it. */
+  /**
+   * uid -> seat, from the room's seating list. Index IS the seat.
+   *
+   * Read from the ROOM document rather than from a seatIndex on each player,
+   * because a seat number living in a document its own player can write is a
+   * seat number that player can choose. Same reasoning as `readSubmissions`
+   * taking the seat from the document's owner.
+   *
+   * Cached because seating is frozen for the duration of a round. A new round
+   * re-seats the table, so the referee builds a new store for it — this cache
+   * must never outlive one round.
+   */
   private async seatByUid(): Promise<Map<string, SeatIndex>> {
     if (this.seatCache) return this.seatCache;
-    const snap = await getDocs(collection(this.db, paths.players(this.roomId)));
+    const snap = await getDoc(this.room());
+    const seating = (snap.data() as { seating?: string[] } | undefined)?.seating ?? [];
     const map = new Map<string, SeatIndex>();
-    for (const d of snap.docs) {
-      const data = d.data() as { seatIndex?: number };
-      if (typeof data.seatIndex === 'number') map.set(d.id, data.seatIndex);
-    }
+    seating.forEach((uid, seat) => map.set(uid, seat));
     this.seatCache = map;
     return map;
   }

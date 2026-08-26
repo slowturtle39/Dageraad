@@ -99,7 +99,7 @@ describe('the rules refuse to let it be re-added from outside', () => {
   it('pins joinedAtRound to the round actually being played', () => {
     // The joiner's only remaining influence over their own seed. If this
     // comparison goes, `joinedAtRound: 99` is the new `seeded: 9999`.
-    expect(members).toMatch(/joinedAtRound == currentRound\(roomId\)/);
+    expect(members).toMatch(/joinedAtRound == currentRound\(roomId\) \+ 1/);
   });
 
   it('never lets joinedAtRound move once it is set', () => {

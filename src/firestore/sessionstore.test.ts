@@ -102,7 +102,7 @@ describe('the store cannot write a score even by accident', () => {
   it('takes joinedAtRound from the room document, never from its caller', () => {
     // The moment this becomes a parameter, the joining device picks its own
     // seed again and the rules are the only thing left standing.
-    expect(src).toMatch(/joinedAtRound: await this\.currentRound\(\)/);
+    expect(src).toMatch(/joinedAtRound: await this\.currentRound\(\) \+ 1/);
     expect(src).toMatch(/async join\(uid: string\): Promise<void>/);
   });
 

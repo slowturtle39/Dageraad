@@ -1,5 +1,5 @@
 import type {
-  CardId, GameConfig, PrivateInfo, RoleId, SeatIndex, Choice, NightEvent,
+  CardId, GameConfig, PrivateInfo, RoleId, Choice, NightEvent, NightState,
 } from '../engine/types.js';
 import type { Timeline } from '../engine/timeline.js';
 import type { VoteOutcome } from '../engine/dayphase.js';
@@ -61,7 +61,15 @@ export interface RoomDoc {
   activeRoles: RoleId[];
   nightOrder: RoleId[];
   config: GameConfig;
-  /** Seat order around the physical table. Frozen once the game starts. */
+  /**
+   * Seat order around the physical table, as uids: index IS the seat. Written
+   * by the referee at each round boundary and frozen while a round runs.
+   *
+   * THE ONLY PLACE A SEAT IS RECORDED. There is deliberately no seatIndex on
+   * the player document: that would be redundant (the doc is keyed by uid) and
+   * forgeable, and no rule could stop a player writing somebody else's seat
+   * number into a document they own. Same reasoning as the submissions store.
+   */
   seating: string[];
   /**
    * Safe to publish: derived from activeRoles alone, never from the deal
@@ -75,12 +83,37 @@ export interface RoomDoc {
   createdAt: number;
   /** Set while the host has paused for an absent player. Public by design. */
   pausedAt: number | null;
+  /**
+   * Live counts, published by the referee. Safe to show: they are counts, and
+   * never who voted for whom — in the physical game you can see perfectly well
+   * whose hand is still down.
+   */
+  votesCast: number;
+  abstainCount: number;
+  /** Set when the 50/50 suspense extension fires (§7). Public on purpose. */
+  discussionExtendedByMs: number;
+  /**
+   * Every seat's card at dawn. Written ONCE, when the game is over — this is
+   * the single moment roles become public, and until then it is null.
+   */
+  finalRoles: Record<number, RoleId> | null;
+  outcome: string | null;
+  /** seat -> role, only for cards genuinely turned face up in play (§12). */
+  revealedSeats: Record<number, RoleId>;
+  shieldedSeats: number[];
 }
 
+/**
+ * Public per-player info. Name and picture, and nothing that is worth points
+ * or reveals a card.
+ *
+ * NOTE THE ABSENCE OF A SEAT. Seating is the room document's ordered uid list,
+ * written by the referee; a seatIndex here would be a seat number sitting in a
+ * document its own player can write. The rules allowlist these keys.
+ */
 export interface PlayerDoc {
   displayName: string;
   avatar: string | null;
-  seatIndex: SeatIndex;
   joinedAt: number;
 }
 
@@ -101,14 +134,62 @@ export interface PrivateDoc {
   revealedThrough: number;
 }
 
-/** SECRET. Referee only. Nothing else in the app may read this. */
+/**
+ * SECRET. Referee only. Nothing else in the app may read this.
+ *
+ * A SERIALISED NightState, not the thing itself. `NightState` uses `Set`s for
+ * the shielded slots and revealed cards, and Firestore cannot store a Set — it
+ * would arrive back as an empty object, and an empty shield set is a Bodyguard
+ * who silently stopped working. Use the converters below rather than casting.
+ */
 export interface EngineStateDoc {
+  seatCount: number;
+  centerCount: number;
   slots: CardId[];
   cardRole: Record<CardId, RoleId>;
   originalRole: RoleId[];
+  /** Set<SlotIndex> as an array. */
   shieldedSlots: number[];
+  /** Set<CardId> as an array. */
   revealedCards: CardId[];
   alphaWolfSlot: number | null;
+  /**
+   * Seats that COUNT AS a role without their card having changed — the
+   * Onderzoeker case. Carried explicitly because losing it would not throw:
+   * the night would resolve, and one player would quietly be on the wrong team
+   * at dawn.
+   */
+  assumedRole: Record<number, RoleId>;
+}
+
+/** NightState -> document. Sets become arrays; nothing else changes. */
+export function engineStateToDoc(state: NightState): EngineStateDoc {
+  return {
+    seatCount: state.seatCount,
+    centerCount: state.centerCount,
+    slots: [...state.slots],
+    cardRole: { ...state.cardRole },
+    originalRole: [...state.originalRole],
+    shieldedSlots: [...state.shieldedSlots],
+    revealedCards: [...state.revealedCards],
+    alphaWolfSlot: state.alphaWolfSlot,
+    assumedRole: { ...state.assumedRole },
+  };
+}
+
+/** Document -> NightState. The inverse, and tested as one. */
+export function engineStateFromDoc(doc: EngineStateDoc): NightState {
+  return {
+    seatCount: doc.seatCount,
+    centerCount: doc.centerCount,
+    slots: [...doc.slots],
+    cardRole: { ...doc.cardRole },
+    originalRole: [...doc.originalRole],
+    shieldedSlots: new Set(doc.shieldedSlots ?? []),
+    revealedCards: new Set(doc.revealedCards ?? []),
+    alphaWolfSlot: doc.alphaWolfSlot,
+    assumedRole: { ...(doc.assumedRole ?? {}) },
+  };
 }
 
 export interface SubmissionDoc {

@@ -430,7 +430,7 @@ describe('the seed a latecomer starts on cannot be typed', () => {
     await seed('day', 0, 4);
     await assertFails(
       setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
-        uid: CARL, joinedAtRound: 4, leftAtRound: null, seeded: 9999,
+        uid: CARL, joinedAtRound: 5, leftAtRound: null, seeded: 9999,
       }),
     );
   });
@@ -439,12 +439,12 @@ describe('the seed a latecomer starts on cannot be typed', () => {
     await seed('day', 0, 4);
     await assertFails(
       setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
-        uid: CARL, joinedAtRound: 4, leftAtRound: null, points: 9999,
+        uid: CARL, joinedAtRound: 5, leftAtRound: null, points: 9999,
       }),
     );
     await assertFails(
       setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
-        uid: CARL, joinedAtRound: 4, leftAtRound: null, wins: 12,
+        uid: CARL, joinedAtRound: 5, leftAtRound: null, wins: 12,
       }),
     );
   });
@@ -453,7 +453,7 @@ describe('the seed a latecomer starts on cannot be typed', () => {
     await seed('day', 0, 4);
     await assertSucceeds(
       setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
-        uid: CARL, joinedAtRound: 4, leftAtRound: null,
+        uid: CARL, joinedAtRound: 5, leftAtRound: null,
       }),
     );
   });
@@ -485,7 +485,7 @@ describe('the seed a latecomer starts on cannot be typed', () => {
     await seed('day', 0, 4);
     await assertFails(
       setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
-        uid: CARL, joinedAtRound: 4.0001, leftAtRound: null,
+        uid: CARL, joinedAtRound: 5.0001, leftAtRound: null,
       }),
     );
   });
@@ -494,7 +494,7 @@ describe('the seed a latecomer starts on cannot be typed', () => {
     await seed('day', 0, 4);
     await assertFails(
       setDoc(doc(as(CARL), 'rooms', ROOM, 'members', CARL), {
-        uid: ALICE, joinedAtRound: 4, leftAtRound: null,
+        uid: ALICE, joinedAtRound: 5, leftAtRound: null,
       }),
     );
   });
@@ -503,7 +503,7 @@ describe('the seed a latecomer starts on cannot be typed', () => {
     await seed('day', 0, 4);
     await assertFails(
       setDoc(doc(as(CARL), 'rooms', ROOM, 'members', ALICE), {
-        uid: ALICE, joinedAtRound: 4, leftAtRound: null,
+        uid: ALICE, joinedAtRound: 5, leftAtRound: null,
       }),
     );
   });
@@ -512,7 +512,7 @@ describe('the seed a latecomer starts on cannot be typed', () => {
     await seed('day', 0, 4);
     await assertSucceeds(
       setDoc(doc(as(HOST), 'rooms', ROOM, 'members', CARL), {
-        uid: CARL, joinedAtRound: 4, leftAtRound: null,
+        uid: CARL, joinedAtRound: 5, leftAtRound: null,
       }),
     );
   });
@@ -524,7 +524,7 @@ describe('the seed a latecomer starts on cannot be typed', () => {
     await seed('day', 0, 4);
     await assertFails(
       updateDoc(doc(as(ALICE), 'rooms', ROOM, 'members', ALICE), {
-        joinedAtRound: 4,
+        joinedAtRound: 5,
       }),
     );
   });
@@ -592,7 +592,7 @@ describe('going home, and coming back', () => {
     });
     await assertFails(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'members', ALICE), {
-        uid: ALICE, joinedAtRound: 4, leftAtRound: null,
+        uid: ALICE, joinedAtRound: 5, leftAtRound: null,
       }),
     );
   });

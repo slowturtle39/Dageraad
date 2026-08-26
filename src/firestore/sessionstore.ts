@@ -50,13 +50,11 @@ export class FirestoreSessionStore implements SessionStore {
     return doc(this.db, paths.room(this.roomId));
   }
 
+  /** The round NOW BEING PLAYED. 0 in the lobby, N during and after round N. */
   private async currentRound(): Promise<number> {
     const snap = await getDoc(this.room());
     const data = snap.data() as { currentRound?: number } | undefined;
-    // A room in the lobby has played nothing, and somebody joining then is a
-    // round-1 member on a floor of zero — the same code path, not a special
-    // case. Defaulting to 1 keeps it that way if the field is ever missing.
-    return typeof data?.currentRound === 'number' ? Math.max(1, data.currentRound) : 1;
+    return typeof data?.currentRound === 'number' ? Math.max(0, data.currentRound) : 0;
   }
 
   /**
@@ -70,9 +68,12 @@ export class FirestoreSessionStore implements SessionStore {
    * because nothing here is allowed to.
    */
   async join(uid: string): Promise<void> {
+    // The NEXT round, not the one running: the deal is fixed the moment the
+    // night starts, so an arrival plays from the following game. In the lobby
+    // that is round 1, which is the same arithmetic rather than a special case.
     const member: SessionMemberDoc = {
       uid,
-      joinedAtRound: await this.currentRound(),
+      joinedAtRound: await this.currentRound() + 1,
       leftAtRound: null,
     };
     await setDoc(doc(this.db, paths.member(this.roomId, uid)), member);
