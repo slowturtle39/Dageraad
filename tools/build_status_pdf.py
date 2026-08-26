@@ -152,25 +152,59 @@ story.append(Paragraph(
     "met onze eigen huisregels",
     style("sub", fontSize=12.5, leading=18, textColor=DIM, spaceAfter=16)))
 
-story.append(panel([
-    ["Status", "Motor, timing, orkestratie, UI en beveiligingsregels: af en getest"],
-    ["Tests", "150 groen · typecheck schoon · 22 commits"],
-    ["Ontbreekt", "Firebase-project + de live app-schil eromheen"],
-    ["Speelbaar", "Nog niet — zie “Wat er nog moet gebeuren”"],
-], [26 * mm, 130 * mm]))
-
-story.append(Spacer(1, 9 * mm))
 story.append(Paragraph(
     "Dit document beschrijft waar het project staat, welke ontwerpkeuzes eronder "
     "liggen en wat er nog moet gebeuren voordat er aan tafel mee gespeeld kan "
     "worden.", LEAD))
 
+# ------------------------------------------------- status, up front
+#
+# Deliberately the first thing a reader sees, and deliberately blunt about the
+# gap: the Firebase side is genuinely finished, which makes it very easy to
+# read this as "so it works now". It does not. `npm run dev` still starts the
+# demo harness.
+story.append(Paragraph("Stand van zaken — vóór het playtesten", H1))
+
+story.append(Paragraph("Wat klaar is", H2))
+story.append(panel([
+    ["Firebase", "Project <b>dageraad-fdb2d</b>. Firestore draait in productiemodus in <b>europe-west4</b>, anonieme login staat aan, en de publieke webconfig staat in de repo."],
+    ["Beveiliging", "De Firestore-regels zijn <b>gepubliceerd</b> (26 aug, ±08:56). De regelsuite draait 38/38 groen in de emulator — geschreven als aanvallen, niet als gelukkige paden."],
+    ["Code", "Nachtmotor, tijdlijn, dagfase, orkestratie en alle schermen: <b>151 tests groen</b>, typecheck schoon."],
+], [26 * mm, 130 * mm]))
+
+story.append(Paragraph("Wat er nog moet gebeuren — dit is het echte werk", H2))
+story.append(Paragraph(
+    "<b>De live app-schil bestaat nog niet.</b> <font face='Courier' size='8'>"
+    "npm run dev</font> start vandaag een <i>demo</i> met verzonnen spelers: er "
+    "wordt geen kamer aangemaakt, geen kaarten gedeeld en niets gesynchroniseerd "
+    "tussen telefoons. <font face='Courier' size='8'>src/firebase/config.ts</font> "
+    "staat klaar, maar wordt nog nergens geïmporteerd.", BODY))
+story.append(panel([
+    ["1", "Schil bouwen", "Kamer maken en joinen, stoelvolgorde vastleggen, kaarten delen naar Firestore, de scheidsrechter op de tablet laten draaien, en elk telefoonscherm aan zijn eigen echte onthullingen hangen."],
+    ["2", "Lokaal doorspelen", "Eén nacht van begin tot eind, met meerdere browservensters als losse spelers."],
+    ["3", "Uitrollen", "<font face='Courier' size='8'>npm run build</font> en daarna <font face='Courier' size='8'>firebase deploy --only hosting</font> — dat geeft de deelbare link die iedereen op zijn eigen telefoon opent."],
+], [8 * mm, 30 * mm, 116 * mm]))
+
+story.append(Paragraph("Commando’s die nu al werken", H2))
+story.append(panel([
+    ["npm install", "Eenmalig."],
+    ["npm test", "151 tests — motor, timing, dagfase, UI-regels."],
+    ["npm run test:rules", "38 beveiligingstests in de emulator. Vereist Java 11+; op Milans machine moet de Java-bin tijdelijk aan PATH worden toegevoegd."],
+    ["npm run dev", "De demo. Nadrukkelijk <b>geen</b> echt spel — geen kamers, geen synchronisatie."],
+], [34 * mm, 122 * mm]))
+
+story.append(Paragraph(
+    "<b>Over de plaatjes:</b> de app gebruikt nu eigen, zelfgetekende symbolen. "
+    "Die kunnen later vervangen worden door echte spelillustraties als we goede "
+    "foto’s van de kaarten hebben — <i>optioneel, en het houdt het playtesten "
+    "niet tegen.</i>", SMALL))
+
+story.append(PageBreak())
+
 story.append(figure("/tmp/pdf-table.png", 74,
                     "De tafel op een telefoon. Dezelfde weergave in dag én nacht. "
                     "De gestreepte kaarten zijn eigen vermoedens, geen feiten.",
                     crop=(0.02, 0.80)))
-
-story.append(PageBreak())
 
 # ---------------------------------------------------------------- what
 story.append(Paragraph("Wat het is", H1))
@@ -338,17 +372,18 @@ story.append(PageBreak())
 # ---------------------------------------------------------------- todo
 story.append(Paragraph("Wat er nog moet gebeuren", H1))
 story.append(Paragraph(
-    "Drie stappen tot een link die je kunt delen. Ze moeten in deze volgorde: "
-    "stap 2 kan pas als stap 1 gedaan is.", LEAD))
+    "De Firebase-kant is af. Wat overblijft is de app-schil en het uitrollen.", LEAD))
 
 story.append(panel([
-    ["1", "Firebase-project aanmaken",
-     "Milan · ±15 min. Firestore in productiemodus, regio <b>eur3</b> (die keuze is definitief), anonieme login aanzetten, config kopiëren."],
-    ["2", "De live app-schil bouwen",
-     "Kamer maken en joinen, kaarten delen, de scheidsrechter op de tablet laten draaien, de schermen aan echte gegevens hangen. Dit is echt werk, geen knopje."],
-    ["3", "Regels en hosting uitrollen",
-     "Eén commando elk. Daarna is er een link."],
-    ["4", "Spelen", "Modus 1 tegen modus 2 — en de open regels beslissen."],
+    ["✓", "Firebase-project aanmaken",
+     "<i>Gedaan.</i> dageraad-fdb2d, europe-west4, anonieme login aan, config in de repo."],
+    ["✓", "Beveiligingsregels uitrollen",
+     "<i>Gedaan.</i> Gepubliceerd op 26 augustus, 38/38 groen in de emulator."],
+    ["1", "De live app-schil bouwen",
+     "Kamer maken en joinen, kaarten delen, de scheidsrechter op de tablet laten draaien, de schermen aan echte gegevens hangen. Dit is echt werk, geen knopje — en het is het enige dat nog tussen de code en een speelbaar potje staat."],
+    ["2", "Hosting uitrollen",
+     "<font face='Courier' size='8'>npm run build</font>, dan <font face='Courier' size='8'>firebase deploy --only hosting</font>. Daarna is er een link."],
+    ["3", "Spelen", "Modus 1 tegen modus 2 — en de open regels beslissen."],
 ], [8 * mm, 44 * mm, 102 * mm]))
 
 story.append(Paragraph("Nog open", H2))
@@ -360,10 +395,12 @@ story.append(panel([
 
 story.append(Spacer(1, 8))
 story.append(Paragraph(
-    "<i>Alles behalve de Firebase-koppeling draait en test zonder cloudaccount: "
-    "</i><font face='Courier' size='8'>npm install &amp;&amp; npm test</font>"
-    "<i> en </i><font face='Courier' size='8'>npm run dev</font><i> werken "
-    "meteen.</i>", SMALL))
+    "<i>De motor en alle tests draaien nog steeds zonder cloudaccount — </i>"
+    "<font face='Courier' size='8'>npm install &amp;&amp; npm test</font>"
+    "<i> werkt op elke machine. Alleen </i>"
+    "<font face='Courier' size='8'>npm run test:rules</font>"
+    "<i> heeft Java nodig, en alleen het uitrollen heeft het Firebase-project "
+    "nodig.</i>", SMALL))
 
 doc = BaseDocTemplate(OUT, pagesize=A4,
                       leftMargin=20 * mm, rightMargin=20 * mm,
