@@ -113,7 +113,7 @@ def panel(rows, widths, header=False):
 CROPS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_figures")
 
 
-def figure(path, width_mm, caption, crop=None):
+def figure_parts(path, width_mm, caption, crop=None):
     """
     Place a screenshot, optionally cropping first.
 
@@ -123,7 +123,7 @@ def figure(path, width_mm, caption, crop=None):
     portrait screenshot always has.
     """
     if not os.path.exists(path):
-        return Spacer(1, 0)
+        return []
     from PIL import Image as PILImage
 
     src = PILImage.open(path)
@@ -138,29 +138,56 @@ def figure(path, width_mm, caption, crop=None):
     w, h = src.size
     width = width_mm * mm
     img = Image(path, width=width, height=width * h / w)
-    return KeepTogether([img, Paragraph(caption, CAP)])
+    return [img, Paragraph(caption, CAP)]
+
+
+def figure(path, width_mm, caption, crop=None):
+    """
+    A figure that will not be split across a page break.
+
+    Inside a table cell use `figure_parts` instead: a KeepTogether nested in a
+    cell reports an unbounded height and ReportLab abandons the page.
+    """
+    parts = figure_parts(path, width_mm, caption, crop)
+    return KeepTogether(parts) if parts else Spacer(1, 0)
 
 
 story = []
 
 # ---------------------------------------------------------------- cover
-story.append(Spacer(1, 26 * mm))
+#
+# Title, then the art large, then the text — a book cover. The screenshot is
+# there to give a reader a feel for the thing before a single word of status,
+# so it is sized to be looked at rather than referred to.
+story.append(Spacer(1, 10 * mm))
 story.append(Paragraph("Dageraad", style("title", fontName="Times-Bold",
                                          fontSize=40, leading=44, spaceAfter=2)))
 story.append(Paragraph(
     "Companion-app voor <i>1 Nacht Weerwolven &amp; Waaghalzen</i>, "
     "met onze eigen huisregels",
-    style("sub", fontSize=12.5, leading=18, textColor=DIM, spaceAfter=16)))
+    style("sub", fontSize=12.5, leading=18, textColor=DIM, spaceAfter=14)))
 
+_cover = figure_parts("/tmp/pdf-table.png", 92,
+                      "De tafel op een telefoon — dezelfde weergave in dag én "
+                      "nacht. De gestreepte kaarten zijn eigen vermoedens, "
+                      "geen feiten.",
+                      crop=(0.02, 0.80))
+for _part in _cover:
+    _part.hAlign = "CENTER"
+    story.append(_part)
+
+story.append(Spacer(1, 6 * mm))
 story.append(Paragraph(
     "Dit document beschrijft waar het project staat, welke ontwerpkeuzes eronder "
     "liggen en wat er nog moet gebeuren voordat er aan tafel mee gespeeld kan "
     "worden.", LEAD))
 
+story.append(PageBreak())
+
 # ------------------------------------------------- status, up front
 #
-# Deliberately the first thing a reader sees, and deliberately blunt about the
-# gap: the Firebase side is genuinely finished, which makes it very easy to
+# Deliberately the first thing after the cover, and deliberately blunt about
+# the gap: the Firebase side is genuinely finished, which makes it very easy to
 # read this as "so it works now". It does not. `npm run dev` still starts the
 # demo harness.
 story.append(Paragraph("Stand van zaken — vóór het playtesten", H1))
@@ -200,11 +227,6 @@ story.append(Paragraph(
     "niet tegen.</i>", SMALL))
 
 story.append(PageBreak())
-
-story.append(figure("/tmp/pdf-table.png", 74,
-                    "De tafel op een telefoon. Dezelfde weergave in dag én nacht. "
-                    "De gestreepte kaarten zijn eigen vermoedens, geen feiten.",
-                    crop=(0.02, 0.80)))
 
 # ---------------------------------------------------------------- what
 story.append(Paragraph("Wat het is", H1))
