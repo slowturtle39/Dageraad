@@ -21,8 +21,14 @@ export interface DayConfig {
   suspenseExtension: boolean;
   suspenseExtensionMs: number;
   votingMode: 'in-app' | 'irl';
-  voteWindowMs: number;
-  /** The window in which a majority-abstain can end the vote early (§7). */
+  /**
+   * Safety bound on waiting for the last vote. Voting is MANDATORY (see
+   * `waitForEveryVote`), so this is not a deadline players are racing — it is
+   * the point at which something has clearly gone wrong and the host needs to
+   * intervene rather than the game silently resolving without somebody.
+   */
+  voteWaitTimeoutMs: number;
+  /** The stretch of the discussion in which a majority-abstain can end it (§7). */
   finalMinuteMs: number;
   /** How often to check for a majority abstain during the final minute. */
   abstainPollMs: number;
@@ -37,7 +43,7 @@ export const DEFAULT_DAY_CONFIG: DayConfig = {
   suspenseExtension: false,
   suspenseExtensionMs: 2 * 60_000,
   votingMode: 'in-app',
-  voteWindowMs: 60_000,
+  voteWaitTimeoutMs: 10 * 60_000,
   finalMinuteMs: 60_000,
   abstainPollMs: 1_000,
   seatCount: 0,
@@ -51,13 +57,26 @@ export interface DayStore {
   announceExtension(extraMs: number): Promise<void>;
 }
 
+export interface DayRunnerHooks {
+  /**
+   * How many have voted, out of how many. Safe to show publicly: it is a count,
+   * never who voted for whom, and in the physical game you can see perfectly
+   * well whose hand is still down. Needed to chase the last player.
+   */
+  onVoteProgress?: (cast: number, total: number) => void;
+  /** Live abstain count during the final minute, for the same reason. */
+  onAbstainProgress?: (abstaining: number, needed: number) => void;
+}
+
 export interface DayRunResult {
   result: DayResult;
   outcomes: Record<SeatIndex, VoteOutcome>;
   /** Whether the 50/50 extension fired. */
   extended: boolean;
-  /** Whether a majority-abstain ended the vote before the timer ran out. */
+  /** Whether the group decided not to vote at all. */
   endedByAbstain: boolean;
+  /** Seats that never cast a vote. Should be empty — voting is mandatory. */
+  missingVotes: SeatIndex[];
 }
 
 export interface DayRunnerOptions {
@@ -66,6 +85,7 @@ export interface DayRunnerOptions {
   clock: Clock;
   config?: DayConfig;
   dayOptions?: DayOptions;
+  hooks?: DayRunnerHooks;
   /**
    * Source of the suspense coin flip. Injected so a game can be replayed and a
    * test can be deterministic — and so it is obvious that this is the ONLY
@@ -82,25 +102,50 @@ export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
   };
   const random = opts.random ?? Math.random;
   const { store, clock } = opts;
+  const hooks = opts.hooks ?? {};
 
   let extended = false;
+  let endedByAbstain = false;
 
   await store.setPhase('day');
 
+  // ---- discussion -------------------------------------------------------
+  //
+  // The "vote not to vote" toggle is available the WHOLE time — people work out
+  // there is nothing to gain long before the last minute, and hiding the button
+  // until then would mean they had decided but couldn't say so. What is confined
+  // to the final minute is when a majority can END the discussion early, so the
+  // group still has to hold that position until the end rather than settling it
+  // in the first thirty seconds.
   if (config.discussionEnabled) {
-    await clock.sleep(config.discussionMs);
+    const quiet = Math.max(0, config.discussionMs - config.finalMinuteMs);
+    if (quiet > 0) await clock.sleep(quiet);
+
+    endedByAbstain = await watchForAbstain(
+      store, clock, config, Math.min(config.finalMinuteMs, config.discussionMs), hooks,
+    );
 
     // Rolled only AFTER the timer expires, so nobody can time their accusation
-    // around a known answer. The result is public the moment it happens.
-    if (config.suspenseExtension && random() < 0.5) {
+    // around a known answer. Public the moment it happens.
+    if (!endedByAbstain && config.suspenseExtension && random() < 0.5) {
       extended = true;
       await store.announceExtension(config.suspenseExtensionMs);
-      await clock.sleep(config.suspenseExtensionMs);
+      endedByAbstain = await watchForAbstain(
+        store, clock, config, config.suspenseExtensionMs, hooks,
+      );
     }
   }
 
-  await store.setPhase('voting');
-  const endedByAbstain = await runVoteWindow(store, clock, config);
+  // ---- voting -----------------------------------------------------------
+  let missingVotes: SeatIndex[] = [];
+  if (!endedByAbstain) {
+    await store.setPhase('voting');
+    missingVotes = await waitForEveryVote(store, clock, config, hooks);
+
+    // A vote is a target OR an abstain, so the group can still land on "no
+    // vote" here — it just has to be everybody saying so, not a silence.
+    endedByAbstain = isMajorityAbstaining(await store.readVotes(), config.seatCount);
+  }
 
   const votes = [...(await store.readVotes()).values()];
   const result = resolveDay(opts.state, votes, opts.dayOptions);
@@ -111,41 +156,79 @@ export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
     outcomes: voteOutcomes(opts.state, votes, result),
     extended,
     endedByAbstain,
+    missingVotes,
   };
 }
 
 /**
- * Sit out the voting window, watching for a majority abstain in its final
- * minute (§7).
+ * Watch for a majority abstain over a stretch of the discussion.
  *
- * The check is "more than 50% have the toggle on AT THE SAME TIME", not "more
- * than 50% have touched it at some point" — it is a simultaneous show of hands,
- * so somebody switching theirs back off genuinely undoes it.
- *
- * Polling is confined to the final minute on purpose. Watching from the start
- * would let the group discover the threshold had been met early and end the
- * vote before anyone had to commit in front of the others, which is the whole
- * tension the rule is trying to create.
+ * The check is "more than half have the toggle on AT THE SAME TIME", not "more
+ * than half have touched it at some point" — it is a simultaneous show of
+ * hands, so somebody switching theirs back off genuinely undoes it.
  */
-async function runVoteWindow(
+async function watchForAbstain(
   store: DayStore,
   clock: Clock,
   config: DayConfig,
+  durationMs: number,
+  hooks: DayRunnerHooks,
 ): Promise<boolean> {
-  const quietMs = Math.max(0, config.voteWindowMs - config.finalMinuteMs);
-  if (quietMs > 0) await clock.sleep(quietMs);
-
-  const watchMs = config.voteWindowMs - quietMs;
+  const needed = Math.floor(config.seatCount / 2) + 1;
   let elapsed = 0;
-  while (elapsed < watchMs) {
-    const step = Math.min(config.abstainPollMs, watchMs - elapsed);
+  while (elapsed < durationMs) {
+    const step = Math.min(config.abstainPollMs, durationMs - elapsed);
     await clock.sleep(step);
     elapsed += step;
 
     const votes = await store.readVotes();
+    const abstaining = [...votes.values()].filter((v) => v.abstain).length;
+    hooks.onAbstainProgress?.(abstaining, needed);
     if (isMajorityAbstaining(votes, config.seatCount)) return true;
   }
   return false;
+}
+
+/**
+ * Wait until EVERY player has voted.
+ *
+ * Voting is mandatory once the timer has expired and the group did not abstain
+ * (Milan, 2026-08-26). So this is not a race against a deadline: there is no
+ * point at which a slow player is dropped and the tally resolves without them.
+ * A vote counts as cast when the player has named a target or explicitly
+ * abstained — silence is not an answer.
+ *
+ * `voteWaitTimeoutMs` exists only so a broken client cannot hang the evening
+ * forever. Reaching it means something is wrong and the host should look, which
+ * is why the seats still missing are returned rather than swallowed.
+ */
+async function waitForEveryVote(
+  store: DayStore,
+  clock: Clock,
+  config: DayConfig,
+  hooks: DayRunnerHooks,
+): Promise<SeatIndex[]> {
+  let waited = 0;
+  for (;;) {
+    const votes = await store.readVotes();
+    const cast = [...votes.values()].filter(
+      (v) => v.target !== null || v.abstain,
+    ).length;
+    hooks.onVoteProgress?.(cast, config.seatCount);
+
+    if (cast >= config.seatCount) return [];
+    if (waited >= config.voteWaitTimeoutMs) {
+      const missing: SeatIndex[] = [];
+      for (let s = 0; s < config.seatCount; s++) {
+        const v = votes.get(s);
+        if (!v || (v.target === null && !v.abstain)) missing.push(s);
+      }
+      return missing;
+    }
+
+    await clock.sleep(config.abstainPollMs);
+    waited += config.abstainPollMs;
+  }
 }
 
 /**
