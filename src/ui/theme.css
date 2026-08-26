@@ -1004,3 +1004,54 @@ body {
   line-height: 1.45;
   color: var(--ink-faint);
 }
+
+/* ------------------------------------------------------------------ */
+/* Joining, waiting, and having gone home                              */
+/* ------------------------------------------------------------------ */
+
+.join,
+.waiting,
+.departed {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.join__code,
+.join__name {
+  width: 100%;
+  padding: 14px;
+  background: var(--bg-sunken);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-family: var(--font-ui);
+  font-size: 1rem;
+}
+
+/* The code is five characters spoken across a table. Big, wide-tracked and
+   monospaced so a misheard character is obvious before the button is hit. */
+.join__code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 1.6rem;
+  letter-spacing: 0.35em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.join__code:focus-visible,
+.join__name:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.join__error {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--blood);
+  background: var(--bg-raised);
+  color: var(--ink);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}

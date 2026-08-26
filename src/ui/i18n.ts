@@ -94,6 +94,31 @@ const nl: Dict = {
   'setup.createOnThisDevice':
     'Je maakt de kamer aan op DIT apparaat. Zit je zelf mee te spelen? Kies ' +
     'dan Eigen telefoon.',
+
+  'join.title': 'Meedoen',
+  'join.code': 'Kamercode',
+  'join.codePlaceholder': 'ABCDE',
+  'join.name': 'Je naam',
+  'join.namePlaceholder': 'Hoe heet je aan tafel?',
+  'join.join': 'Doe mee',
+  'join.joining': 'Bezig…',
+  'join.back': 'Terug',
+  'join.noSuchRoom': 'Die kamer bestaat niet. Klopt de code?',
+  'join.refereeCannotPlay':
+    'Dit apparaat leidt het spel en speelt niet mee — het kan alle kaarten ' +
+    'inzien. Doe mee op je eigen telefoon.',
+
+  'waiting.title': 'Je zit erin vanaf ronde {n}',
+  'waiting.why':
+    'Er loopt nu een potje. De kaarten liggen al, dus je schuift aan zodra ' +
+    'dit potje klaar is — niemand hoeft iets voor je te onderbreken.',
+  'waiting.leave': 'Toch weggaan',
+
+  'departed.title': 'Je bent weggegaan',
+  'departed.kept':
+    'De potjes die je gespeeld hebt tellen gewoon mee. Kom je terug, dan pak ' +
+    'je je eigen stand weer op.',
+  'departed.rejoin': 'Toch weer meedoen',
 };
 
 const en: Dict = {
@@ -173,6 +198,31 @@ const en: Dict = {
   'setup.createOnThisDevice':
     'You are creating the room on THIS device. Playing yourself? Choose a ' +
     'player\u2019s own phone instead.',
+
+  'join.title': 'Join',
+  'join.code': 'Room code',
+  'join.codePlaceholder': 'ABCDE',
+  'join.name': 'Your name',
+  'join.namePlaceholder': 'What do they call you at the table?',
+  'join.join': 'Join',
+  'join.joining': 'Joining\u2026',
+  'join.back': 'Back',
+  'join.noSuchRoom': 'No such room. Is the code right?',
+  'join.refereeCannotPlay':
+    'This device runs the game and does not play — it can see every card. ' +
+    'Join on your own phone instead.',
+
+  'waiting.title': 'You are in from round {n}',
+  'waiting.why':
+    'A game is running. The cards are already dealt, so you join as soon as ' +
+    'this one finishes — nobody has to interrupt anything for you.',
+  'waiting.leave': 'Leave after all',
+
+  'departed.title': 'You left',
+  'departed.kept':
+    'The games you played still count. Come back and you pick your own score ' +
+    'up where it was.',
+  'departed.rejoin': 'Join again',
 };
 
 const DICTS: Record<Lang, Dict> = { nl, en };
