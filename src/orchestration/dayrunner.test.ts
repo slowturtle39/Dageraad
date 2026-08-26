@@ -38,8 +38,7 @@ const FAST: DayConfig = {
   ...DEFAULT_DAY_CONFIG,
   discussionMs: 10_000,
   suspenseExtensionMs: 4_000,
-  voteWindowMs: 6_000,
-  finalMinuteMs: 3_000,
+  voteWaitTimeoutMs: 8_000,
   abstainPollMs: 1_000,
   seatCount: 5,
 };
@@ -138,10 +137,66 @@ describe('the majority-abstain threshold', () => {
   });
 });
 
-describe('the vote window', () => {
+describe('voting is mandatory (Milan, 2026-08-26)', () => {
   const state = table(['weerwolf', 'dorpeling', 'ziener', 'jager', 'medium']);
 
-  it('ends early when a majority abstains during the final minute', async () => {
+  it('waits for every player rather than resolving without the slow one', async () => {
+    const store = new TestDayStore();
+    const clock = new FakeClock();
+    // Only three of five have voted when the discussion timer expires.
+    store.cast(1, 0);
+    store.cast(2, 0);
+    store.cast(3, 0);
+
+    const progress: [number, number][] = [];
+    const run = runDay({
+      state, store, clock, config: FAST,
+      hooks: { onVoteProgress: (cast, total) => progress.push([cast, total]) },
+    });
+    // Discussion is 10s and the safety bound is 8s, so 13s in we are inside
+    // the voting phase with the vote still open.
+    await drive(clock, 13_000);
+    // Seats 0 and 4 arrive late — the vote must still be open for them.
+    store.cast(0, 1);
+    store.cast(4, 0);
+    await drive(clock, 10_000);
+    const out = await run;
+
+    expect(out.missingVotes).toEqual([]);
+    expect(progress.some(([cast]) => cast === 3)).toBe(true);
+    expect(out.result.eliminated).toEqual([0]);
+  });
+
+  it('reports who is missing rather than silently resolving without them', async () => {
+    const store = new TestDayStore();
+    const clock = new FakeClock();
+    store.cast(1, 0);
+    store.cast(2, 0);   // seats 0, 3, 4 never vote
+
+    const run = runDay({ state, store, clock, config: FAST });
+    await drive(clock, 60_000);
+    const out = await run;
+
+    // Reaching the safety bound means something is wrong and the host should
+    // look — not that the game quietly went ahead.
+    expect(out.missingVotes).toEqual([0, 3, 4]);
+  });
+
+  it('counts an explicit abstain as having voted — silence is not an answer', async () => {
+    const store = new TestDayStore();
+    const clock = new FakeClock();
+    store.cast(0, null, true);
+    store.cast(1, 0);
+    store.cast(2, 0);
+    store.cast(3, 0);
+    store.cast(4, 0);
+
+    const run = runDay({ state, store, clock, config: FAST });
+    await drive(clock, 40_000);
+    expect((await run).missingVotes).toEqual([]);
+  });
+
+  it('ends the discussion the moment a majority wants to skip the vote', async () => {
     const store = new TestDayStore();
     const clock = new FakeClock();
     store.cast(0, null, true);
@@ -160,12 +215,10 @@ describe('the vote window', () => {
     expect(out.result.teamsWon.wolf).toBe(true);
   });
 
-  it('runs to the end and tallies normally when nobody abstains', async () => {
+  it('tallies normally when everybody votes and nobody abstains', async () => {
     const store = new TestDayStore();
     const clock = new FakeClock();
-    store.cast(1, 0);
-    store.cast(2, 0);
-    store.cast(3, 0);
+    for (const seat of [0, 1, 2, 3, 4]) store.cast(seat, seat === 0 ? 1 : 0);
 
     const run = runDay({ state, store, clock, config: FAST });
     await drive(clock, 40_000);
@@ -174,6 +227,47 @@ describe('the vote window', () => {
     expect(out.endedByAbstain).toBe(false);
     expect(out.result.eliminated).toEqual([0]);   // the wolf
     expect(out.result.teamsWon.village).toBe(true);
+  });
+
+  it('counts a majority from the very first seconds, not only near the end', async () => {
+    // Milan, 2026-08-26: the group may decide not to vote AT ANY MOMENT. A
+    // table that works out early that there is nothing to gain should be able
+    // to stop, rather than sitting out a timer they have all given up on.
+    const store = new TestDayStore();
+    const clock = new FakeClock();
+    store.cast(0, null, true);
+    store.cast(1, null, true);
+    store.cast(2, null, true);   // 3 of 5, before the discussion has run
+    store.cast(3, 0);
+    store.cast(4, 0);
+
+    const run = runDay({ state, store, clock, config: FAST });
+    // Only 2s of a 10s discussion — well before any "final minute" would start.
+    await drive(clock, 2_500);
+    await drive(clock, 20_000);
+    const out = await run;
+
+    expect(out.endedByAbstain).toBe(true);
+    expect(out.result.outcome).toBe('no-vote');
+    // The vote never opened, so nobody was asked to cast one.
+    expect(store.phases).not.toContain('voting');
+  });
+
+  it('lets the group change its mind — a majority that lapses does not hold', async () => {
+    // It is a simultaneous show of hands, so switching back off genuinely
+    // undoes it. That is what keeps an early majority from being irreversible.
+    const store = new TestDayStore();
+    const clock = new FakeClock();
+    store.cast(0, null, true);
+    store.cast(1, null, true);
+    store.cast(2, 0);
+    store.cast(3, 0);
+    store.cast(4, 0);
+
+    const run = runDay({ state, store, clock, config: FAST });
+    await drive(clock, 40_000);
+    const out = await run;
+    expect(out.endedByAbstain).toBe(false);   // only 2 of 5 ever held it
   });
 
   it('walks the phases in order', async () => {
@@ -188,9 +282,7 @@ describe('the vote window', () => {
   it('returns per-seat vote outcomes for the stats', async () => {
     const store = new TestDayStore();
     const clock = new FakeClock();
-    store.cast(1, 0);
-    store.cast(2, 0);
-    store.cast(3, 0);
+    for (const seat of [0, 1, 2, 3, 4]) store.cast(seat, seat === 0 ? 1 : 0);
 
     const run = runDay({ state, store, clock, config: FAST });
     await drive(clock, 40_000);

@@ -18,11 +18,13 @@ export interface VotingView {
   names: Record<SeatIndex, string>;
   target: SeatIndex | null;
   abstain: boolean;
-  /** True once the abstain toggle can actually end the vote (§7). */
-  inFinalMinute: boolean;
   /** How many are currently abstaining, and how many it would take. */
   abstainCount: number;
   seatCount: number;
+  /** How many have cast a vote. Voting is mandatory, so this chases stragglers. */
+  votesCast: number;
+  /** True once the discussion has ended and voting is open. */
+  votingOpen: boolean;
   onTarget: (seat: SeatIndex) => void;
   onAbstain: (next: boolean) => void;
   onConfirm: () => void;
@@ -52,11 +54,28 @@ export function renderVoting(view: VotingView): HTMLElement {
   const needed = Math.floor(view.seatCount / 2) + 1;
   const tally = document.createElement('p');
   tally.className = 'sheet__note';
-  tally.textContent = view.inFinalMinute
-    ? `${view.abstainCount} van de ${view.seatCount} willen niet stemmen. ` +
-      `Vanaf ${needed} gaat de stemming niet door.`
-    : 'In de laatste minuut telt deze knop mee. Nu nog niet.';
+  // Live from the first second: the group may decide not to vote at any moment,
+  // so the count has to be true at any moment too. Showing how close it is IS
+  // the mechanic — and it reveals intention, never anybody's role.
+  tally.textContent =
+    `${view.abstainCount} van de ${view.seatCount} willen niet stemmen. ` +
+    `Vanaf ${needed} gaat de stemming niet door.`;
   el.append(tally);
+
+  if (view.votingOpen) {
+    // Voting is MANDATORY once the timer has expired and the group did not
+    // abstain, so the game is genuinely waiting for these people. A count is
+    // safe to show — it is never who voted for whom, and at a real table you
+    // can see perfectly well whose hand is still down.
+    const progress = document.createElement('p');
+    progress.className = 'sheet__note';
+    progress.textContent =
+      view.votesCast >= view.seatCount
+        ? 'Iedereen heeft gestemd.'
+        : `${view.votesCast} van de ${view.seatCount} hebben gestemd. ` +
+          `Er wordt op de rest gewacht — iedereen moet stemmen.`;
+    el.append(progress);
+  }
 
   const confirm = document.createElement('button');
   confirm.type = 'button';

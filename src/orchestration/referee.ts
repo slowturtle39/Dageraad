@@ -5,6 +5,7 @@ import type {
   Choice, DecisionRequest, GameConfig, NightResult, NightState, PrivateInfo,
   RoleId, SeatIndex,
 } from '../engine/types.js';
+import type { Bot } from '../engine/bot.js';
 import type { Clock } from './clock.js';
 import { PausableClock } from './clock.js';
 import { answerKey, probe, requestsForWindow } from './replay.js';
@@ -37,6 +38,13 @@ export interface RefereeOptions {
   durations?: Durations;
   /** Optional: called when a window opens, so a UI can prompt. */
   onWindowOpen?: (window: WindowInfo) => void;
+  /**
+   * Seats played automatically (test mode, and later a bot filling an empty
+   * chair). A bot seat's decisions are generated rather than read from the
+   * store; everything else about the window is identical, including its full
+   * fixed duration — a bot answering instantly must not shorten it.
+   */
+  bots?: { seats: ReadonlySet<SeatIndex>; bot: Bot };
 }
 
 export interface WindowInfo {
@@ -103,6 +111,15 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
     const paused = clock instanceof PausableClock ? clock.consumeDirty() : false;
 
     for (const request of requests) {
+      // A bot decides instead of the store being consulted. Note this happens
+      // AFTER the window has already run its full length, not instead of it: a
+      // bot answering in a microsecond must not make its window shorter, or
+      // test mode would stop testing the thing that matters most.
+      if (opts.bots?.seats.has(request.seat)) {
+        answers.set(answerKey(request), opts.bots.bot.choose(request, state));
+        continue;
+      }
+
       const choices = submitted.get(request.seat);
       const choice = choices?.[request.key];
       const latencyMs = clock.now() - openedAt;

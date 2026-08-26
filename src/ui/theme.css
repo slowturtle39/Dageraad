@@ -163,6 +163,13 @@ body {
   left: 50%;
   transform: translate(-50%, -50%);
   display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: center;
+}
+
+.table__center-row {
+  display: flex;
   gap: 5px;
   align-items: center;
 }
@@ -173,8 +180,15 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 2px;
   width: 62px;
+}
+
+/* Card and name are separate tap targets (Milan, 2026-08-26): the card is the
+   suspicion gesture, the name opens history. The name gets real padding rather
+   than being a 10px-tall strip of text — it is a primary target, not a label. */
+.seat__card,
+.seat__name {
   background: none;
   border: 0;
   padding: 0;
@@ -208,6 +222,59 @@ body {
 .seat__card--revealed {
   background: linear-gradient(160deg, var(--bone), var(--bone-shadow));
   border-color: var(--bone-shadow);
+  /* Emblem above, name beneath — the layout of the printed card. */
+  flex-direction: column;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 2px;
+}
+
+.seat__card--suspected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 2px;
+}
+
+/* One emblem file has to work on a bone card in dark ink and on a dashed guess
+   in dim gold, so it is line art in currentColor and never a bitmap with its
+   own colours baked in. */
+.emblem {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: block;
+  object-fit: contain;
+}
+
+.seat__card--revealed .emblem {
+  color: #2b2318;
+}
+
+.seat__card--suspected .emblem {
+  color: var(--gold);
+  opacity: 0.8;
+}
+
+.tablet .emblem {
+  width: 38px;
+  height: 38px;
+}
+
+.suspicion__chip .emblem {
+  width: 15px;
+  height: 15px;
+  color: currentColor;
+}
+
+.suspicion__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .seat__card--revealed::after {
@@ -218,14 +285,88 @@ body {
   border-color: var(--moss);
 }
 
+/* A private guess (§9). Deliberately NOT the bone face of a real reveal: same
+   dark card, dashed edge, dimmed text. Mistaking your own hunch for a fact is
+   the one way a memory aid makes you play worse than having no notes at all. */
+.seat__card--suspected {
+  border-style: dashed;
+  border-color: var(--gold-dim);
+}
+
+.seat__card--suspected::after {
+  display: none;
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Suspicion picker                                                    */
+/* ------------------------------------------------------------------ */
+
+.suspicion__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.suspicion__chip {
+  border: 1px solid var(--line);
+  background: var(--bg-sunken);
+  color: var(--ink-dim);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.suspicion__chip--on {
+  border-color: var(--gold-dim);
+  border-style: dashed;
+  color: var(--gold);
+}
+
+/* ------------------------------------------------------------------ */
+/* Test mode                                                           */
+/* ------------------------------------------------------------------ */
+
+/* Everywhere else in this app, looking identical is the safety rule (§13.1).
+   Here it is inverted: a test game must be UNMISTAKABLE, because the failure
+   it guards against is somebody playing a real evening on it and wondering why
+   no stats appeared. Test mode is allowed — required — to look wrong. */
+.testbanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #1a1206;
+  font-weight: 700;
+  background: repeating-linear-gradient(
+    45deg,
+    #c9a227 0 10px,
+    #a8861d 10px 20px
+  );
+}
+
 .seat__role {
   font-family: var(--font);
-  font-size: 9px;
-  line-height: 1.1;
+  font-size: 8px;
+  line-height: 1.05;
   text-align: center;
   color: #23262e;
-  padding: 0 2px;
+  padding: 0 1px;
   font-weight: 600;
+  max-width: 100%;
+  /* Role names are long single words on a 38px card — Leerlingziener,
+     Schoneslaapster — so they must be allowed to break mid-word. Ellipsis
+     would be worse than a break here: a truncated role name is no use at all
+     as a memory aid. */
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 
 .seat__name {
@@ -236,6 +377,25 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
+  padding: 6px 4px;
+  border-radius: 6px;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+
+/* Defined AFTER .seat__role so it actually wins: the base rule's near-black is
+   for text on a bone-coloured revealed card, which would be invisible here. */
+.seat__card--suspected .seat__role--guess {
+  color: var(--gold);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 7.5px;
+  letter-spacing: -0.02em;
+}
+
+.tablet .seat__card--suspected .seat__role--guess {
+  font-size: 12px;
 }
 
 .seat--self .seat__name {
@@ -287,8 +447,13 @@ body {
   opacity: 0.4;
 }
 
+/* The Alpha Wolf's card is NOT one of the three. It lies sideways beneath them
+   so that is obvious at a glance — the Heks and Leerlingziener may never pick
+   it, and a card sitting in the row would invite exactly that mistake. */
 .centercard--wolf {
-  border-color: color-mix(in srgb, var(--blood) 60%, var(--line));
+  width: 37px;
+  height: 26px;
+  border-color: color-mix(in srgb, var(--blood) 70%, var(--line));
 }
 
 /* ------------------------------------------------------------------ */
@@ -581,6 +746,11 @@ body {
 .tablet .centercard {
   width: 44px;
   height: 62px;
+}
+
+.tablet .centercard--wolf {
+  width: 62px;
+  height: 44px;
 }
 
 /* ------------------------------------------------------------------ */

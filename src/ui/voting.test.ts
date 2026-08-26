@@ -21,11 +21,19 @@ describe('the voting sheet', () => {
     expect(src).toMatch(/Vanaf \$\{needed\}/);
   });
 
-  it('tells you the abstain button is inert outside the final minute', () => {
-    // Otherwise a player toggles it early, nothing happens, and they conclude
-    // the feature is broken.
-    expect(src).toMatch(/inFinalMinute/);
-    expect(src).toMatch(/Nu nog niet/);
+  it('shows the abstain tally live, because a majority counts at any moment', () => {
+    // Milan, 2026-08-26: the group may decide not to vote at ANY point, so the
+    // count has to be true at any point too. There is no "final minute" gate.
+    expect(src).toMatch(/willen niet stemmen/);
+    expect(src).toMatch(/Vanaf \$\{needed\} gaat de stemming niet door/);
+    expect(src).not.toMatch(/inFinalMinute/);
+  });
+
+  it('shows how many still have to vote, because voting is mandatory', () => {
+    // A count is safe: never who voted for whom, and at a real table you can
+    // see whose hand is still down anyway.
+    expect(src).toMatch(/votesCast/);
+    expect(src).toMatch(/iedereen moet stemmen/);
   });
 
   it('needs strictly more than half to end the vote', () => {
