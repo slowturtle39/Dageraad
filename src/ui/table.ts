@@ -20,6 +20,15 @@ export interface SeatView {
   name: string;
   /** Only set for a card genuinely revealed in play — the Medium's flip (§12). */
   revealedRole?: RoleId;
+  /**
+   * YOUR OWN private guess about this player (§9). Rendered deliberately
+   * unlike a real reveal — a scratched note, not a card face — because
+   * confusing your own hunch with a fact is the one way a memory aid can make
+   * you play worse than having no notes at all.
+   */
+  suspectedRole?: RoleId;
+  /** False once you have tapped it away. The guess is remembered either way. */
+  suspicionVisible?: boolean;
   shielded?: boolean;
   isSelf?: boolean;
   selected?: boolean;
@@ -86,6 +95,14 @@ export function renderTable(view: TableView): HTMLElement {
       const label = document.createElement('span');
       label.className = 'seat__role';
       label.textContent = NL(s.revealedRole);
+      card.append(label);
+    } else if (s.suspectedRole && s.suspicionVisible !== false) {
+      // A guess never takes the bone face of a real reveal. Same dark card,
+      // dashed edge, dimmed text — legible to you, obviously not a fact.
+      card.classList.add('seat__card--suspected');
+      const label = document.createElement('span');
+      label.className = 'seat__role seat__role--guess';
+      label.textContent = NL(s.suspectedRole);
       card.append(label);
     }
     if (s.shielded) {

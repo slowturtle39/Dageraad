@@ -8,6 +8,8 @@ import { aggregate, renderStats, type ResultRow } from './ui/stats.js';
 import { renderTablet } from './ui/tablet.js';
 import { renderLobby, swapSeats, seatingIsValid, type LobbyPlayer } from './ui/lobby.js';
 import { detectLang, t, type Lang } from './ui/i18n.js';
+import { renderSuspicionPicker, type SuspicionMap } from './ui/suspicionpicker.js';
+import { TEST_MODE_BANNER } from './orchestration/sandbox.js';
 
 /**
  * Demo harness.
@@ -41,6 +43,8 @@ const state = {
   prompting: true,
   paused: false,
   pendingSwap: null as SeatIndex | null,
+  testMode: false,
+  suspicions: new Map() as SuspicionMap,
   players: NAMES.map((displayName, i) => ({
     uid: `u${i}`,
     displayName,
@@ -82,12 +86,24 @@ function seats(): SeatView[] {
     // Only a genuinely public flip shows a face — the Medium's (§12).
     revealedRole: state.phase === 'day' && i === 4 ? ('ziener' as RoleId) : undefined,
     shielded: i === 6,
+    suspectedRole: state.suspicions.get(p.seatIndex)?.role,
+    suspicionVisible: state.suspicions.get(p.seatIndex)?.visible,
   }));
 }
 
 function render(): void {
   const app = document.getElementById('app')!;
   app.replaceChildren();
+
+  // Unmistakable on purpose. Everywhere else identical appearance is the safety
+  // rule; here the failure to guard against is playing a real evening on a test
+  // game and wondering why no stats appeared.
+  if (state.testMode) {
+    const banner = document.createElement('div');
+    banner.className = 'testbanner';
+    banner.textContent = TEST_MODE_BANNER[state.lang];
+    app.append(banner);
+  }
 
   if (state.view === 'tablet') return renderTabletView(app);
   if (state.view === 'lobby') return renderLobbyView(app);
@@ -127,8 +143,19 @@ function renderPhoneView(app: HTMLElement): void {
       centerCount: 3,
       hasAlphaWolfCard: true,
       onSeatTap: (seat) => {
-        if (state.prompting && state.phase === 'night') state.selected = seat;
-        else state.openStats = seat;
+        if (state.prompting && state.phase === 'night') {
+          state.selected = seat;
+        } else {
+          // One tap hides a guess that is currently showing — the gesture you
+          // want when somebody leans over your shoulder. Anything else opens
+          // the sheet, which is what keeps tapping the table's resting state.
+          const suspicion = state.suspicions.get(seat);
+          if (suspicion && suspicion.visible) {
+            state.suspicions.set(seat, { ...suspicion, visible: false });
+          } else {
+            state.openStats = seat;
+          }
+        }
         render();
       },
     }),
@@ -139,10 +166,37 @@ function renderPhoneView(app: HTMLElement): void {
   if (state.openStats !== null) {
     const seat = state.openStats;
     const name = ordered().find((p) => p.seatIndex === seat)!.displayName;
+    const current = state.suspicions.get(seat);
+
+    const body = document.createElement('div');
+    body.append(
+      renderSuspicionPicker({
+        lang: state.lang,
+        about: seat,
+        aboutName: name,
+        rolesInGame: DEFAULT_ACTIVE_ROLES,
+        current: current?.role ?? null,
+        visible: current?.visible ?? true,
+        onPick: (role) => {
+          if (role === null) state.suspicions.delete(seat);
+          else state.suspicions.set(seat, { role, visible: true });
+          state.openStats = null;
+          render();
+        },
+        onToggleVisible: (visible) => {
+          const existing = state.suspicions.get(seat);
+          if (existing) state.suspicions.set(seat, { ...existing, visible });
+          state.openStats = null;
+          render();
+        },
+      }),
+    );
+    body.append(renderStats(aggregate(name, fakeResults(seat + 1))));
+
     app.append(
       renderSheet({
         title: name,
-        body: renderStats(aggregate(name, fakeResults(seat + 1))),
+        body,
         note: t(state.lang, 'stats.historicalOnly'),
         onDismiss: () => {
           state.openStats = null;
@@ -258,6 +312,10 @@ function bottomBar(): HTMLElement {
       state.phase = state.phase === 'night' ? 'day' : 'night';
       state.prompting = state.phase === 'night';
       state.openStats = null;
+      render();
+    }),
+    button(state.testMode ? 'Test aan' : 'Test uit', () => {
+      state.testMode = !state.testMode;
       render();
     }),
     button(state.lang === 'nl' ? 'EN' : 'NL', () => {

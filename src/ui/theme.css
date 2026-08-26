@@ -218,6 +218,73 @@ body {
   border-color: var(--moss);
 }
 
+/* A private guess (§9). Deliberately NOT the bone face of a real reveal: same
+   dark card, dashed edge, dimmed text. Mistaking your own hunch for a fact is
+   the one way a memory aid makes you play worse than having no notes at all. */
+.seat__card--suspected {
+  border-style: dashed;
+  border-color: var(--gold-dim);
+}
+
+.seat__card--suspected::after {
+  display: none;
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Suspicion picker                                                    */
+/* ------------------------------------------------------------------ */
+
+.suspicion__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.suspicion__chip {
+  border: 1px solid var(--line);
+  background: var(--bg-sunken);
+  color: var(--ink-dim);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.suspicion__chip--on {
+  border-color: var(--gold-dim);
+  border-style: dashed;
+  color: var(--gold);
+}
+
+/* ------------------------------------------------------------------ */
+/* Test mode                                                           */
+/* ------------------------------------------------------------------ */
+
+/* Everywhere else in this app, looking identical is the safety rule (§13.1).
+   Here it is inverted: a test game must be UNMISTAKABLE, because the failure
+   it guards against is somebody playing a real evening on it and wondering why
+   no stats appeared. Test mode is allowed — required — to look wrong. */
+.testbanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #1a1206;
+  font-weight: 700;
+  background: repeating-linear-gradient(
+    45deg,
+    #c9a227 0 10px,
+    #a8861d 10px 20px
+  );
+}
+
 .seat__role {
   font-family: var(--font);
   font-size: 9px;
@@ -236,6 +303,20 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
+}
+
+/* Defined AFTER .seat__role so it actually wins: the base rule's near-black is
+   for text on a bone-coloured revealed card, which would be invisible here. */
+.seat__card--suspected .seat__role--guess {
+  color: var(--gold);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 8.5px;
+  letter-spacing: -0.01em;
+}
+
+.tablet .seat__card--suspected .seat__role--guess {
+  font-size: 12px;
 }
 
 .seat--self .seat__name {
