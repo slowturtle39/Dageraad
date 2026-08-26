@@ -12,7 +12,7 @@ import {
 import { runNight, type NightRunResult, type WindowInfo } from '../orchestration/referee.js';
 import { SandboxStore, mayRecordResults, type GameMode } from '../orchestration/sandbox.js';
 import type { RoomStore } from '../orchestration/store.js';
-import type { Backend, RoomView } from './backend.js';
+import type { Backend, GameResults, RoomView, SeatResult } from './backend.js';
 
 /**
  * One evening, start to finish, on the referee's device.
@@ -62,6 +62,8 @@ export interface RefereeRunnerOptions {
 export interface GameRunResult {
   night: NightRunResult;
   day: DayRunResult;
+  /** The full record, as published. */
+  results: GameResults;
   /** Every seat's card at dawn (§6.0) — the one thing that becomes public. */
   finalRoles: Record<SeatIndex, RoleId>;
   outcome: string;
@@ -163,25 +165,62 @@ export async function runGame(opts: RefereeRunnerOptions): Promise<GameRunResult
     ...(opts.random ? { random: opts.random } : {}),
   });
 
-  // §6.0: the win condition is judged on the card a player ENDS the night
-  // holding, not the one they were dealt. This is the only moment either
-  // becomes public, and it happens after the vote has already resolved.
-  const finalRoles: Record<SeatIndex, RoleId> = {};
-  for (let seat = 0; seat < night.result.state.seatCount; seat++) {
-    finalRoles[seat] = finalRoleOf(night.result.state, seat);
-  }
-
+  const results = await buildResults(night, day, store, room);
   const persist = mayRecordResults(mode);
-  await backend.publishResults(roomId, finalRoles, day.result.outcome, persist);
+  await backend.publishResults(roomId, results, persist);
 
   return {
     night,
     day,
-    finalRoles,
-    outcome: day.result.outcome,
+    results,
+    finalRoles: results.finalRoles,
+    outcome: results.outcome,
     resultsPersisted: persist,
     blocked: base instanceof SandboxStore ? base.blocked : [],
   };
+}
+
+/**
+ * Assemble the one thing that becomes public.
+ *
+ * §6.0: a player's win is judged on the card they END the night holding, not
+ * the one they were dealt — so both go in the record. Keeping the original as
+ * well is what makes "you were dealt the Ziener and finished as a Weerwolf"
+ * showable afterwards, which is most of the fun of the results screen.
+ */
+async function buildResults(
+  night: NightRunResult,
+  day: DayRunResult,
+  store: DayStore,
+  room: RoomView,
+): Promise<GameResults> {
+  const state = night.result.state;
+  // Read once more now the day has resolved. Votes were hidden until this
+  // moment; from here they are part of the public record.
+  const votes = await store.readVotes();
+
+  const finalRoles: Record<SeatIndex, RoleId> = {};
+  const seats: Record<SeatIndex, SeatResult> = {};
+
+  for (let seat = 0; seat < state.seatCount; seat++) {
+    const finalRole = finalRoleOf(state, seat);
+    finalRoles[seat] = finalRole;
+
+    const vote = votes.get(seat);
+    const targetSeat = vote?.target ?? null;
+    seats[seat] = {
+      finalRole,
+      originalRole: state.originalRole[seat]!,
+      won: day.result.seatWon[seat] ?? false,
+      votedFor: targetSeat === null ? null : (room.seating[targetSeat] ?? null),
+      voteOutcome: day.outcomes[seat] ?? 'not-scored',
+      // The referee never sees anyone's suspicion notes — they live on the
+      // guesser's device and are theirs to submit or keep (§14).
+      suspicionAccuracy: null,
+    };
+  }
+
+  return { outcome: day.result.outcome, finalRoles, seats };
 }
 
 /**

@@ -8,8 +8,9 @@ import type {
 import type { DayStore } from '../orchestration/dayrunner.js';
 import type { RoomStore } from '../orchestration/store.js';
 import {
-  generateRoomCode, type Backend, type CreateRoomOptions, type PlayerView,
-  type PrivateView, type RoomPhase, type RoomView, type Unsubscribe,
+  generateRoomCode, type Backend, type CreateRoomOptions, type GameResults,
+  type PlayerView, type PrivateView, type RoomPhase, type RoomView,
+  type SeatResult, type Unsubscribe,
 } from './backend.js';
 
 /**
@@ -114,7 +115,7 @@ interface RoomRecord {
   submissions: Map<string, { windowIndex: number; choices: Record<string, Choice> }>;
   votes: Map<string, { target: string | null; abstain: boolean }>;
   /** Append-only, live games only. What profile stats aggregate from. */
-  results: Map<string, { finalRole: RoleId; outcome: string }>;
+  results: Map<string, SeatResult>;
   latency: LatencySample[];
   state: NightState | null;
   watchers: {
@@ -279,20 +280,19 @@ class MemoryBackend implements Backend {
 
   async publishResults(
     roomId: string,
-    finalRoles: Record<SeatIndex, RoleId>,
-    outcome: string,
+    results: GameResults,
     persist: boolean,
   ): Promise<void> {
     const r = this.world.room(roomId);
     this.requireReferee(r);
-    r.view.finalRoles = finalRoles;
-    r.view.outcome = outcome;
+    r.view.finalRoles = results.finalRoles;
+    r.view.outcome = results.outcome;
     // Only a live game leaves a permanent record. See the note on the
     // interface: these documents are append-only and there is no delete path.
     if (persist) {
-      for (const [seatKey, role] of Object.entries(finalRoles)) {
+      for (const [seatKey, seatResult] of Object.entries(results.seats)) {
         const uid = r.view.seating[Number(seatKey)];
-        if (uid) r.results.set(uid, { finalRole: role, outcome });
+        if (uid) r.results.set(uid, seatResult);
       }
     }
     this.world.notify(roomId);

@@ -2,6 +2,7 @@ import type {
   GameConfig, PrivateInfo, RoleId, SeatIndex, Choice, NightEvent, NightState,
 } from '../engine/types.js';
 import type { Timeline } from '../engine/timeline.js';
+import type { VoteOutcome } from '../engine/dayphase.js';
 import type { DayStore } from '../orchestration/dayrunner.js';
 import type { RoomStore } from '../orchestration/store.js';
 
@@ -68,6 +69,39 @@ export interface PrivateView {
 }
 
 export type Unsubscribe = () => void;
+
+/**
+ * One player's line in the game record.
+ *
+ * Deliberately the full categorical `voteOutcome` and not a boolean: a
+ * Bodyguard whose vote cost the village the game has to stay distinguishable
+ * from an ordinary wrong guess, and a window that timed out is not a wrong
+ * answer at all (§10). Once a boolean is written here that distinction is gone
+ * for good, and these documents are append-only.
+ */
+export interface SeatResult {
+  finalRole: RoleId;
+  originalRole: RoleId;
+  won: boolean;
+  /** uid, or null for an abstain. Public once the game is over. */
+  votedFor: string | null;
+  voteOutcome: VoteOutcome;
+  /**
+   * How well this player's suspicion guesses matched the truth, if they kept
+   * any. Null when they did not, and null from the referee's point of view
+   * always: the guesses live on the guesser's own device and are theirs to
+   * submit or keep. Nobody is scored on notes they did not hand in.
+   */
+  suspicionAccuracy: number | null;
+}
+
+/** Everything the table learns at dawn, in one object. */
+export interface GameResults {
+  outcome: string;
+  /** Every seat's card at dawn (§6.0) — what the win condition is judged on. */
+  finalRoles: Record<SeatIndex, RoleId>;
+  seats: Record<SeatIndex, SeatResult>;
+}
 
 export interface CreateRoomOptions {
   displayName: string;
@@ -141,12 +175,7 @@ export interface Backend {
    * is no delete path by design, so a bot game would inflate somebody's record
    * permanently (§16).
    */
-  publishResults(
-    roomId: string,
-    finalRoles: Record<SeatIndex, RoleId>,
-    outcome: string,
-    persist: boolean,
-  ): Promise<void>;
+  publishResults(roomId: string, results: GameResults, persist: boolean): Promise<void>;
 
   /** Host: pause/resume for an absent player. Public and manual (§5.3). */
   setPaused(roomId: string, paused: boolean): Promise<void>;
