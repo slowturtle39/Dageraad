@@ -4,18 +4,16 @@ import type { RoleId, SeatIndex } from '../engine/types.js';
 /**
  * The suspicion picker (§9).
  *
- * WHERE THE TAP GOES. Tapping a seat already opens that player's history, and
- * that tap is the night phase's cover traffic (§5.4) — if tapping stopped
- * opening a sheet, the thing that makes everyone look busy would go with it. So
- * the picker lives INSIDE the sheet rather than taking the tap for itself:
+ * WHERE THE TAP GOES (settled with Milan, 2026-08-26). The card and the name
+ * are separate targets, so suspicion and history stop competing for one gesture:
  *
- *   - tap a seat                  -> sheet: their history, with the picker on top
- *   - tap a card showing a guess  -> hides it immediately, no sheet
- *   - tap a hidden guess          -> sheet again, where it can be re-shown
+ *   - tap the CARD, no guess yet -> this picker
+ *   - tap the CARD with a guess  -> flips it face-down, tap again to bring back
+ *   - tap the NAME               -> that player's history
  *
- * The one asymmetry is deliberate. Hiding is a single tap because it is the
- * gesture you want when somebody leans over your shoulder; un-hiding costs a
- * sheet because nobody is ever in a hurry to reveal their own notes.
+ * Both are still taps on the ring, so the night phase's cover traffic (§5.4)
+ * survives intact — what makes everyone look busy is that everybody is poking
+ * at the table, not which sheet opens.
  *
  * ONLY ROLES IN THIS GAME ARE OFFERED. The active role list is public, so
  * showing it leaks nothing — and offering roles that aren't in the deck would

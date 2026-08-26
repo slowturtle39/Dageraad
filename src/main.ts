@@ -44,6 +44,7 @@ const state = {
   paused: false,
   pendingSwap: null as SeatIndex | null,
   testMode: false,
+  openPicker: null as SeatIndex | null,
   suspicions: new Map() as SuspicionMap,
   players: NAMES.map((displayName, i) => ({
     uid: `u${i}`,
@@ -135,27 +136,40 @@ function renderPhoneView(app: HTMLElement): void {
 
   const wrap = document.createElement('div');
   wrap.className = 'tablewrap';
-  const sheetOpen = state.openStats !== null || (state.prompting && state.phase === 'night');
+  const sheetOpen =
+    state.openStats !== null ||
+    state.openPicker !== null ||
+    (state.prompting && state.phase === 'night');
   if (sheetOpen) wrap.classList.add('tablewrap--sheet');
   wrap.append(
     renderTable({
       seats: seats(),
       centerCount: 3,
       hasAlphaWolfCard: true,
-      onSeatTap: (seat) => {
+      // The CARD is the suspicion gesture — except during a night prompt,
+      // where picking your target has to win.
+      onCardTap: (seat: SeatIndex) => {
         if (state.prompting && state.phase === 'night') {
           state.selected = seat;
         } else {
-          // One tap hides a guess that is currently showing — the gesture you
-          // want when somebody leans over your shoulder. Anything else opens
-          // the sheet, which is what keeps tapping the table's resting state.
           const suspicion = state.suspicions.get(seat);
-          if (suspicion && suspicion.visible) {
-            state.suspicions.set(seat, { ...suspicion, visible: false });
+          if (!suspicion) {
+            // No guess yet: open the picker on its own, without the history
+            // underneath it — you asked a question about this player, not for
+            // their record.
+            state.openPicker = seat;
           } else {
-            state.openStats = seat;
+            // Tap a guess to flip it face-down; tap again to bring it back.
+            // The choice is remembered either way.
+            state.suspicions.set(seat, { ...suspicion, visible: !suspicion.visible });
           }
         }
+        render();
+      },
+      // The NAME always opens history. Separate target, so the two gestures
+      // stop competing (Milan, 2026-08-26).
+      onNameTap: (seat: SeatIndex) => {
+        state.openStats = seat;
         render();
       },
     }),
@@ -166,40 +180,49 @@ function renderPhoneView(app: HTMLElement): void {
   if (state.openStats !== null) {
     const seat = state.openStats;
     const name = ordered().find((p) => p.seatIndex === seat)!.displayName;
-    const current = state.suspicions.get(seat);
-
-    const body = document.createElement('div');
-    body.append(
-      renderSuspicionPicker({
-        lang: state.lang,
-        about: seat,
-        aboutName: name,
-        rolesInGame: DEFAULT_ACTIVE_ROLES,
-        current: current?.role ?? null,
-        visible: current?.visible ?? true,
-        onPick: (role) => {
-          if (role === null) state.suspicions.delete(seat);
-          else state.suspicions.set(seat, { role, visible: true });
-          state.openStats = null;
-          render();
-        },
-        onToggleVisible: (visible) => {
-          const existing = state.suspicions.get(seat);
-          if (existing) state.suspicions.set(seat, { ...existing, visible });
+    app.append(
+      renderSheet({
+        title: name,
+        body: renderStats(aggregate(name, fakeResults(seat + 1))),
+        note: t(state.lang, 'stats.historicalOnly'),
+        onDismiss: () => {
           state.openStats = null;
           render();
         },
       }),
     );
-    body.append(renderStats(aggregate(name, fakeResults(seat + 1))));
+    return;
+  }
 
+  if (state.openPicker !== null) {
+    const seat = state.openPicker;
+    const name = ordered().find((p) => p.seatIndex === seat)!.displayName;
+    const current = state.suspicions.get(seat);
     app.append(
       renderSheet({
         title: name,
-        body,
-        note: t(state.lang, 'stats.historicalOnly'),
+        body: renderSuspicionPicker({
+          lang: state.lang,
+          about: seat,
+          aboutName: name,
+          rolesInGame: DEFAULT_ACTIVE_ROLES,
+          current: current?.role ?? null,
+          visible: current?.visible ?? true,
+          onPick: (role) => {
+            if (role === null) state.suspicions.delete(seat);
+            else state.suspicions.set(seat, { role, visible: true });
+            state.openPicker = null;
+            render();
+          },
+          onToggleVisible: (visible) => {
+            const existing = state.suspicions.get(seat);
+            if (existing) state.suspicions.set(seat, { ...existing, visible });
+            state.openPicker = null;
+            render();
+          },
+        }),
         onDismiss: () => {
-          state.openStats = null;
+          state.openPicker = null;
           render();
         },
       }),
@@ -305,6 +328,7 @@ function bottomBar(): HTMLElement {
         state.view =
           state.view === 'phone' ? 'tablet' : state.view === 'tablet' ? 'lobby' : 'phone';
         state.openStats = null;
+        state.openPicker = null;
         render();
       },
     ),

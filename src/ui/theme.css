@@ -180,8 +180,15 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 2px;
   width: 62px;
+}
+
+/* Card and name are separate tap targets (Milan, 2026-08-26): the card is the
+   suspicion gesture, the name opens history. The name gets real padding rather
+   than being a 10px-tall strip of text — it is a primary target, not a label. */
+.seat__card,
+.seat__name {
   background: none;
   border: 0;
   padding: 0;
@@ -310,6 +317,11 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
+  padding: 6px 4px;
+  border-radius: 6px;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
 }
 
 /* Defined AFTER .seat__role so it actually wins: the base rule's near-black is

@@ -40,7 +40,21 @@ export interface TableView {
   centerCount: number;
   /** Whether the Alpha Wolf's extra wolf card is in play — public information. */
   hasAlphaWolfCard: boolean;
-  onSeatTap?: (seat: SeatIndex) => void;
+  /**
+   * Tapping the CARD. During a night prompt this picks your target; otherwise
+   * it is the suspicion gesture (§9).
+   */
+  onCardTap?: (seat: SeatIndex) => void;
+  /**
+   * Tapping the NAME. Always opens that player's history.
+   *
+   * Card and name are separate targets on purpose (Milan, 2026-08-26). Routing
+   * both through one tap meant suspicion and stats were fighting over the same
+   * gesture, and one of them had to become a second-class citizen. Splitting
+   * them keeps stats one tap away — which matters, because tapping around the
+   * table is the night phase's cover traffic (§5.4).
+   */
+  onNameTap?: (seat: SeatIndex) => void;
 }
 
 const NL = (role: RoleId) => ROLES[role]?.nl ?? role;
@@ -85,16 +99,16 @@ export function renderTable(view: TableView): HTMLElement {
     const x = 50 + Math.cos(angle) * 39;
     const y = 50 + Math.sin(angle) * 39;
 
-    const btn = document.createElement('button');
+    const btn = document.createElement('div');
     btn.className = 'seat';
     if (s.isSelf) btn.classList.add('seat--self');
     if (s.selected) btn.classList.add('seat--selected');
     if (s.disabled) btn.classList.add('seat--disabled');
     btn.style.left = `${x}%`;
     btn.style.top = `${y}%`;
-    btn.type = 'button';
 
-    const card = document.createElement('div');
+    const card = document.createElement('button');
+    card.type = 'button';
     card.className = 'seat__card';
     if (s.revealedRole) {
       card.classList.add('seat__card--revealed');
@@ -119,12 +133,15 @@ export function renderTable(view: TableView): HTMLElement {
       card.append(badge);
     }
 
-    const name = document.createElement('span');
+    const name = document.createElement('button');
+    name.type = 'button';
     name.className = 'seat__name';
     name.textContent = s.name;
 
+    card.addEventListener('click', () => view.onCardTap?.(s.seat));
+    name.addEventListener('click', () => view.onNameTap?.(s.seat));
+
     btn.append(card, name);
-    btn.addEventListener('click', () => view.onSeatTap?.(s.seat));
     el.append(btn);
   });
 
