@@ -25,6 +25,17 @@ export interface VotingView {
   votesCast: number;
   /** True once the discussion has ended and voting is open. */
   votingOpen: boolean;
+  /**
+   * You believe you are the Bodyguard, so you shield instead of voting: every
+   * vote against whoever you name is cancelled, your own included.
+   *
+   * Deliberately keyed to what you BELIEVE you are — your dealt role — and not
+   * to the truth. The engine resolves the shield on whoever holds the Bodyguard
+   * card at dawn (§6.0), so a player whose card was swapped away goes on
+   * shielding nobody while somebody else shields without knowing it. Same shape
+   * as the Looier, whose vote they think counts and does not.
+   */
+  isBodyguard?: boolean;
   onTarget: (seat: SeatIndex) => void;
   onAbstain: (next: boolean) => void;
   onConfirm: () => void;
@@ -36,17 +47,39 @@ export function renderVoting(view: VotingView): HTMLElement {
   const chosen = view.target === null ? null : view.names[view.target];
   const line = document.createElement('p');
   line.className = 'sheet__sub';
-  line.textContent = chosen
-    ? `Je stemt op ${chosen}.`
-    : 'Tik iemand aan de tafel aan om op te stemmen.';
+  if (view.isBodyguard) {
+    line.textContent = chosen
+      ? `Je beschermt ${chosen}. Alle stemmen op ${chosen} vervallen.`
+      : 'Tik iemand aan om te beschermen. Alle stemmen op die persoon vervallen.';
+  } else {
+    line.textContent = chosen
+      ? `Je stemt op ${chosen}.`
+      : 'Tik iemand aan de tafel aan om op te stemmen.';
+  }
   el.append(line);
+
+  // The Bodyguard MUST name someone once voting is open (Milan, 2026-08-26) —
+  // shielding is not optional. He may still join a majority that decides not to
+  // vote at all during the discussion, because that ends the vote for everybody
+  // rather than letting him quietly do nothing while it happens.
+  const mustProtect = view.isBodyguard === true && view.votingOpen;
 
   const abstain = document.createElement('button');
   abstain.type = 'button';
   abstain.className = view.abstain ? 'btn btn--primary' : 'btn';
   abstain.textContent = t(view.lang, 'action.abstain');
-  abstain.addEventListener('click', () => view.onAbstain(!view.abstain));
+  abstain.disabled = mustProtect;
+  if (!mustProtect) {
+    abstain.addEventListener('click', () => view.onAbstain(!view.abstain));
+  }
   el.append(abstain);
+
+  if (mustProtect) {
+    const note = document.createElement('p');
+    note.className = 'sheet__note';
+    note.textContent = 'Je moet iemand beschermen — overslaan kan niet.';
+    el.append(note);
+  }
 
   // The count is shown to everyone because the rule is a simultaneous show of
   // hands — knowing how close it is IS the mechanic. It reveals nothing about
@@ -158,22 +191,30 @@ function teamTile(label: string, won: boolean): HTMLElement {
   return el;
 }
 
+/** "Sanne (Weerwolf) en Joris (Dorpeling)" — who died and what they turned out to be. */
+function lynchLine(view: ResultsView): string {
+  return view.result.eliminated
+    .map((s) => {
+      const name = view.names[s] ?? s;
+      const role = ROLES[view.finalRoles[s]!]?.nl;
+      return role ? `${name} (${role})` : `${name}`;
+    })
+    .join(' en ');
+}
+
 function describeOutcome(view: ResultsView): string {
   const { result, lang } = view;
   switch (result.outcome) {
     case 'no-vote':
       return t(lang, 'day.noVote');
-    case 'tie':
-      return t(lang, 'day.tie');
-    case 'bodyguard-void':
-      return t(lang, 'day.bodyguardVoid');
-    case 'eliminated': {
-      const who = result.eliminated.map((s) => view.names[s] ?? s).join(' en ');
-      const roles = result.eliminated
-        .map((s) => ROLES[view.finalRoles[s]!]?.nl ?? '')
-        .join(' en ');
-      return `${who} werd gelyncht — ${roles}.`;
+    case 'tie': {
+      // A tie is no longer a reprieve: everyone on the top count hangs
+      // (2026-08-26). It only means "nobody died" when no vote counted at all.
+      if (result.eliminated.length === 0) return t(lang, 'day.tie');
+      return `Gelijkspel — ${lynchLine(view)} hangen allebei.`;
     }
+    case 'eliminated':
+      return `${lynchLine(view)} werd gelyncht.`;
   }
 }
 

@@ -3,6 +3,7 @@ import {
   DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG, TWO_ROUND_CONFIG,
   centerSlot, computeRoundSchedule, createNightState, defaultNightOrder,
   resolveDay, resolveNight, roleAt, voteAccuracy, voteOutcomes, finalRoleOf,
+  roleDef,
 } from './index.js';
 import type { AnswerProvider } from './resolve.js';
 import type { Choice, GameConfig, RoleId } from './types.js';
@@ -193,18 +194,36 @@ describe('Medium', () => {
     );
   });
 
-  it('may swap with the Looier, and the public reveal follows the card', () => {
+  it('is FORCED to take the Looier, and it is never flipped face up', () => {
+    // Milan, 2026-08-26: she has no say. She turns over the Looier and it is
+    // hers, and the player she looked at is the Medium and is never told.
     const state = deal(['medium', 'looier'], ['jager', 'jager', 'jager']);
-    const res = run(state, ['medium'], answers({
-      '0:medium-target': seat(1),
-      '0:medium-looier-swap': { kind: 'bool', value: true },
-    }));
+    const res = run(state, ['medium'], answers({ '0:medium-target': seat(1) }));
 
     expect(roleAt(res.state, 0)).toBe('looier');
     expect(roleAt(res.state, 1)).toBe('medium');
-    // The face-up card is tracked by card identity, so it travelled to seat 0.
-    const looierCard = res.state.slots[0]!;
-    expect(res.state.revealedCards.has(looierCard)).toBe(true);
+
+    // NOT flipped face up — this is the load-bearing half of the rule. A
+    // publicly known Looier is one nobody will ever lynch, so revealing it
+    // would turn the forced swap from a risk into a guaranteed loss.
+    expect(res.state.revealedCards.size).toBe(0);
+    expect(res.events.some((e) => e.kind === 'card-publicly-revealed')).toBe(false);
+  });
+
+  it('still flips anything that is neither a wolf nor the Looier', () => {
+    const state = deal(['medium', 'ziener'], ['jager', 'jager', 'jager']);
+    const res = run(state, ['medium'], answers({ '0:medium-target': seat(1) }));
+
+    expect(roleAt(res.state, 0)).toBe('medium');
+    expect(res.state.revealedCards.has(res.state.slots[1]!)).toBe(true);
+  });
+
+  it('has no follow-up decision left to make', () => {
+    // The Looier swap was her only reveal-dependent choice. With it forced,
+    // she needs no second round in either mode — which is why she is out of
+    // precommitRoles and the Heks is the only role that pre-commits.
+    expect(roleDef('medium').revealThenDecide).toBe(false);
+    expect(TWO_ROUND_CONFIG.precommitRoles).toEqual(['heks']);
   });
 });
 
@@ -216,7 +235,7 @@ describe('round schedule (§5.1)', () => {
   });
 
   it('dropping the Heks pre-commit is what would make it 3 — the whole reason she pre-commits', () => {
-    const noPrecommit: GameConfig = { ...TWO_ROUND_CONFIG, precommitRoles: ['medium'] };
+    const noPrecommit: GameConfig = { ...TWO_ROUND_CONFIG, precommitRoles: [] };
     expect(computeRoundSchedule(DEFAULT_ACTIVE_ROLES, noPrecommit).rounds).toBe(3);
   });
 
@@ -244,19 +263,66 @@ describe('day phase (§7, §8)', () => {
     expect(res.tally[1]).toBe(1);
   });
 
-  it('voids the vote when the Bodyguard is the top target', () => {
-    const state = deal(['bodyguard', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
-    const res = resolveDay(state, votes([1, 0], [2, 0]));
-    expect(res.outcome).toBe('bodyguard-void');
+  it('cancels every vote against whoever the Bodyguard shields', () => {
+    // RULED 2026-08-26: he does not vote, he protects. Seats 2 and 3 both name
+    // the wolf at seat 1, and the Bodyguard at seat 0 shields him.
+    const state = deal(
+      ['bodyguard', 'weerwolf', 'dorpeling', 'ziener'],
+      ['jager', 'jager', 'jager'],
+    );
+    const res = resolveDay(state, votes([0, 1], [2, 1], [3, 1]));
+
+    expect(res.protectedSeats).toEqual([1]);
+    expect(res.tally[1]).toBe(0);
+    expect(res.eliminated).toEqual([]);
+    // His own ballot is not a vote at all, and the other two were cancelled.
+    expect(res.discarded).toContainEqual({ voter: 0, reason: 'bodyguard-protects' });
+    expect(res.discarded.filter((d) => d.reason === 'protected')).toHaveLength(2);
+  });
+
+  it('does not save the Bodyguard himself — he cannot shield his own seat', () => {
+    // He just dies now; the old "top target voids the vote" rule is gone.
+    const state = deal(
+      ['bodyguard', 'weerwolf', 'dorpeling'],
+      ['jager', 'jager', 'jager'],
+    );
+    const res = resolveDay(state, votes([0, 1], [1, 0], [2, 0]));
+    expect(res.eliminated).toEqual([0]);
+    expect(res.outcome).toBe('eliminated');
+  });
+
+  it('shields on the FINAL card, so a swapped Bodyguard protects nobody', () => {
+    // §6.0. Seat 0 was dealt the Bodyguard but ends holding a Dorpeling card;
+    // seat 2 ends holding the Bodyguard card and shields without knowing it.
+    const state = deal(
+      ['dorpeling', 'weerwolf', 'bodyguard', 'ziener'],
+      ['jager', 'jager', 'jager'],
+    );
+    const res = resolveDay(state, votes([0, 1], [2, 1], [3, 1]));
+    // Seat 2's ballot is the shield; seat 0's and seat 3's are real votes.
+    expect(res.protectedSeats).toEqual([1]);
     expect(res.eliminated).toEqual([]);
   });
 
-  it('treats a tie as a failed vote, and the wolves win', () => {
+  it('hangs EVERYONE tied on the top count', () => {
+    // Milan, 2026-08-26: a tie is a double execution, not a reprieve.
     const state = deal(['weerwolf', 'dorpeling', 'ziener'], ['jager', 'jager', 'jager']);
     const res = resolveDay(state, votes([1, 0], [0, 1]));
     expect(res.outcome).toBe('tie');
+    expect(res.eliminated.sort()).toEqual([0, 1]);
+    // A wolf AND an innocent hanged -> the wolves take it.
     expect(res.teamsWon.wolf).toBe(true);
     expect(res.teamsWon.village).toBe(false);
+  });
+
+  it('still reports a tie with nobody dead when no vote counted at all', () => {
+    const state = deal(['weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
+    const res = resolveDay(state, [
+      { voter: 0, target: null, abstain: false },
+      { voter: 1, target: null, abstain: false },
+    ]);
+    expect(res.outcome).toBe('tie');
+    expect(res.eliminated).toEqual([]);
   });
 
   it('a majority abstain overrides the tally, and the Looier loses', () => {
@@ -302,10 +368,20 @@ describe('win conditions (§8, ruled 2026-08-25)', () => {
       ['dorpeling', 'ziener', 'jager'],
       ['weerwolf', 'weerwolf', 'alphawolf'],
     );
+    // Both tied players now hang, so this is no longer a bloodless tie: two
+    // innocents died in a game with no wolves and nobody wins.
     const tied = resolveDay(state, votes([0, 1], [1, 0]));
     expect(tied.outcome).toBe('tie');
-    expect(tied.teamsWon.village).toBe(true);
-    expect(tied.teamsWon.wolf).toBe(false);
+    expect(tied.eliminated.sort()).toEqual([0, 1]);
+    expect(tied.teamsWon).toEqual({ village: false, wolf: false, solo: false });
+
+    // Lynching nobody is the only way the village wins such a game.
+    const abstained = resolveDay(state, [
+      { voter: 0, target: null, abstain: true },
+      { voter: 1, target: null, abstain: true },
+      { voter: 2, target: null, abstain: true },
+    ]);
+    expect(abstained.teamsWon.village).toBe(true);
   });
 
   it('lynching an innocent with no wolves in play means nobody wins', () => {
@@ -322,88 +398,109 @@ describe('win conditions (§8, ruled 2026-08-25)', () => {
     const state = deal(['dorpeling', 'ziener'], ['weerwolf', 'jager', 'jager']);
     expect(resolveDay(state, votes([0, 1], [1, 0])).teamsWon.wolf).toBe(false);
   });
+
+  it('village wins only if it hanged wolves and nobody else', () => {
+    // The one sentence the 2026-08-26 revision collapses to. Four seats, two
+    // wolves, so every combination below is reachable in one game.
+    const state = deal(
+      ['weerwolf', 'alphawolf', 'dorpeling', 'ziener'],
+      ['jager', 'jager', 'jager'],
+    );
+
+    // two wolves tied -> village
+    const twoWolves = resolveDay(state, votes([2, 0], [3, 1], [0, 1], [1, 0]));
+    expect(twoWolves.eliminated.sort()).toEqual([0, 1]);
+    expect(twoWolves.teamsWon.village).toBe(true);
+
+    // wolf + innocent tied -> wolves
+    const mixed = resolveDay(state, votes([2, 0], [3, 2], [0, 2], [1, 0]));
+    expect(mixed.eliminated.sort()).toEqual([0, 2]);
+    expect(mixed.teamsWon.village).toBe(false);
+    expect(mixed.teamsWon.wolf).toBe(true);
+
+    // two innocents tied -> wolves
+    const twoInnocents = resolveDay(state, votes([0, 2], [1, 3], [2, 3], [3, 2]));
+    expect(twoInnocents.eliminated.sort()).toEqual([2, 3]);
+    expect(twoInnocents.teamsWon.wolf).toBe(true);
+  });
+
+  it('lets the Looier win by being one of the tied', () => {
+    // Milan, 2026-08-26: being tied is enough, and it beats everything — even
+    // a wolf hanging in the same vote.
+    const state = deal(
+      ['looier', 'weerwolf', 'dorpeling', 'ziener', 'jager'],
+      ['dorpeling', 'dorpeling', 'dorpeling'],
+    );
+    // The Looier's own ballot never counts, so the tie is made by the other
+    // four: two for the Looier at seat 0, two for the wolf at seat 1.
+    const res = resolveDay(state, votes([2, 1], [3, 1], [1, 0], [4, 0], [0, 3]));
+    expect(res.eliminated.sort()).toEqual([0, 1]);
+    expect(res.teamsWon).toEqual({ village: false, wolf: false, solo: true });
+  });
 });
 
-describe('Bodyguard vote accuracy — scored by consequence (§10)', () => {
-  it('is null when their target was not lynched', () => {
-    const state = deal(['bodyguard', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
+describe('Bodyguard scoring — by consequence, now that he shields (§10)', () => {
+  it("scores 'caused-village-loss' when he shields the wolf who was about to hang", () => {
+    // The sharpest version of the case Milan asked to track separately: two
+    // villagers had the wolf dead to rights and the Bodyguard called it off.
+    const state = deal(
+      ['bodyguard', 'weerwolf', 'dorpeling', 'ziener'],
+      ['jager', 'jager', 'jager'],
+    );
     const cast = [
-      { voter: 0, target: 2, abstain: false },
-      { voter: 1, target: 2, abstain: false },
+      { voter: 0, target: 1, abstain: false },   // shields the wolf
       { voter: 2, target: 1, abstain: false },
+      { voter: 3, target: 1, abstain: false },
     ];
     const res = resolveDay(state, cast);
-    expect(res.eliminated).toEqual([2]);
-    // Bodyguard voted for seat 2, who WAS lynched — village lost, so incorrect.
-    expect(voteAccuracy(state, cast, res)[0]).toBe(false);
-  });
 
-  it('is correct when their target was lynched and the village won', () => {
-    const state = deal(['bodyguard', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
-    const cast = [
-      { voter: 0, target: 1, abstain: false },
-      { voter: 2, target: 1, abstain: false },
-    ];
-    const res = resolveDay(state, cast);
-    expect(res.teamsWon.village).toBe(true);
-    expect(voteAccuracy(state, cast, res)[0]).toBe(true);
-  });
-
-  it('is null — inconsequential — when nobody was lynched at all', () => {
-    const state = deal(['bodyguard', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
-    const cast = [
-      { voter: 0, target: 1, abstain: false },
-      { voter: 1, target: 2, abstain: false },
-      { voter: 2, target: 1, abstain: false },
-    ];
-    const res = resolveDay(state, cast);
-    expect(voteAccuracy(state, cast, res)[0]).toBe(res.eliminated.includes(1) ? true : null);
-  });
-});
-
-describe('Bodyguard: a vote that causes the village to lose is tracked separately', () => {
-  it("distinguishes 'caused-village-loss' from an ordinary wrong guess", () => {
-    // Bodyguard votes for an innocent, that innocent IS lynched, village loses.
-    const state = deal(['bodyguard', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
-    const cast = [
-      { voter: 0, target: 2, abstain: false },
-      { voter: 1, target: 2, abstain: false },
-      { voter: 2, target: 1, abstain: false },
-    ];
-    const res = resolveDay(state, cast);
-    expect(res.eliminated).toEqual([2]);
+    expect(res.eliminated).toEqual([]);
     expect(res.teamsWon.village).toBe(false);
-
-    // The distinction the boolean view cannot carry.
+    // The distinction a boolean cannot carry, and these documents are
+    // append-only — collapse it once and it is gone for good.
     expect(voteOutcomes(state, cast, res)[0]).toBe('caused-village-loss');
     expect(voteAccuracy(state, cast, res)[0]).toBe(false);
   });
 
-  it("scores 'inconsequential' when the target was never lynched", () => {
-    const state = deal(['bodyguard', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
+  it("scores 'correct' when the shield held and the village still won", () => {
+    // He saves an innocent from a wrongful lynch; the wolf hangs anyway.
+    const state = deal(
+      ['bodyguard', 'weerwolf', 'dorpeling', 'ziener'],
+      ['jager', 'jager', 'jager'],
+    );
     const cast = [
-      { voter: 0, target: 1, abstain: false },
-      { voter: 1, target: 2, abstain: false },
-      { voter: 2, target: 0, abstain: false },
-    ];
-    const res = resolveDay(state, cast);
-    // Three-way split -> tie -> nobody lynched.
-    expect(res.eliminated).toEqual([]);
-    expect(voteOutcomes(state, cast, res)[0]).toBe('inconsequential');
-    expect(voteAccuracy(state, cast, res)[0]).toBeNull();
-  });
-
-  it("scores 'correct' when the target was lynched and the village won", () => {
-    const state = deal(['bodyguard', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
-    const cast = [
-      { voter: 0, target: 1, abstain: false },
+      { voter: 0, target: 3, abstain: false },   // shields the Ziener
+      { voter: 1, target: 3, abstain: false },   // the wolf tries for her
       { voter: 2, target: 1, abstain: false },
+      { voter: 3, target: 1, abstain: false },
     ];
     const res = resolveDay(state, cast);
+
+    expect(res.eliminated).toEqual([1]);
     expect(res.teamsWon.village).toBe(true);
     expect(voteOutcomes(state, cast, res)[0]).toBe('correct');
   });
 
+  it("scores 'inconsequential' when nobody was voting for the person he shielded", () => {
+    const state = deal(
+      ['bodyguard', 'weerwolf', 'dorpeling', 'ziener'],
+      ['jager', 'jager', 'jager'],
+    );
+    const cast = [
+      { voter: 0, target: 2, abstain: false },   // shields someone nobody named
+      { voter: 1, target: 3, abstain: false },
+      { voter: 2, target: 1, abstain: false },
+      { voter: 3, target: 1, abstain: false },
+    ];
+    const res = resolveDay(state, cast);
+
+    expect(res.eliminated).toEqual([1]);
+    expect(voteOutcomes(state, cast, res)[0]).toBe('inconsequential');
+    expect(voteAccuracy(state, cast, res)[0]).toBeNull();
+  });
+});
+
+describe('vote scoring for everyone else', () => {
   it('a normal villager still scores by target, not consequence', () => {
     const state = deal(['ziener', 'weerwolf', 'dorpeling'], ['jager', 'jager', 'jager']);
     const cast = [

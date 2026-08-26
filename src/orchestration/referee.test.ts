@@ -95,10 +95,10 @@ describe('the referee runs every window for its full duration', () => {
       .toEqual(a.map((w) => ({ i: w.index, kind: w.kind, role: w.role, at: w.closesAtMs })));
   });
 
-  it('gives mode 1 a window each for Dubbelganger, Heks and Medium', async () => {
+  it('gives mode 1 a window each for Dubbelganger and Heks', async () => {
     const opened: WindowInfo[] = [];
     await play(standardDeal(), DEPENDENCY_CONFIG, (w) => { opened.push(w); });
-    expect(opened.map((w) => w.role)).toEqual([null, 'dubbelganger', 'heks', 'medium']);
+    expect(opened.map((w) => w.role)).toEqual([null, 'dubbelganger', 'heks']);
   });
 });
 

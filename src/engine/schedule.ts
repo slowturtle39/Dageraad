@@ -31,9 +31,13 @@ export interface RoundSchedule {
  *
  * With the default preset (Droomwolf, Alpha Wolf, Mystieke Wolf, Dubbelganger,
  * Heks, Leerlingziener, Dorpsgek, Medium) that is exactly 2: the Dubbelganger is
- * the only reveal-then-decide role not pre-committing, because the Heks and the
- * Medium's Looier swap are answered from stored rules. Dropping the Heks's
- * pre-commit would make it 3 — which is the entire reason she pre-commits.
+ * the only reveal-then-decide role not pre-committing, because the Heks answers
+ * from a stored rule. Dropping the Heks's pre-commit would make it 3 — which is
+ * the entire reason she pre-commits.
+ *
+ * The Medium used to be the second pre-committer. Since her Looier swap became
+ * forced (2026-08-26) she has no decision to defer, so she costs a round in
+ * neither mode.
  */
 export function computeRoundSchedule(
   activeRoles: RoleId[],

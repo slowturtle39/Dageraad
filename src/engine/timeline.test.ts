@@ -39,10 +39,11 @@ describe('reveal gates', () => {
 describe('mode 1 timeline (dependency)', () => {
   const t = buildTimeline(DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG);
 
-  it('gives a window to each of the three live follow-up roles', () => {
-    expect(t.phases.map((p) => p.role)).toEqual([
-      null, 'dubbelganger', 'heks', 'medium',
-    ]);
+  it('gives a window to each of the two live follow-up roles', () => {
+    // The Medium had a third window until 2026-08-26. Taking the Looier is
+    // forced now, so she has no reveal-dependent decision and needs no window
+    // in either mode — even dependency mode got a round shorter.
+    expect(t.phases.map((p) => p.role)).toEqual([null, 'dubbelganger', 'heks']);
   });
 
   it('has the Mystieke Wolf finished within about nine seconds', () => {
@@ -58,15 +59,15 @@ describe('mode 1 timeline (dependency)', () => {
     expect(t.revealAtMs['mystiekewolf']!).toBeLessThan(t.totalMs);
   });
 
-  it('runs about forty seconds', () => {
-    expect(s(t.totalMs)).toBe(40);
+  it('runs about thirty-three seconds', () => {
+    expect(s(t.totalMs)).toBe(33);
   });
 });
 
 describe('mode 2 timeline (tworound)', () => {
   const t = buildTimeline(DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG);
 
-  it('collapses the Heks and Medium windows, leaving only the Dubbelganger', () => {
+  it('collapses the Heks window, leaving only the Dubbelganger', () => {
     expect(t.phases.map((p) => p.role)).toEqual([null, 'dubbelganger']);
   });
 
@@ -80,10 +81,13 @@ describe('mode 2 timeline (tworound)', () => {
     expect(s(t.revealAtMs['mystiekewolf']!)).toBe(9);
   });
 
-  it('runs roughly half as long as mode 1', () => {
+  it('is still meaningfully shorter than mode 1', () => {
+    // The gap narrowed when the Medium stopped needing a window in either
+    // mode: 33s vs 22s rather than 40s vs 22s. Pre-committing the Heks is now
+    // the only thing mode 2 buys, and it still buys a third of the night.
     const mode1 = buildTimeline(DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG);
     expect(s(t.totalMs)).toBe(22);
-    expect(t.totalMs).toBeLessThan(mode1.totalMs * 0.6);
+    expect(t.totalMs).toBeLessThan(mode1.totalMs);
   });
 });
 

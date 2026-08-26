@@ -311,11 +311,23 @@ const dorpsgek: Applier = function* (ctx) {
 
 /**
  * §6.1 #9 — checks one player's card. A wolf stays hidden; anything else is
- * flipped face-up publicly. If it is the Looier, the Medium may swap with them.
+ * flipped face-up publicly.
  *
- * That swap is a reveal-dependent decision. In 'dependency' mode she decides
- * live; in 'tworound' mode the pre-commit resolver answers it from her stored
- * yes/no, so it costs no extra round and leaks nothing.
+ * THE LOOIER IS FORCED (Milan, 2026-08-26). If the card she turns over is the
+ * Looier, she takes it — no yes/no, no way out. She hands her Medium card to
+ * that player, who is never told, and she now wins only by getting herself
+ * lynched.
+ *
+ * Two consequences worth spelling out:
+ *
+ *  1. The Looier is a NO-PUBLIC-FLIP exception alongside the wolves. It has to
+ *     be: flipping it face up would tell the table she is now the Looier, and a
+ *     publicly known Looier is one nobody will ever lynch. The forced swap
+ *     would go from a risk to a guaranteed loss.
+ *
+ *  2. She no longer has a reveal-dependent DECISION, which is why she is out of
+ *     `precommitRoles` and no longer generates a follow-up window in either
+ *     mode. The Heks is now the only role that pre-commits anything.
  */
 const medium: Applier = function* (ctx) {
   const choice = yield ask(ctx, 'medium-target', {
@@ -332,18 +344,23 @@ const medium: Applier = function* (ctx) {
   const seen: PrivateInfo = { kind: 'saw-card', step: ctx.step, slot: seat, role };
   ctx.info(ctx.actor, seen);
 
-  // House rule: a wolf is NOT flipped face-up. Anything else is.
-  if (!isWolfRole(role)) {
+  // House rule: a wolf is NOT flipped face-up, and neither is the Looier (see
+  // the note above — flipping it would make the forced swap a guaranteed loss).
+  if (!isWolfRole(role) && role !== 'looier') {
     ctx.state.revealedCards.add(cardAt(ctx.state, seat));
     ctx.event({ kind: 'card-publicly-revealed', step: ctx.step, slot: seat, role });
   }
 
   if (role !== 'looier') return;
-  const swap = yield ask(ctx, 'medium-looier-swap', { kind: 'confirm' },
-    { dependsOnReveal: true, seen });
-  if (swap.kind === 'bool' && swap.value) {
-    swapSlots(ctx.state, ctx.actor, seat);
-  }
+
+  // Forced. She is the Looier from here, and the player she looked at is the
+  // Medium and will not find out. No event is emitted: the whole point is that
+  // the table saw nothing happen.
+  swapSlots(ctx.state, ctx.actor, seat);
+  ctx.info(ctx.actor, {
+    kind: 'action-confirmed', step: ctx.step,
+    detail: 'looier-taken',
+  });
 };
 
 /**

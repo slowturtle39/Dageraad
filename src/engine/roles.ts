@@ -47,7 +47,10 @@ export const ROLES: Record<RoleId, RoleDef> = {
   onrustoker: { id: 'onrustoker', nl: 'Onrustoker', en: 'Troublemaker', team: 'village', isWolf: false, hasNightAction: true, revealThenDecide: false, defaultOrder: 75 },
   dorpsgek: { id: 'dorpsgek', nl: 'Dorpsgek', en: 'Village Idiot', team: 'village', isWolf: false, hasNightAction: true, revealThenDecide: false, defaultOrder: 80 },
   dronkaard: { id: 'dronkaard', nl: 'Dronkaard', en: 'Drunk', team: 'village', isWolf: false, hasNightAction: true, revealThenDecide: false, defaultOrder: 85 },
-  medium: { id: 'medium', nl: 'Medium', en: 'Medium', team: 'village', isWolf: false, hasNightAction: true, revealThenDecide: true, defaultOrder: 90 },
+  // revealThenDecide is false since 2026-08-26: taking the Looier is forced, so
+  // she sees a card and everything after it is automatic. That is what drops her
+  // out of precommitRoles and out of the follow-up windows in both modes.
+  medium: { id: 'medium', nl: 'Medium', en: 'Medium', team: 'village', isWolf: false, hasNightAction: true, revealThenDecide: false, defaultOrder: 90 },
   slapeloze: { id: 'slapeloze', nl: 'Slapeloze', en: 'Insomniac', team: 'village', isWolf: false, hasNightAction: true, revealThenDecide: false, defaultOrder: 95 },
   schoneslaapster: { id: 'schoneslaapster', nl: 'Schone Slaapster', en: 'Sleeping Beauty', team: 'village', isWolf: false, hasNightAction: true, revealThenDecide: false, defaultOrder: 100 },
   // No night action, but they matter for the day phase / win conditions (§6.1).

@@ -46,7 +46,6 @@ export const DEFAULT_DURATIONS: Durations = {
   followupMs: {
     dubbelganger: 12_000, // see what you copied, then act as it
     heks: 10_000,         // see the centre card, then pick a target
-    medium: 6_000,        // Looier swap: yes/no
   },
   defaultFollowupMs: 10_000,
 };
@@ -116,8 +115,8 @@ export function buildTimeline(
 ): Timeline {
   const order = defaultNightOrder(activeRoles);
 
-  // Live follow-ups, in canonical order. In 'tworound' mode the Heks and the
-  // Medium pre-commit, so only the Dubbelganger remains — which is exactly why
+  // Live follow-ups, in canonical order. In 'tworound' mode the Heks
+  // pre-commits, so only the Dubbelganger remains — which is exactly why
   // that mode is two rounds and roughly half the wall-clock time.
   const followups = order.filter((r) => liveFollowupRoles([r], config).length > 0);
   const followupSteps = followups.map((r) => order.indexOf(r) + 1);

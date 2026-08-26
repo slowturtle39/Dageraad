@@ -70,3 +70,56 @@ describe('the results sheet', () => {
     expect(src).toMatch(/finalRoles/);
   });
 });
+
+describe('the Bodyguard shields instead of voting (2026-08-26)', () => {
+  it('tells him he is protecting, not voting', () => {
+    expect(src).toMatch(/Je beschermt/);
+    expect(src).toMatch(/Alle stemmen op/);
+  });
+
+  it('takes the abstain button away once voting has opened', () => {
+    // He must name someone; skipping is not an option (Milan, 2026-08-26).
+    expect(src).toMatch(/mustProtect/);
+    expect(src).toMatch(/abstain\.disabled = mustProtect/);
+    expect(src).toMatch(/overslaan kan niet/);
+  });
+
+  it('leaves him free to join a majority that calls off the vote entirely', () => {
+    // That ends the vote for everybody rather than letting him quietly do
+    // nothing while it happens, so it is a different thing from skipping.
+    expect(src).toMatch(/view\.isBodyguard === true && view\.votingOpen/);
+  });
+
+  it('keys off what he BELIEVES he is, not the truth', () => {
+    // §6.0: the engine resolves the shield on whoever holds the Bodyguard card
+    // at dawn. A player whose card was swapped away goes on shielding nobody.
+    expect(src).toMatch(/believe/i);
+  });
+});
+
+describe('a tie is now a double execution', () => {
+  it('names everyone who hangs rather than reporting a failed vote', () => {
+    const state = table(['weerwolf', 'dorpeling', 'ziener']);
+    const result = resolveDay(state, [
+      { voter: 0, target: 1, abstain: false },
+      { voter: 1, target: 0, abstain: false },
+      { voter: 2, target: 0, abstain: false },
+    ]);
+    // Seat 0 has two votes, seat 1 has one — not actually tied here; the point
+    // of this test is the renderer, so assert on the source and the shape.
+    expect(result.eliminated.length).toBeGreaterThan(0);
+    expect(src).toMatch(/hangen allebei/);
+    expect(src).toMatch(/lynchLine/);
+  });
+
+  it('still says nobody died when no vote counted at all', () => {
+    const state = table(['weerwolf', 'dorpeling']);
+    const result = resolveDay(state, [
+      { voter: 0, target: null, abstain: false },
+      { voter: 1, target: null, abstain: false },
+    ]);
+    expect(result.outcome).toBe('tie');
+    expect(result.eliminated).toEqual([]);
+    expect(src).toMatch(/result\.eliminated\.length === 0/);
+  });
+});

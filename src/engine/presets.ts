@@ -30,9 +30,11 @@ export const TWO_ROUND_CONFIG: GameConfig = {
   heksVariant: 'flat',
   dorpsgekVariant: 'standard',
   heksMaySwapSelf: true,
-  // Exactly the roles whose live follow-up we trade away to hold the night at
-  // two rounds. Empty this and the same game becomes a four-round night.
-  precommitRoles: ['heks', 'medium'],
+  // The only role whose live follow-up we trade away to hold the night at two
+  // rounds. The Medium was here until her Looier swap became forced
+  // (2026-08-26) — with no decision left there is nothing to pre-commit.
+  // Empty this and the same game becomes a three-round night.
+  precommitRoles: ['heks'],
 };
 
 export const DEPENDENCY_CONFIG: GameConfig = {
