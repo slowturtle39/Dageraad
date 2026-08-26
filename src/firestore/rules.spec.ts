@@ -702,4 +702,11 @@ describe('the round counter only ever goes forward', () => {
       updateDoc(doc(as(HOST), 'rooms', ROOM), { currentRound: 2 }),
     );
   });
+
+  it('cannot skip ahead and manufacture a later join boundary', async () => {
+    await seed('results', 0, 4);
+    await assertFails(
+      updateDoc(doc(as(REF), 'rooms', ROOM), { currentRound: 99 }),
+    );
+  });
 });

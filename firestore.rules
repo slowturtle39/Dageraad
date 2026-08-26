@@ -57,9 +57,12 @@ service cloud.firestore {
         || request.resource.data[field] != resource.data[field];
     }
     function roundNeverRewinds() {
-      return !('currentRound' in request.resource.data)
-        || !('currentRound' in resource.data)
-        || request.resource.data.currentRound >= resource.data.currentRound;
+      return !('currentRound' in resource.data)
+        || (
+          request.resource.data.currentRound is int
+          && request.resource.data.currentRound >= resource.data.currentRound
+          && request.resource.data.currentRound <= resource.data.currentRound + 1
+        );
     }
     // The round NOW BEING PLAYED. 0 in the lobby, N during and after round N.
     // Somebody joining is measured against this + 1; a round record against it
