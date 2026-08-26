@@ -10,7 +10,12 @@ import type { RoomStore } from '../orchestration/store.js';
 import { paths, type RoomPhase } from './schema.js';
 
 /**
- * The one Firebase-aware file in the whole codebase.
+ * The referee's read/write path for ONE night.
+ *
+ * Firebase lives in this directory and nowhere else — here and in
+ * `sessionstore.ts`, which handles what spans rounds (who is in the evening,
+ * and what has been played). The split is along who writes: everything below
+ * is the referee's, and the session store is every device's.
  *
  * It implements the same `RoomStore` and `DayStore` interfaces that
  * `InMemoryRoomStore` does, so the referee and the day runner cannot tell the
