@@ -285,7 +285,12 @@ const dronkaard: Applier = function* (ctx) {
  *     Dubbelganger's card is the exempt one and the real Dorpsgek's card moves
  *     normally — Milan's explicit ruling),
  *   - any shielded card (stays put, the rest rotate around it),
- *   - in the 'designate' variant, one further named player's card.
+ *   - in the 'designate' variant, one further named player's card. That player
+ *     is told their card was held still, and nothing more — see 'card-locked'.
+ *
+ * The DIRECTION is the actor's alone. Nobody else is told which way the cards
+ * went, including the players whose cards moved, and the screen never names
+ * one. A shift you can reconstruct is not a shift in the dark.
  */
 const dorpsgek: Applier = function* (ctx) {
   const choice = yield ask(ctx, 'dorpsgek', {
@@ -301,6 +306,11 @@ const dorpsgek: Applier = function* (ctx) {
   }
   if (ctx.config.dorpsgekVariant === 'designate' && choice.designatedSeat !== undefined) {
     exempt.add(choice.designatedSeat);
+    // The locked player IS told (Milan, 2026-08-26) — but only that it
+    // happened. Not by whom, and not whether the actor was the Dorpsgek Alt or
+    // a Dubbelganger copying them: either would be a free read on somebody's
+    // role. The lock is for this shift only and does not follow the card.
+    ctx.info(choice.designatedSeat, { kind: 'card-locked', step: ctx.step });
   }
   const moved = rotateSeats(ctx.state, exempt, choice.direction);
   ctx.info(ctx.actor, {

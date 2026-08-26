@@ -54,6 +54,12 @@ const nl: Dict = {
   'reveal.becameRole': 'Je bent nu zelf de {role}.',
   'reveal.judged':
     'De Rechter heeft jou gekozen. Je eerste uitspraak vandaag moet waar zijn.',
+  // Says only that it happened. Not who did it, and not whether it was the
+  // Dorpsgek Alt or a Dubbelganger copying them — either would be a free read
+  // on somebody's role.
+  'reveal.cardLocked':
+    'Jouw kaart bleef liggen terwijl de rest opschoof. Verder weet je niets: ' +
+    'niet wie dat deed, en niet welke kant de kaarten op gingen.',
   'reveal.ownFinal': 'Je eindigt de nacht als de {role}.',
   'reveal.shielded':
     'Die kaart was beschermd door de Schildwacht. Er is niets gebeurd.',
@@ -162,6 +168,9 @@ const en: Dict = {
   'reveal.becameRole': 'You are now the {role} yourself.',
   'reveal.judged':
     'The Judge picked you. Your first statement today must be true.',
+  'reveal.cardLocked':
+    'Your card stayed put while the rest shifted. That is all you know: not ' +
+    'who did it, and not which way the cards went.',
   'reveal.ownFinal': 'You end the night as the {role}.',
   'reveal.shielded': 'That card was shielded by the Sentinel. Nothing happened.',
   'reveal.nothing': 'You did nothing this night.',

@@ -9,6 +9,7 @@ import type { Bot } from '../engine/bot.js';
 import type { Clock } from './clock.js';
 import { PausableClock } from './clock.js';
 import { answerKey, probe, requestsForWindow } from './replay.js';
+import { resolvePrecommit } from '../engine/precommit.js';
 import type { RoomStore } from './store.js';
 
 /**
@@ -137,7 +138,13 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
         answers.set(answerKey(request), { kind: 'none' });
         continue;
       }
-      answers.set(answerKey(request), choice);
+      // A stored RULE is not an answer yet. In 'tworound' mode the Heks
+      // commits one target per team before she has seen anything, and it is
+      // resolved here against the card she actually turned over — the engine
+      // handed us that in request.seen. A rule that cannot answer this
+      // decision resolves to nothing, which the referee already treats as a
+      // decline; firing a pre-commit on the wrong decision would be worse.
+      answers.set(answerKey(request), resolveChoice(request, choice));
       samples.push({
         role: request.actingAs, key: request.key, latencyMs,
         outcome: 'submitted', paused, sessionId: 'local',
@@ -208,4 +215,21 @@ async function releaseDueReveals(
     await store.releasePrivateInfo(seat, fresh);
     releasedSoFar.set(seat, info.length);
   }
+}
+
+/**
+ * A submitted choice, or the answer a submitted RULE produces.
+ *
+ * Kept out of the engine on purpose: the engine's job is to say what it is
+ * asking and what the asker has seen, not to hold anybody's stored policy.
+ * The classification the rule needs — which team a card belongs to — is engine
+ * logic and lives in precommit.ts, so this is only the join between them.
+ */
+function resolveChoice(request: DecisionRequest, choice: Choice): Choice {
+  if (choice.kind !== 'heks-policy') return choice;
+  const resolved = resolvePrecommit(request, {
+    kind: 'heks-policy',
+    policy: { wolf: choice.wolf, looier: choice.looier, village: choice.village },
+  });
+  return resolved ?? { kind: 'none' };
 }

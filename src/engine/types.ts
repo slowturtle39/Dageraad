@@ -127,6 +127,16 @@ export type PrivateInfo =
   | { kind: 'copied-role'; step: number; fromSeat: SeatIndex; role: RoleId }
   /** Told they were picked by the Rechter; first day statement must be true. */
   | { kind: 'judged'; step: number }
+  /**
+   * Told their card was held still while a Dorpsgek power shifted the others.
+   *
+   * DELIBERATELY SAYS NOTHING ELSE. Not who locked it, and not whether it was
+   * the Dorpsgek Alt or a Dubbelganger copying them (Milan, 2026-08-26) —
+   * either of those would hand this player a read on somebody's role, which is
+   * the opposite of what a shift in the dark is for. It carries no direction
+   * either: which way the cards moved is the actor's secret.
+   */
+  | { kind: 'card-locked'; step: number }
   | { kind: 'own-final-card'; step: number; role: RoleId }
   /** The Onderzoeker has become the role they uncovered. */
   | { kind: 'became-role'; step: number; role: RoleId }
@@ -163,6 +173,13 @@ export type Choice =
   | { kind: 'seats'; seats: SeatIndex[] }
   | { kind: 'center'; centerIndices: number[] }
   | { kind: 'dorpsgek'; direction: 'left' | 'right' | 'none'; designatedSeat?: SeatIndex }
+  /**
+   * A pre-committed rule rather than an answer: one target per team, for a
+   * decision the player must make before seeing what it depends on. Only
+   * meaningful in 'tworound' mode with heksVariant 'conditional'; the referee
+   * resolves it against what was actually turned over (see precommit.ts).
+   */
+  | { kind: 'heks-policy'; wolf: SeatIndex; looier: SeatIndex; village: SeatIndex }
   | { kind: 'bool'; value: boolean };
 
 /**
