@@ -1,0 +1,246 @@
+import { finalRoleOf } from '../engine/state.js';
+import type { Bot } from '../engine/bot.js';
+import type { DayOptions } from '../engine/dayphase.js';
+import type { Durations } from '../engine/timeline.js';
+import type { RoleId, SeatIndex } from '../engine/types.js';
+import type { Clock } from '../orchestration/clock.js';
+import { PausableClock, SystemClock } from '../orchestration/clock.js';
+import {
+  DEFAULT_DAY_CONFIG, runDay,
+  type DayConfig, type DayRunnerHooks, type DayRunResult, type DayStore,
+} from '../orchestration/dayrunner.js';
+import { runNight, type NightRunResult, type WindowInfo } from '../orchestration/referee.js';
+import { SandboxStore, mayRecordResults, type GameMode } from '../orchestration/sandbox.js';
+import type { RoomStore } from '../orchestration/store.js';
+import type { Backend, RoomView } from './backend.js';
+
+/**
+ * One evening, start to finish, on the referee's device.
+ *
+ * `runNight` and `runDay` already know how to play a game; what was missing was
+ * the thing that hands them a real room and then does something with what they
+ * hand back. That is all this is — the join between the engine's two halves and
+ * the network, and the only place in the app where a whole game is a function
+ * call.
+ *
+ * It runs on ONE device: the referee's, ideally the tablet (see backend.ts).
+ * Nothing here should ever run on a player's phone, and the security rules
+ * refuse it if it tries.
+ */
+
+export interface BotSeats {
+  seats: ReadonlySet<SeatIndex>;
+  bot: Bot;
+  /**
+   * The bot's own device.
+   *
+   * A bot votes through a Backend of its own rather than the referee writing
+   * votes on its behalf, so its vote meets exactly the same refusals a human's
+   * does — no self-vote, no target before 'voting'. A shortcut here would mean
+   * test mode stopped testing the vote path, which is most of what it is for.
+   */
+  device(seat: SeatIndex): Backend;
+}
+
+export interface RefereeRunnerOptions {
+  backend: Backend;
+  roomId: string;
+  /** 'test' blocks calibration and permanent stats, structurally (§16). */
+  mode?: GameMode;
+  clock?: Clock;
+  durations?: Durations;
+  dayConfig?: Partial<DayConfig>;
+  dayOptions?: DayOptions;
+  random?: () => number;
+  bots?: BotSeats;
+  onWindowOpen?: (window: WindowInfo) => void;
+  dayHooks?: DayRunnerHooks;
+  /** Called once the phase turns over, for a UI that wants to follow along. */
+  onPhase?: (phase: 'night' | 'day' | 'voting' | 'results') => void;
+}
+
+export interface GameRunResult {
+  night: NightRunResult;
+  day: DayRunResult;
+  /** Every seat's card at dawn (§6.0) — the one thing that becomes public. */
+  finalRoles: Record<SeatIndex, RoleId>;
+  outcome: string;
+  /** False in test mode: nothing was written to anyone's permanent record. */
+  resultsPersisted: boolean;
+  /** What test mode refused to write, so the UI can say so out loud. */
+  blocked: { method: string; count: number }[];
+}
+
+export class RefereeError extends Error {}
+
+/**
+ * Read a room once.
+ *
+ * `watchRoom` is the only read in the interface, deliberately — every screen in
+ * the app is live, so a one-shot read is the special case rather than the norm.
+ * Both implementations fire the callback with current state on subscribe.
+ */
+export function readRoomOnce(backend: Backend, roomId: string): Promise<RoomView> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const off = backend.watchRoom(roomId, (room) => {
+      if (settled) return;
+      settled = true;
+      // Unsubscribe on the next tick: a synchronous callback (memory backend)
+      // would otherwise call this before `off` has been assigned.
+      queueMicrotask(() => off());
+      if (room) resolve(room);
+      else reject(new RefereeError(`no such room: ${roomId}`));
+    });
+  });
+}
+
+/**
+ * Run the game the room is set up for.
+ *
+ * Call this AFTER `startGame` — the deal is the host pressing a button, and
+ * this is what happens next. Splitting them matters: the deal is one write that
+ * either happened or did not, and this is a long-running loop that a refresh
+ * has to be able to resume against a room that is already dealt.
+ */
+export async function runGame(opts: RefereeRunnerOptions): Promise<GameRunResult> {
+  const { backend, roomId } = opts;
+  const mode: GameMode = opts.mode ?? 'live';
+
+  const room = await readRoomOnce(backend, roomId);
+  if (room.refereeUid !== backend.uid) {
+    throw new RefereeError(
+      'only the referee device may run the game — create the room on the tablet',
+    );
+  }
+
+  const state = await backend.refereeNightState(roomId);
+  if (!state) throw new RefereeError('the game has not been dealt yet');
+
+  // The host pause has to stop the countdown for everyone at once (§5.3), so it
+  // wraps whatever clock the caller supplied rather than replacing it.
+  const clock = opts.clock ?? new PausableClock(new SystemClock());
+
+  const live = backend.refereeStore(roomId);
+  // In test mode the store PHYSICALLY cannot write calibration samples. This is
+  // a wrapper rather than an `if` at the call site because the failure it
+  // prevents — bot timings dragging every future window towards zero — would
+  // surface weeks later at a real table looking like an unrelated bug.
+  const base: RoomStore & DayStore = mode === 'test' ? new SandboxStore(live) : live;
+  const store = withPhaseHook(base, opts, room);
+
+  // Where we are starting from. `startGame` already moved the room to 'night',
+  // so the first setPhase the night runner makes is a no-op — a UI following
+  // along still needs to be told which phase it is joining.
+  if (room.phase !== 'lobby') opts.onPhase?.(room.phase);
+
+  const night = await runNight({
+    state,
+    activeRoles: room.activeRoles,
+    config: room.config,
+    store,
+    clock,
+    ...(opts.durations ? { durations: opts.durations } : {}),
+    ...(opts.onWindowOpen ? { onWindowOpen: opts.onWindowOpen } : {}),
+    ...(opts.bots ? { bots: { seats: opts.bots.seats, bot: opts.bots.bot } } : {}),
+  });
+
+  const day = await runDay({
+    state: night.result.state,
+    store,
+    clock,
+    config: {
+      ...DEFAULT_DAY_CONFIG,
+      // Always from the room, never from the caller: the abstain threshold is
+      // measured against how many people are at the table, and getting it from
+      // anywhere else is how two of the first three tappers end an eight-player
+      // vote.
+      seatCount: room.seating.length,
+      ...opts.dayConfig,
+    },
+    ...(opts.dayOptions ? { dayOptions: opts.dayOptions } : {}),
+    ...(opts.dayHooks ? { hooks: opts.dayHooks } : {}),
+    ...(opts.random ? { random: opts.random } : {}),
+  });
+
+  // §6.0: the win condition is judged on the card a player ENDS the night
+  // holding, not the one they were dealt. This is the only moment either
+  // becomes public, and it happens after the vote has already resolved.
+  const finalRoles: Record<SeatIndex, RoleId> = {};
+  for (let seat = 0; seat < night.result.state.seatCount; seat++) {
+    finalRoles[seat] = finalRoleOf(night.result.state, seat);
+  }
+
+  const persist = mayRecordResults(mode);
+  await backend.publishResults(roomId, finalRoles, day.result.outcome, persist);
+
+  return {
+    night,
+    day,
+    finalRoles,
+    outcome: day.result.outcome,
+    resultsPersisted: persist,
+    blocked: base instanceof SandboxStore ? base.blocked : [],
+  };
+}
+
+/**
+ * Wrap the store so the runner can react to a phase change without either
+ * `runNight` or `runDay` having to know a network exists.
+ *
+ * Two things hang off it: the caller's `onPhase`, and the moment bot seats have
+ * to cast their votes — which is exactly when voting opens and not a second
+ * before, since that is when the rules start accepting a target.
+ */
+function withPhaseHook(
+  inner: RoomStore & DayStore,
+  opts: RefereeRunnerOptions,
+  room: RoomView,
+): RoomStore & DayStore {
+  // `runNight` ends by setting 'day' and `runDay` opens by setting it again —
+  // each is right on its own, and together they are one redundant write that
+  // every device would see as a change and re-render for. Collapse it here
+  // rather than making either half aware of the other.
+  let lastPhase: string = room.phase;
+
+  return {
+    setWindowIndex: (i) => inner.setWindowIndex(i),
+    readSubmissions: (i) => inner.readSubmissions(i),
+    releasePrivateInfo: (seat, info) => inner.releasePrivateInfo(seat, info),
+    appendPublicEvents: (events) => inner.appendPublicEvents(events),
+    recordLatency: (samples) => inner.recordLatency(samples),
+    readVotes: () => inner.readVotes(),
+    announceExtension: (ms) => inner.announceExtension(ms),
+    async setPhase(phase) {
+      if (phase === lastPhase) return;
+      lastPhase = phase;
+      await inner.setPhase(phase);
+      if (phase !== 'lobby') opts.onPhase?.(phase);
+      if (phase === 'voting') await castBotVotes(opts, room);
+    },
+  };
+}
+
+async function castBotVotes(opts: RefereeRunnerOptions, room: RoomView): Promise<void> {
+  const bots = opts.bots;
+  if (!bots) return;
+  const state = await opts.backend.refereeNightState(opts.roomId);
+  if (!state) return;
+
+  for (const seat of bots.seats) {
+    const choice = bots.bot.chooseVote(seat, state);
+    const targetUid = choice.target === null ? null : (room.seating[choice.target] ?? null);
+    const ownUid = room.seating[seat];
+    // Defensive: a bot that named itself would be refused by the rules anyway,
+    // and a refusal thrown here would abort the whole day for everyone.
+    const safeTarget = targetUid === ownUid ? null : targetUid;
+    try {
+      await bots.device(seat).vote(
+        opts.roomId, safeTarget, choice.abstain || safeTarget === null,
+      );
+    } catch {
+      // A bot that cannot vote is a bug in the bot, not a reason to end the
+      // evening. It shows up as a missing vote, which the day runner reports.
+    }
+  }
+}
