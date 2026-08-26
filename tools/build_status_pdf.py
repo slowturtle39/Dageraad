@@ -3,8 +3,10 @@
 Build the shareable project-status PDF.
 
 Regenerate with:  python3 tools/build_status_pdf.py
-Screenshots come from /tmp/pdf-*.png (see the playwright snippet in the README
-of this folder) — if they are missing the document still builds, minus figures.
+Screenshots come from /tmp/pdf-*.png, produced by `node tools/shots.mjs` (which
+needs a `npm run dev` server and playwright). If they are missing the document
+still builds MINUS THE FIGURES and no error is raised — so check the page count
+and file size before committing a rebuild.
 """
 import os
 from reportlab.lib import colors
@@ -364,10 +366,15 @@ story.append(panel([
     ["Tijdlijn + zelfkalibrerende venstertijden", "Af · getest"],
     ["Scheidsrechter-lus, host-pauze, bots", "Af · getest"],
     ["Testmodus (bots spelen, geen stats, geen kalibratie)", "Af · getest"],
-    ["Firestore-schema + beveiligingsregels", "Af · geverifieerd, 33/33"],
+    ["Firestore-schema + beveiligingsregels", "Af · 38/38 in de emulator"],
     ["UI: tafel, statistieken, verdenkingen, stemmen, lobby, tablet", "Af"],
+    ["Scherm: wie leidt het spel (tafelapparaat of eigen telefoon)", "Af · getest"],
+    ["Avond als reeks potjes: aanschuiven en weggaan tussendoor", "Af · getest"],
+    ["Firestore-laag (kamer, leden, potjes, de verdeling)", "Af · getest"],
     ["Rolplaatjes", "Tijdelijke eigen tekeningen"],
-    ["Firebase-project + live koppeling", "<b>Nog niet</b>"],
+    ["Firebase-project", "Af · dageraad-fdb2d, europe-west4"],
+    ["Regels van de nieuwe collecties opnieuw uitrollen", "<b>Nog niet</b>"],
+    ["Schermen aan echte gegevens hangen", "<b>Nog niet</b>"],
     ["Curator + voorwerpen", "Niet gebouwd — regels nog niet vastgelegd"],
 ], [104 * mm, 50 * mm], header=True))
 
@@ -375,13 +382,36 @@ story.append(Paragraph("De beveiligingsregels zijn echt getest", H2))
 story.append(Paragraph(
     "De regels zijn geschreven als <i>aanvallen</i>, niet als gelukkige paden: "
     "elke test is iets wat een van ons met de ontwikkelaarsconsole open zou "
-    "kunnen proberen. Alle 33 slagen. De belangrijkste is dat niemand zichzelf "
+    "kunnen proberen. De 38 die live staan slagen allemaal; er zijn er 27 bij "
+    "gekomen voor de nieuwe collecties, en die moeten nog een keer door de "
+    "emulator vóór we uitrollen. De belangrijkste is dat niemand zichzelf "
     "tot scheidsrechter kan bombarderen — wie dat kon, kon de hele verdeling "
     "lezen.", BODY))
 story.append(Paragraph(
     "Wat op het gratis plan onvermijdelijk blijft: het apparaat dat de nacht "
-    "uitrekent heeft alle kaarten in het geheugen. Laat dat de tablet zijn, die "
-    "midden op tafel ligt en die niemand vasthoudt.", SMALL))
+    "uitrekent heeft alle kaarten in het geheugen. Dat valt niet weg te "
+    "programmeren — dus vraagt de app het nu gewoon, in het scherm waar je de "
+    "kamer aanmaakt.", SMALL))
+
+story.append(Paragraph("Wie leidt het spel?", H2))
+story.append(Paragraph(
+    "Je kiest bij het aanmaken van de kamer welk apparaat het spel leidt. Het "
+    "heet in het scherm het <b>tafelapparaat</b>. De keuze ligt vast zodra de "
+    "kamer bestaat — hij kan later niet meer verschuiven, en dat is met opzet "
+    "zo.", BODY))
+story.append(panel([
+    ["Los tafelapparaat", "<i>Aanbevolen.</i> Een aparte tablet, laptop of oude telefoon leidt het spel en speelt zelf niet mee. Dat apparaat kan technisch gezien alle kaarten inzien — precies daarom krijgt het er zelf geen. Op het scherm staat alleen wat iedereen mag weten, dus het mag gewoon midden op tafel liggen."],
+    ["Eigen telefoon", "<i>Vertrouwde groep.</i> Eén speler leidt het spel op zijn eigen telefoon en speelt gewoon mee. Geen extra apparaat nodig. Maar die telefoon kan technisch gezien alle kaarten inzien, ook die van jou."],
+], [40 * mm, 114 * mm]))
+story.append(Paragraph(
+    "Het scherm zegt dat tweede stukje er hardop bij, in het Nederlands en het "
+    "Engels, en <i>vóór</i> de knop in plaats van erna. Een gevolg dat je pas "
+    "leest als je al geklikt hebt, is geen keuze die je gekregen hebt.", SMALL))
+story.append(figure("/tmp/pdf-setup.png", 74,
+                    "Het scherm waarin je de kamer aanmaakt. De aanbevolen "
+                    "keuze staat boven, en wat de andere kost staat er "
+                    "gewoon bij.",
+                    crop=(0.0, 0.83)))
 
 story.append(Spacer(1, 3))
 story.append(figure("/tmp/pdf-stats.png", 66,
@@ -401,8 +431,12 @@ story.append(panel([
      "<i>Gedaan.</i> dageraad-fdb2d, europe-west4, anonieme login aan, config in de repo."],
     ["✓", "Beveiligingsregels uitrollen",
      "<i>Gedaan.</i> Gepubliceerd op 26 augustus, 38/38 groen in de emulator."],
-    ["1", "De live app-schil bouwen",
-     "Kamer maken en joinen, kaarten delen, de scheidsrechter op de tablet laten draaien, de schermen aan echte gegevens hangen. Dit is echt werk, geen knopje — en het is het enige dat nog tussen de code en een speelbaar potje staat."],
+    ["✓", "De Firestore-laag bouwen",
+     "<i>Gedaan.</i> <font face='Courier' size='8'>FirestoreBackend</font> draait op dezelfde interface als de geheugenversie waar alle tests op staan. Een avond is nu een reeks potjes: mensen kunnen tussendoor aanschuiven en naar huis, zonder dat de avond stopt."],
+    ["!", "Beveiligingsregels opnieuw uitrollen",
+     "<b>Nodig vóór het eerste echte potje.</b> De regels die live staan kennen de nieuwe collecties nog niet, dus een kamer aanmaken zou nu geweigerd worden. Eerst <font face='Courier' size='8'>npm run test:rules</font> draaien, dan pas uitrollen."],
+    ["1", "De schermen aan echte gegevens hangen",
+     "De schermen bestaan en zijn getest; ze hangen nog aan verzonnen gegevens. Dit is wat er nog tussen de code en een speelbaar potje staat."],
     ["2", "Hosting uitrollen",
      "<font face='Courier' size='8'>npm run build</font>, dan <font face='Courier' size='8'>firebase deploy --only hosting</font>. Daarna is er een link."],
     ["3", "Spelen", "Modus 1 tegen modus 2 — en de open regels beslissen."],

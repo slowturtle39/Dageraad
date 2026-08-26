@@ -65,6 +65,35 @@ const nl: Dict = {
   'day.noVote': 'De groep heeft besloten niet te stemmen.',
   'day.tie': 'Gelijkspel — er wordt niemand gelyncht.',
   'day.bodyguardVoid': 'De Bodyguard was het doelwit. De stemming vervalt.',
+
+  // Which device runs the game. Player-facing wording only: internally this is
+  // still refereeUid, and it is still immutable once the room exists.
+  'setup.title': 'Wie leidt het spel?',
+  'setup.sub':
+    'Eén apparaat deelt de kaarten en rekent de nacht uit. Dat apparaat heet ' +
+    'hier het tafelapparaat.',
+  'setup.tableDevice': 'Los tafelapparaat',
+  'setup.tableDevice.badge': 'Aanbevolen',
+  'setup.tableDevice.body':
+    'Een aparte tablet, laptop of oude telefoon maakt de kamer aan en leidt ' +
+    'het spel. Dat apparaat deelt de kaarten en kan ze technisch gezien ' +
+    'allemaal inzien — daarom speelt het zelf niet mee. Op het scherm staat ' +
+    'alleen wat iedereen mag weten, dus je kunt het gerust midden op tafel ' +
+    'laten liggen.',
+  'setup.trustedHost': 'Eigen telefoon',
+  'setup.trustedHost.badge': 'Vertrouwde groep',
+  'setup.trustedHost.body':
+    'Eén speler maakt de kamer aan op zijn eigen telefoon en speelt gewoon ' +
+    'mee. Je hebt geen extra apparaat nodig. Maar die telefoon deelt de ' +
+    'kaarten en kan ze technisch gezien allemaal inzien, ook die van jou. ' +
+    'Kies dit alleen in een groep die elkaar vertrouwt.',
+  'setup.permanent':
+    'Deze keuze ligt vast zodra de kamer bestaat. Hij kan later niet meer ' +
+    'naar een ander apparaat verschuiven — dat is met opzet zo.',
+  'setup.create': 'Maak de kamer aan',
+  'setup.createOnThisDevice':
+    'Je maakt de kamer aan op DIT apparaat. Zit je zelf mee te spelen? Kies ' +
+    'dan Eigen telefoon.',
 };
 
 const en: Dict = {
@@ -118,6 +147,32 @@ const en: Dict = {
   'day.noVote': 'The group decided not to vote.',
   'day.tie': 'A tie — nobody is lynched.',
   'day.bodyguardVoid': 'The Bodyguard was the target. The vote is void.',
+
+  'setup.title': 'Which device runs the game?',
+  'setup.sub':
+    'One device deals the cards and works out the night. Here that device is ' +
+    'called the table device.',
+  'setup.tableDevice': 'Separate table device',
+  'setup.tableDevice.badge': 'Recommended',
+  'setup.tableDevice.body':
+    'A separate tablet, laptop or spare phone creates the room and runs the ' +
+    'game. That device deals the cards and can technically see all of them — ' +
+    'which is why it takes no seat itself. Its screen shows only what ' +
+    'everyone is allowed to know, so you can leave it face-up on the table.',
+  'setup.trustedHost': 'A player\u2019s own phone',
+  'setup.trustedHost.badge': 'Trusted group',
+  'setup.trustedHost.body':
+    'One player creates the room on their own phone and plays along. No ' +
+    'extra device needed. But that phone deals the cards and can technically ' +
+    'see all of them, including yours. Only choose this in a group that ' +
+    'trusts each other.',
+  'setup.permanent':
+    'This choice is fixed the moment the room exists. It cannot move to ' +
+    'another device later — that is deliberate.',
+  'setup.create': 'Create the room',
+  'setup.createOnThisDevice':
+    'You are creating the room on THIS device. Playing yourself? Choose a ' +
+    'player\u2019s own phone instead.',
 };
 
 const DICTS: Record<Lang, Dict> = { nl, en };

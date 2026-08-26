@@ -181,6 +181,36 @@ If the first one is allowed, stop and tell me — that's the leak.
 
 ---
 
+# Task 11 — Decide which device runs the game
+
+This one is a table decision, not a console one, and it takes thirty seconds —
+but make it **before** the first real evening, because it cannot be changed
+afterwards.
+
+The room-creation screen now asks it directly. Player-facing the device is the
+**tafelapparaat** / **table device**; in the code and the rules it is still
+`refereeUid`, unchanged.
+
+**Separate table device (recommended).** A spare tablet, laptop or old phone
+creates the room and runs the game, and takes no seat. It can technically read
+every card — that is unavoidable on the free plan, see the README trust model —
+which is exactly why it is not dealt one, and why its screen shows only what
+everyone at the table may know. Leave it face-up in the middle.
+
+**A player's own phone (trusted group).** One player creates the room and plays
+along. No extra hardware. That phone can technically read every card, including
+everybody else's. Fine for your group; not something to do with strangers, and
+not something to do without saying so out loud first.
+
+The screen says all of this itself, in Dutch and English, before the create
+button. You do not have to brief anybody — but you do have to pick, and picking
+the second option quietly is the one thing worth avoiding.
+
+**Whichever you choose, the referee's tab has to stay open all night.** Lock
+that device or lose signal mid-round and resolution stalls until it is back.
+
+---
+
 ## What I need back from you
 
 1. ~~**Task 9 output**~~ — ✅ done, 33/33 passing.

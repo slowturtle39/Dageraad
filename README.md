@@ -29,11 +29,32 @@ something is **a browser at the table**.
   player's secret lives in a document whose rule is "readable only by its owner."
   Player B cannot fetch player A's card, devtools or not.
 - **The referee is the exposure.** Whoever computes the resolution holds every
-  role in memory. Prefer running it on **the tablet** — a neutral device in the
-  middle of the table that nobody is holding during the night. Failing that it
-  falls to the room creator's phone, which is worse.
+  role in memory.
 - **The referee's tab must stay open** for the whole night. Lock the phone or
   lose signal mid-round and resolution stalls until it's back.
+
+### The group chooses whose browser — on screen, in words
+
+Because the exposure is real and unavoidable, it is not buried in this file.
+The room-creation screen (`src/ui/setup.ts`) asks the question directly and
+says what each answer costs. Player-facing, the device is the **table device**
+(*tafelapparaat*); internally it is still `refereeUid` and nothing about the
+rules changed.
+
+| On screen | `playing` | What it means |
+| --- | --- | --- |
+| **Separate table device** (recommended) | `false` | A spare tablet, laptop or old phone runs the game and **takes no seat**. It can technically read every card, which is exactly why it is not dealt one — and why its screen shows only what everyone may know, so it can lie face-up on the table. |
+| **A player's own phone** (trusted group) | `true` | One player runs it and plays along. No extra hardware, but that phone can technically read every card, including yours. Appropriate for a group that trusts each other; not for strangers. |
+
+The screen states the trade-off of the second option in plain language, and
+states it **before** the create button rather than after — a consequence you
+read having already committed is not a choice you were offered. It also says
+the choice is permanent, which is true at the database level: `refereeUid` is
+immutable and the rules refuse to let it move.
+
+Softening that wording is the one genuinely dishonest thing this app could do.
+A group that picked the convenient option without being told was misled, and
+they find out when somebody wonders aloud how the host always guesses right.
 
 **The engine is written so this is reversible.** `src/engine/` imports no
 Firebase, no `window`, no timers — it is a pure function of (deal + answers) →

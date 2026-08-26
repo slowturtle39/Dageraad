@@ -7,6 +7,7 @@ import { renderSheet } from './ui/sheet.js';
 import { aggregate, renderStats, type ResultRow } from './ui/stats.js';
 import { renderTablet } from './ui/tablet.js';
 import { renderLobby, swapSeats, seatingIsValid, type LobbyPlayer } from './ui/lobby.js';
+import { renderRoomSetup, type ControllerMode } from './ui/setup.js';
 import { detectLang, t, type Lang } from './ui/i18n.js';
 import { renderSuspicionPicker, type SuspicionMap } from './ui/suspicionpicker.js';
 import { TEST_MODE_BANNER } from './orchestration/sandbox.js';
@@ -31,7 +32,7 @@ import { TEST_MODE_BANNER } from './orchestration/sandbox.js';
 
 const NAMES = ['Milan', 'Sanne', 'Joris', 'Fleur', 'Daan', 'Noor', 'Bram', 'Eva'];
 
-type View = 'phone' | 'tablet' | 'lobby';
+type View = 'phone' | 'tablet' | 'lobby' | 'setup';
 type Phase = 'night' | 'day';
 
 const state = {
@@ -45,6 +46,13 @@ const state = {
   pendingSwap: null as SeatIndex | null,
   testMode: false,
   openPicker: null as SeatIndex | null,
+  /**
+   * Which device the group has said should run the game. The table device is
+   * the default because it is the one where nobody at the table is holding
+   * everybody's cards; the alternative is legitimate but has to be chosen
+   * knowingly. See ui/setup.ts.
+   */
+  controllerMode: 'table-device' as ControllerMode,
   suspicions: new Map() as SuspicionMap,
   players: NAMES.map((displayName, i) => ({
     uid: `u${i}`,
@@ -108,6 +116,7 @@ function render(): void {
 
   if (state.view === 'tablet') return renderTabletView(app);
   if (state.view === 'lobby') return renderLobbyView(app);
+  if (state.view === 'setup') return renderSetupView(app);
   return renderPhoneView(app);
 }
 
@@ -318,15 +327,50 @@ function renderLobbyView(app: HTMLElement): void {
   app.append(bottomBar());
 }
 
+/**
+ * The first screen a group ever sees: whose browser runs the game.
+ *
+ * In the demo it only flips a local flag, but the wiring is the real one — the
+ * chosen mode becomes `CreateRoomOptions.playing`, and the creating device
+ * becomes the room's immutable `refereeUid`. Nothing here can move that
+ * afterwards, which is why the screen says the choice is permanent.
+ */
+function renderSetupView(app: HTMLElement): void {
+  app.append(
+    renderRoomSetup({
+      lang: state.lang,
+      mode: state.controllerMode,
+      onModeChange: (mode) => {
+        state.controllerMode = mode;
+        render();
+      },
+      onCreate: (mode) => {
+        state.controllerMode = mode;
+        // The real app calls backend.createRoom({ ..., playing:
+        // controllerModeIsPlaying(mode) }) here and goes to the lobby.
+        state.view = 'lobby';
+        render();
+      },
+    }),
+  );
+  app.append(bottomBar());
+}
+
 function bottomBar(): HTMLElement {
   const bar = document.createElement('div');
   bar.className = 'bottombar';
   bar.append(
     button(
-      state.view === 'phone' ? 'Telefoon' : state.view === 'tablet' ? 'Tablet' : 'Stoelen',
+      state.view === 'phone' ? 'Telefoon'
+        : state.view === 'tablet' ? 'Tablet'
+        : state.view === 'lobby' ? 'Stoelen'
+        : 'Opzet',
       () => {
         state.view =
-          state.view === 'phone' ? 'tablet' : state.view === 'tablet' ? 'lobby' : 'phone';
+          state.view === 'phone' ? 'tablet'
+            : state.view === 'tablet' ? 'lobby'
+            : state.view === 'lobby' ? 'setup'
+            : 'phone';
         state.openStats = null;
         state.openPicker = null;
         render();
