@@ -48,14 +48,22 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
     const snap = await getDocs(
       collection(this.db, `rooms/${this.roomId}/submissions`),
     );
+    const seats = await this.seatByUid();
     const out = new Map<SeatIndex, Record<string, Choice>>();
     for (const d of snap.docs) {
-      const data = d.data() as { windowIndex?: number; choices?: Record<string, Choice>; seat?: number };
+      const data = d.data() as {
+        windowIndex?: number;
+        choices?: Record<string, Choice>;
+      };
       // Belt and braces: the rules already reject a mismatched windowIndex, but
       // a document left over from an earlier window must not be replayed here.
       if (data.windowIndex !== windowIndex) continue;
-      const seat = data.seat;
-      if (typeof seat !== 'number') continue;
+      // The seat comes from the document's OWNER, not from a field inside it.
+      // A `seat` field would be both redundant (the doc is keyed by uid) and
+      // forgeable — nothing in the rules could stop a player writing somebody
+      // else's seat number into their own submission.
+      const seat = seats.get(d.id);
+      if (seat === undefined) continue;
       out.set(seat, data.choices ?? {});
     }
     return out;

@@ -239,6 +239,59 @@ describe('voting', () => {
   });
 });
 
+describe('the abstain toggle during the discussion (§7, revised 2026-08-26)', () => {
+  beforeEach(async () => { await seed('day'); });
+
+  it('accepts an abstain while the room is still discussing', async () => {
+    // The toggle is live from the first second and a majority counts at ANY
+    // moment — which happens in phase 'day'. A voting-only rule would silently
+    // reject every abstain and the whole mechanic would appear to do nothing.
+    await assertSucceeds(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
+        target: null, abstain: true,
+      }),
+    );
+  });
+
+  it('accepts switching the abstain back off — it is a show of hands', async () => {
+    await assertSucceeds(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
+        target: null, abstain: false,
+      }),
+    );
+  });
+
+  it('still refuses a named target during the discussion', async () => {
+    // Letting somebody lock a target in early would quietly turn a simultaneous
+    // vote into a first-mover one, even though nobody can read it yet.
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
+        target: BOB, abstain: false,
+      }),
+    );
+  });
+
+  it('still refuses a self-vote, in either phase', async () => {
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
+        target: ALICE, abstain: true,
+      }),
+    );
+  });
+
+  it('keeps abstains unreadable by other players', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'votes', ALICE), {
+        target: null, abstain: true,
+      });
+    });
+    // The public count reaches the table via the room document, written by the
+    // referee — never by players reading each other's votes.
+    await assertFails(getDoc(doc(as(BOB), 'rooms', ROOM, 'votes', ALICE)));
+    await assertSucceeds(getDoc(doc(as(REF), 'rooms', ROOM, 'votes', ALICE)));
+  });
+});
+
 describe('results are append-only, so history is tamper-evident', () => {
   beforeEach(async () => { await seed('results'); });
 

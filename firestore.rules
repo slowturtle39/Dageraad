@@ -148,12 +148,28 @@ service cloud.firestore {
               || isReferee(roomId)
               || inPhase(roomId, 'results'));
 
+        // Two phases can write here, and for different reasons.
+        //
+        // During 'voting': a full vote, target or abstain.
+        //
+        // During 'day' (the discussion): ABSTAIN ONLY. The "vote not to vote"
+        // toggle is live from the first second and a majority counts at any
+        // moment (§7, revised 2026-08-26) — which happens while the room is
+        // still in 'day', so a voting-only rule would silently reject every
+        // abstain and the whole mechanic would appear to do nothing.
+        //
+        // Naming a target is still confined to 'voting'. Letting someone lock a
+        // target in during the discussion would quietly turn a simultaneous
+        // vote into a first-mover one, even though nobody can read it yet.
         allow create, update: if signedIn()
           && playerUid == uid()
-          && inPhase(roomId, 'voting')
           // §7: never allowed to vote for yourself. Enforced here as well as
           // in the UI, so a hand-crafted write cannot do it either.
-          && request.resource.data.target != uid();
+          && request.resource.data.target != uid()
+          && (
+               inPhase(roomId, 'voting')
+               || (inPhase(roomId, 'day') && request.resource.data.target == null)
+             );
 
         allow delete: if false;
       }
