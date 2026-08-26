@@ -7,3 +7,4 @@ dist/
 .DS_Store
 shot.mjs
 lum.mjs
+tools/_figures/
