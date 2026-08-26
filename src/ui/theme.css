@@ -783,3 +783,124 @@ body {
   color: var(--ink-dim);
   font-size: 13px;
 }
+
+/* ------------------------------------------------------------------ *
+ * The stats browser (§10).
+ *
+ * Reachable BEFORE joining a game, so unlike everything else in this file it
+ * is not under the no-luminance-change rule for its own sake — but it uses the
+ * same palette anyway, because it is also reachable DURING a game and a screen
+ * that lights up differently is the exact tell §5.4 exists to prevent.
+ * ------------------------------------------------------------------ */
+
+.browser {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.browser__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.browser__tab {
+  appearance: none;
+  background: var(--bg-raised);
+  color: var(--ink-dim);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.browser__tab--on {
+  color: var(--ink);
+  border-color: var(--gold-dim);
+  background: var(--bg-sunken);
+}
+
+.browser__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.browser__chip {
+  appearance: none;
+  background: transparent;
+  color: var(--ink-faint);
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.browser__chip--on {
+  color: var(--ink);
+  border-color: var(--gold-dim);
+}
+
+.browser__select {
+  appearance: none;
+  background: var(--bg-raised);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.browser__sample {
+  color: var(--ink-faint);
+  font-size: 12px;
+  font-style: italic;
+  margin: 0;
+}
+
+/* A wide table on a narrow phone scrolls sideways INSIDE itself rather than
+   pushing the page around it. */
+.grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.grid th {
+  text-align: left;
+  color: var(--ink-faint);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.grid td {
+  padding: 7px 10px 7px 0;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink);
+}
+
+.grid__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.grid tr:last-child td {
+  border-bottom: none;
+}
