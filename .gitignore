@@ -12,3 +12,6 @@ tools/_figures/
 # Handoff artefacts. Full history, but rebuildable — `git bundle create`.
 *.bundle
 *.tar.gz
+
+# tsc -b incremental cache. Machine-local, and it churns on every build.
+*.tsbuildinfo
