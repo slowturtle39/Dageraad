@@ -21,12 +21,12 @@ describe('the voting sheet', () => {
     expect(src).toMatch(/Vanaf \$\{needed\}/);
   });
 
-  it('offers the abstain toggle the whole time, not only at the end', () => {
-    // People work out there is nothing to gain long before the last minute.
-    // Hiding the button until then would mean they had decided but couldn't
-    // say so.
-    expect(src).toMatch(/Je kunt dit nu al aanzetten/);
-    expect(src).toMatch(/inFinalMinute/);
+  it('shows the abstain tally live, because a majority counts at any moment', () => {
+    // Milan, 2026-08-26: the group may decide not to vote at ANY point, so the
+    // count has to be true at any point too. There is no "final minute" gate.
+    expect(src).toMatch(/willen niet stemmen/);
+    expect(src).toMatch(/Vanaf \$\{needed\} gaat de stemming niet door/);
+    expect(src).not.toMatch(/inFinalMinute/);
   });
 
   it('shows how many still have to vote, because voting is mandatory', () => {

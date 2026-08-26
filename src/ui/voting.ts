@@ -18,8 +18,6 @@ export interface VotingView {
   names: Record<SeatIndex, string>;
   target: SeatIndex | null;
   abstain: boolean;
-  /** True once a majority abstain can actually end the discussion (§7). */
-  inFinalMinute: boolean;
   /** How many are currently abstaining, and how many it would take. */
   abstainCount: number;
   seatCount: number;
@@ -56,15 +54,12 @@ export function renderVoting(view: VotingView): HTMLElement {
   const needed = Math.floor(view.seatCount / 2) + 1;
   const tally = document.createElement('p');
   tally.className = 'sheet__note';
-  // The button is available the whole time — people work out there is nothing
-  // to gain long before the last minute, and hiding it until then would mean
-  // they had decided but couldn't say so. What changes at the end is when a
-  // majority can actually stop the vote.
-  tally.textContent = view.inFinalMinute
-    ? `${view.abstainCount} van de ${view.seatCount} willen niet stemmen. ` +
-      `Vanaf ${needed} gaat de stemming niet door.`
-    : `Je kunt dit nu al aanzetten (${view.abstainCount}/${view.seatCount}). ` +
-      `In de laatste minuut kan het de stemming tegenhouden.`;
+  // Live from the first second: the group may decide not to vote at any moment,
+  // so the count has to be true at any moment too. Showing how close it is IS
+  // the mechanic — and it reveals intention, never anybody's role.
+  tally.textContent =
+    `${view.abstainCount} van de ${view.seatCount} willen niet stemmen. ` +
+    `Vanaf ${needed} gaat de stemming niet door.`;
   el.append(tally);
 
   if (view.votingOpen) {

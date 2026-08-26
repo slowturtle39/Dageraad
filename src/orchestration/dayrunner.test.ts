@@ -39,7 +39,6 @@ const FAST: DayConfig = {
   discussionMs: 10_000,
   suspenseExtensionMs: 4_000,
   voteWaitTimeoutMs: 8_000,
-  finalMinuteMs: 3_000,
   abstainPollMs: 1_000,
   seatCount: 5,
 };
@@ -197,7 +196,7 @@ describe('voting is mandatory (Milan, 2026-08-26)', () => {
     expect((await run).missingVotes).toEqual([]);
   });
 
-  it('ends the discussion early when a majority abstains during the final minute', async () => {
+  it('ends the discussion the moment a majority wants to skip the vote', async () => {
     const store = new TestDayStore();
     const clock = new FakeClock();
     store.cast(0, null, true);
@@ -230,23 +229,45 @@ describe('voting is mandatory (Milan, 2026-08-26)', () => {
     expect(out.result.teamsWon.village).toBe(true);
   });
 
-  it('lets the abstain toggle be set early, even though it only counts late', async () => {
-    // People work out there is nothing to gain long before the last minute;
-    // hiding the button until then would mean they had decided but couldn't
-    // say so.
+  it('counts a majority from the very first seconds, not only near the end', async () => {
+    // Milan, 2026-08-26: the group may decide not to vote AT ANY MOMENT. A
+    // table that works out early that there is nothing to gain should be able
+    // to stop, rather than sitting out a timer they have all given up on.
     const store = new TestDayStore();
     const clock = new FakeClock();
     store.cast(0, null, true);
     store.cast(1, null, true);
-    store.cast(2, null, true);
+    store.cast(2, null, true);   // 3 of 5, before the discussion has run
+    store.cast(3, 0);
+    store.cast(4, 0);
+
+    const run = runDay({ state, store, clock, config: FAST });
+    // Only 2s of a 10s discussion — well before any "final minute" would start.
+    await drive(clock, 2_500);
+    await drive(clock, 20_000);
+    const out = await run;
+
+    expect(out.endedByAbstain).toBe(true);
+    expect(out.result.outcome).toBe('no-vote');
+    // The vote never opened, so nobody was asked to cast one.
+    expect(store.phases).not.toContain('voting');
+  });
+
+  it('lets the group change its mind — a majority that lapses does not hold', async () => {
+    // It is a simultaneous show of hands, so switching back off genuinely
+    // undoes it. That is what keeps an early majority from being irreversible.
+    const store = new TestDayStore();
+    const clock = new FakeClock();
+    store.cast(0, null, true);
+    store.cast(1, null, true);
+    store.cast(2, 0);
     store.cast(3, 0);
     store.cast(4, 0);
 
     const run = runDay({ state, store, clock, config: FAST });
     await drive(clock, 40_000);
     const out = await run;
-    expect(out.endedByAbstain).toBe(true);
-    expect(out.result.outcome).toBe('no-vote');
+    expect(out.endedByAbstain).toBe(false);   // only 2 of 5 ever held it
   });
 
   it('walks the phases in order', async () => {

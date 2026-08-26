@@ -28,9 +28,7 @@ export interface DayConfig {
    * intervene rather than the game silently resolving without somebody.
    */
   voteWaitTimeoutMs: number;
-  /** The stretch of the discussion in which a majority-abstain can end it (§7). */
-  finalMinuteMs: number;
-  /** How often to check for a majority abstain during the final minute. */
+  /** How often to check whether a majority wants to skip the vote. */
   abstainPollMs: number;
   /** Total players at the table. The abstain threshold is measured against
    *  THIS, never against the number who happen to have voted so far. */
@@ -44,7 +42,6 @@ export const DEFAULT_DAY_CONFIG: DayConfig = {
   suspenseExtensionMs: 2 * 60_000,
   votingMode: 'in-app',
   voteWaitTimeoutMs: 10 * 60_000,
-  finalMinuteMs: 60_000,
   abstainPollMs: 1_000,
   seatCount: 0,
 };
@@ -64,7 +61,7 @@ export interface DayRunnerHooks {
    * well whose hand is still down. Needed to chase the last player.
    */
   onVoteProgress?: (cast: number, total: number) => void;
-  /** Live abstain count during the final minute, for the same reason. */
+  /** Live abstain count, for the same reason. Runs the whole discussion. */
   onAbstainProgress?: (abstaining: number, needed: number) => void;
 }
 
@@ -111,18 +108,16 @@ export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
 
   // ---- discussion -------------------------------------------------------
   //
-  // The "vote not to vote" toggle is available the WHOLE time — people work out
-  // there is nothing to gain long before the last minute, and hiding the button
-  // until then would mean they had decided but couldn't say so. What is confined
-  // to the final minute is when a majority can END the discussion early, so the
-  // group still has to hold that position until the end rather than settling it
-  // in the first thirty seconds.
+  // The group may decide not to vote AT ANY MOMENT (Milan, 2026-08-26). The
+  // toggle is live from the first second, and the instant a majority holds it
+  // the discussion ends — there is no window it has to survive until.
+  //
+  // This deliberately makes abstaining strong: a table that works out early
+  // that there is nothing to gain can simply stop, rather than sitting out a
+  // timer they have all already given up on.
   if (config.discussionEnabled) {
-    const quiet = Math.max(0, config.discussionMs - config.finalMinuteMs);
-    if (quiet > 0) await clock.sleep(quiet);
-
     endedByAbstain = await watchForAbstain(
-      store, clock, config, Math.min(config.finalMinuteMs, config.discussionMs), hooks,
+      store, clock, config, config.discussionMs, hooks,
     );
 
     // Rolled only AFTER the timer expires, so nobody can time their accusation
@@ -161,11 +156,13 @@ export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
 }
 
 /**
- * Watch for a majority abstain over a stretch of the discussion.
+ * Watch for a majority abstain, for the whole stretch handed to us.
  *
  * The check is "more than half have the toggle on AT THE SAME TIME", not "more
  * than half have touched it at some point" — it is a simultaneous show of
- * hands, so somebody switching theirs back off genuinely undoes it.
+ * hands, so somebody switching theirs back off genuinely undoes it. That is
+ * what stops an early majority being irreversible: the group can change its
+ * mind right up until the moment it holds.
  */
 async function watchForAbstain(
   store: DayStore,

@@ -294,7 +294,7 @@ story.append(panel([
     ["Looier gelyncht", "De Looier wint <b>alleen</b>. Dorp én wolven verliezen — ook als er in dezelfde stemming een wolf omkwam, wat de Jager kan veroorzaken."],
     ["Alle wolven in het midden", "De wolven kunnen niet winnen. Het dorp wint alleen als er niemand gelyncht wordt: lynch je een onschuldige, dan wint niemand."],
     ["Stemmen", "Verplicht. Zodra de klok om is en er niet is afgezien, wacht het spel tot iedereen gestemd heeft — niemand wordt overgeslagen."],
-    ["Niet stemmen", "De knop staat de hele tijd aan. Pas in de laatste minuut kan een meerderheid de stemming ermee tegenhouden."],
+    ["Niet stemmen", "De knop staat de hele tijd aan en telt op <b>elk moment</b>: zodra een meerderheid niet wil stemmen, stopt het overleg meteen. Het is een gelijktijdig handopsteken — wie zijn knop weer uitzet, draait het terug."],
 ], [30 * mm, 124 * mm]))
 
 story.append(PageBreak())
