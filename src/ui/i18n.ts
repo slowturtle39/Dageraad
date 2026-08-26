@@ -70,7 +70,6 @@ const nl: Dict = {
   'day.extended': 'Nog 2 minuten! De spanning wordt opgerekt.',
   'day.noVote': 'De groep heeft besloten niet te stemmen.',
   'day.tie': 'Gelijkspel — er wordt niemand gelyncht.',
-  'day.bodyguardVoid': 'De Bodyguard was het doelwit. De stemming vervalt.',
 
   // Which device runs the game. Player-facing wording only: internally this is
   // still refereeUid, and it is still immutable once the room exists.
@@ -180,7 +179,6 @@ const en: Dict = {
   'day.extended': 'Two more minutes! The tension is stretched.',
   'day.noVote': 'The group decided not to vote.',
   'day.tie': 'A tie — nobody is lynched.',
-  'day.bodyguardVoid': 'The Bodyguard was the target. The vote is void.',
 
   'setup.title': 'Which device runs the game?',
   'setup.sub':

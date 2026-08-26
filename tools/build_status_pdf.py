@@ -339,11 +339,12 @@ story.append(PageBreak())
 story.append(Paragraph("Huisregels die vastliggen", H1))
 story.append(panel([
     ["Dubbelganger", "Voert de gekopieerde actie uit op zijn eigen plek in de volgorde, wat hij ook kopieert. Geen ketting op een andere Dubbelganger."],
-    ["Dorpsgek", "De kaart van de handelende speler blijft liggen; een beschermde kaart ook, de rest draait eromheen. Kopieert de Dubbelganger deze rol, dan blijft zíjn kaart liggen en schuift die van de echte Dorpsgek gewoon mee."],
-    ["Heks", "Kiest uit de <b>drie</b> middenkaarten, nooit de wolvenkaart. Haar voorwaardelijke regel splitst in drieën — Wolf, Looier, dorp — want de Looier is een derde team en zou anders ongemerkt bij “dorp” belanden."],
+    ["Dorpsgek", "<b>Hij kiest zelf welke kant op, en dat weet verder niemand</b> — het scherm noemt geen richting. Zijn eigen kaart blijft liggen; een beschermde kaart ook, de rest draait eromheen. Kopieert de Dubbelganger deze rol, dan blijft zíjn kaart liggen en schuift die van de echte Dorpsgek gewoon mee."],
+    ["Dorpsgek alt", "Zelfde, maar hij mag daarnaast één andere kaart vastzetten die niet meeschuift. <b>Alleen die speler krijgt bericht</b>, en enkel dát: niet van wie, en niet of het de Dorpsgek alt was of een Dubbelganger die hem kopieerde. Het vastzetten geldt alleen voor dit schuiven — niet voor andere acties, en het geldt niet meer als de echte Dorpsgek alt daarna zelf aan de beurt is."],
+    ["Heks", "Kiest uit de <b>drie</b> middenkaarten, nooit de wolvenkaart. In modus 2 legt ze haar regel vooraf vast, en die splitst in drieën — Wolf, Looier, dorp — want de Looier is een derde team en zou anders ongemerkt bij “dorp” belanden. In modus 1 kiest ze gewoon live."],
     ["Alfawolf", "Blijft blind: ze weet nooit welke kaart ze weghaalt. Dat hoort bij de rol en is geen bug. Idem de Dronkaard."],
-    ["Medium", "Een wolf gaat niet open, al het andere wel. Mag ruilen met de Looier."],
-    ["Bodyguard", "Krijgt hij de meeste stemmen, dan vervalt de stemming en gaat er niemand dood."],
+    ["Medium", "Een wolf gaat niet open, al het andere wel. Draait ze de Looier om, dan <b>moet</b> ze die nemen — geen keuze. Ze geeft haar Mediumkaart aan die speler, die het nooit te horen krijgt, en wint vanaf dat moment alleen nog door zelf gelyncht te worden. De Looier gaat níét open: een Looier die iedereen ziet is een Looier die niemand lyncht."],
+    ["Bodyguard", "Stemt niet, maar <b>beschermt</b>. Hij wijst zodra de stemming opengaat één speler aan, en elke stem tegen die speler vervalt — zijn eigen stem bestaat niet, hij brengt er geen uit. Aanwijzen is verplicht: de knop om af te zien wordt hem afgenomen. Zichzelf beschermen mag niet, en dát is wat hem lynchbaar houdt. Het schild ligt bij wie bij zonsopgang de Bodyguardkaart heeft, dus een weggeruilde Bodyguard beschermt niemand en iemand anders beschermt zonder het te weten. Hij annuleert stembriefjes, geen kogels: het schot van de Jager gaat gewoon door."],
     ["Looier", "Zijn eigen stem telt nooit mee."],
 ], [26 * mm, 128 * mm]))
 
