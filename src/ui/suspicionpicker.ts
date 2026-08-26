@@ -1,4 +1,5 @@
 import { roleName, t, type Lang } from './i18n.js';
+import { roleArt } from './art.js';
 import type { RoleId, SeatIndex } from '../engine/types.js';
 
 /**
@@ -53,7 +54,11 @@ export function renderSuspicionPicker(view: SuspicionPickerView): HTMLElement {
     chip.type = 'button';
     chip.className =
       role === view.current ? 'suspicion__chip suspicion__chip--on' : 'suspicion__chip';
-    chip.textContent = roleName(view.lang, role);
+    const art = roleArt(role);
+    if (art) chip.append(art);
+    const chipLabel = document.createElement('span');
+    chipLabel.textContent = roleName(view.lang, role);
+    chip.append(chipLabel);
     chip.addEventListener('click', () =>
       view.onPick(role === view.current ? null : role),
     );

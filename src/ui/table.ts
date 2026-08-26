@@ -1,4 +1,5 @@
 import { ROLES } from '../engine/roles.js';
+import { roleArt } from './art.js';
 import type { RoleId, SeatIndex } from '../engine/types.js';
 
 /**
@@ -112,6 +113,8 @@ export function renderTable(view: TableView): HTMLElement {
     card.className = 'seat__card';
     if (s.revealedRole) {
       card.classList.add('seat__card--revealed');
+      const art = roleArt(s.revealedRole);
+      if (art) card.append(art);
       const label = document.createElement('span');
       label.className = 'seat__role';
       label.textContent = NL(s.revealedRole);
@@ -120,6 +123,8 @@ export function renderTable(view: TableView): HTMLElement {
       // A guess never takes the bone face of a real reveal. Same dark card,
       // dashed edge, dimmed text — legible to you, obviously not a fact.
       card.classList.add('seat__card--suspected');
+      const art = roleArt(s.suspectedRole);
+      if (art) card.append(art);
       const label = document.createElement('span');
       label.className = 'seat__role seat__role--guess';
       label.textContent = NL(s.suspectedRole);

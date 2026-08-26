@@ -1,4 +1,5 @@
 import { roleName, t, type Lang } from './i18n.js';
+import { roleArt } from './art.js';
 import type { CardId, RoleId, SeatIndex } from '../engine/types.js';
 
 /**
@@ -111,6 +112,8 @@ export function renderTablet(view: TabletView): HTMLElement {
     card.className = 'seat__card';
     if (s.revealedRole) {
       card.classList.add('seat__card--revealed');
+      const art = roleArt(s.revealedRole);
+      if (art) card.append(art);
       const label = document.createElement('span');
       label.className = 'seat__role';
       label.textContent = roleName(view.lang, s.revealedRole);

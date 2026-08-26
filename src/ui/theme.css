@@ -222,6 +222,59 @@ body {
 .seat__card--revealed {
   background: linear-gradient(160deg, var(--bone), var(--bone-shadow));
   border-color: var(--bone-shadow);
+  /* Emblem above, name beneath — the layout of the printed card. */
+  flex-direction: column;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 2px;
+}
+
+.seat__card--suspected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 2px;
+}
+
+/* One emblem file has to work on a bone card in dark ink and on a dashed guess
+   in dim gold, so it is line art in currentColor and never a bitmap with its
+   own colours baked in. */
+.emblem {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: block;
+  object-fit: contain;
+}
+
+.seat__card--revealed .emblem {
+  color: #2b2318;
+}
+
+.seat__card--suspected .emblem {
+  color: var(--gold);
+  opacity: 0.8;
+}
+
+.tablet .emblem {
+  width: 38px;
+  height: 38px;
+}
+
+.suspicion__chip .emblem {
+  width: 15px;
+  height: 15px;
+  color: currentColor;
+}
+
+.suspicion__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .seat__card--revealed::after {
@@ -301,12 +354,19 @@ body {
 
 .seat__role {
   font-family: var(--font);
-  font-size: 9px;
-  line-height: 1.1;
+  font-size: 8px;
+  line-height: 1.05;
   text-align: center;
   color: #23262e;
-  padding: 0 2px;
+  padding: 0 1px;
   font-weight: 600;
+  max-width: 100%;
+  /* Role names are long single words on a 38px card — Leerlingziener,
+     Schoneslaapster — so they must be allowed to break mid-word. Ellipsis
+     would be worse than a break here: a truncated role name is no use at all
+     as a memory aid. */
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 
 .seat__name {
@@ -330,8 +390,8 @@ body {
   color: var(--gold);
   font-style: italic;
   font-weight: 500;
-  font-size: 8.5px;
-  letter-spacing: -0.01em;
+  font-size: 7.5px;
+  letter-spacing: -0.02em;
 }
 
 .tablet .seat__card--suspected .seat__role--guess {
