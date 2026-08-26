@@ -163,6 +163,13 @@ body {
   left: 50%;
   transform: translate(-50%, -50%);
   display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: center;
+}
+
+.table__center-row {
+  display: flex;
   gap: 5px;
   align-items: center;
 }
@@ -368,8 +375,13 @@ body {
   opacity: 0.4;
 }
 
+/* The Alpha Wolf's card is NOT one of the three. It lies sideways beneath them
+   so that is obvious at a glance — the Heks and Leerlingziener may never pick
+   it, and a card sitting in the row would invite exactly that mistake. */
 .centercard--wolf {
-  border-color: color-mix(in srgb, var(--blood) 60%, var(--line));
+  width: 37px;
+  height: 26px;
+  border-color: color-mix(in srgb, var(--blood) 70%, var(--line));
 }
 
 /* ------------------------------------------------------------------ */
@@ -662,6 +674,11 @@ body {
 .tablet .centercard {
   width: 44px;
   height: 62px;
+}
+
+.tablet .centercard--wolf {
+  width: 62px;
+  height: 44px;
 }
 
 /* ------------------------------------------------------------------ */

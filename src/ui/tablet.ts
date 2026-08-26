@@ -81,12 +81,18 @@ export function renderTablet(view: TabletView): HTMLElement {
 
   const center = document.createElement('div');
   center.className = 'table__center';
+
+  const row = document.createElement('div');
+  row.className = 'table__center-row';
   for (let i = 0; i < view.centerCount; i++) {
     const c = document.createElement('div');
     c.className = 'centercard';
-    center.append(c);
+    row.append(c);
   }
+  center.append(row);
+
   if (view.hasAlphaWolfCard) {
+    // Sideways beneath the three — it is not one of them (see table.ts).
     const w = document.createElement('div');
     w.className = 'centercard centercard--wolf';
     center.append(w);

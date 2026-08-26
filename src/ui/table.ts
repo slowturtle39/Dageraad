@@ -55,16 +55,22 @@ export function renderTable(view: TableView): HTMLElement {
 
   const center = document.createElement('div');
   center.className = 'table__center';
+
+  const row = document.createElement('div');
+  row.className = 'table__center-row';
   for (let i = 0; i < view.centerCount; i++) {
     const c = document.createElement('div');
     c.className = 'centercard';
-    center.append(c);
+    row.append(c);
   }
+  center.append(row);
+
   if (view.hasAlphaWolfCard) {
     const wolf = document.createElement('div');
-    // Shown separately because it IS separate: the Heks and Leerlingziener
-    // choose among the three only, never this one, even after the Alpha Wolf
-    // has parked somebody's old card here.
+    // Laid out sideways beneath the three, because it IS a different thing:
+    // the Heks and Leerlingziener choose among the three only, never this one,
+    // even after the Alpha Wolf has parked somebody's old card here. Sitting it
+    // in the row would invite exactly the mistake the engine forbids.
     wolf.className = 'centercard centercard--wolf';
     wolf.title = 'Alfawolf-kaart';
     center.append(wolf);
