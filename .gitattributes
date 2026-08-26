@@ -1,0 +1,33 @@
+# Line endings, settled once.
+#
+# Without this file the repository's own checkout was rewriting it. Every
+# working tree here came out with CRLF against LF blobs, so `git status` showed
+# 70 files modified with zero changed content — noise that hides real work and
+# trains you to `git add .` past it.
+#
+# Worse, `Dageraad-status.pdf` was being converted too: 252 CR bytes injected
+# into a binary, shifting every byte offset its xref table points at. A PDF
+# that git thinks is text is a PDF git will corrupt on checkout.
+
+# Normalise text to LF in the repository and in the working tree. All of this
+# project's tooling is node, which does not care, and one representation
+# everywhere means the diff is always the change.
+* text=auto eol=lf
+
+# Never touch these. Marked explicitly rather than left to git's guess, because
+# the guess is what damaged the PDF.
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.jar   binary
+*.gz    binary
+*.zip   binary
+*.bundle binary

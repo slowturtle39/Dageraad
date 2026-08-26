@@ -8,3 +8,7 @@ dist/
 shot.mjs
 lum.mjs
 tools/_figures/
+
+# Handoff artefacts. Full history, but rebuildable — `git bundle create`.
+*.bundle
+*.tar.gz
