@@ -3,6 +3,7 @@ import { DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG } from '../engine/presets.js';
 import type { RoomView, PlayerView, PrivateView } from './backend.js';
 import { generateRoomCode, isValidRoomCode, normaliseRoomCode } from './backend.js';
 import { MemoryWorld } from './memorybackend.js';
+import { readRoomOnce } from './refereeRunner.js';
 
 /**
  * These tests are as much about the REFUSALS as the happy path.
@@ -167,15 +168,35 @@ describe('starting a game', () => {
     expect(() => phones[0]!.device.refereeStore(roomId)).toThrow(/referee only/);
   });
 
-  it('closes the lobby', async () => {
-    const { world, tablet, roomId } = await lobbyOfEight();
+  it('freezes the table for the round now running', async () => {
+    const { tablet, roomId } = await lobbyOfEight();
     await tablet.startGame(roomId, 1);
 
-    await expect(world.device('u:Laatkomer').joinRoom(roomId, 'Laatkomer'))
-      .rejects.toThrow(/already started/);
     await expect(tablet.setSeating(roomId, ['u:Milan'])).rejects.toThrow(/frozen/);
     await expect(tablet.setActiveRoles(roomId, [], TWO_ROUND_CONFIG)).rejects.toThrow(/frozen/);
-    await expect(tablet.startGame(roomId, 2)).rejects.toThrow(/already started/);
+    await expect(tablet.startGame(roomId, 2)).rejects.toThrow(/already running/);
+  });
+
+  it('lets a latecomer join mid-round and seats them in the NEXT one', async () => {
+    // Milan, 2026-08-26: arriving late must not mean waiting out the evening,
+    // and it must not end anybody else's round either.
+    const { world, tablet, roomId, phones } = await lobbyOfEight();
+    await tablet.startGame(roomId, 1);
+
+    const late = world.device('u:Laatkomer');
+    await expect(late.joinRoom(roomId, 'Laatkomer')).resolves.toBeUndefined();
+
+    let players: PlayerView[] = [];
+    phones[0]!.device.watchPlayers(roomId, (p) => { players = p; });
+    const row = players.find((p) => p.uid === 'u:Laatkomer')!;
+
+    // Present, but genuinely seatless — not holding a stale seat number.
+    expect(row.playing).toBe(false);
+    expect(row.seatIndex).toBeNull();
+    // ...and the round in progress is untouched.
+    const room = await readRoomOnce(phones[0]!.device, roomId);
+    expect(room.seating).not.toContain('u:Laatkomer');
+    expect(room.seating).toHaveLength(NAMES.length);
   });
 
   it('publishes a timeline built from the public role list alone', async () => {

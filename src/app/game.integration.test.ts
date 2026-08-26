@@ -5,6 +5,7 @@ import type { GameConfig, RoleId, SeatIndex } from '../engine/types.js';
 import { FakeClock } from '../orchestration/clock.js';
 import type { Backend, PrivateView, RoomView } from './backend.js';
 import { MemoryWorld } from './memorybackend.js';
+import type { RoundRecord } from './session.js';
 import { runGame, readRoomOnce, RefereeError } from './refereeRunner.js';
 
 /**
@@ -267,5 +268,143 @@ describe('who may run the game', () => {
       roomId: table.roomId,
       clock,
     })).rejects.toThrow(/not been dealt/);
+  });
+});
+
+describe('an evening of several rounds', () => {
+  it('scores across rounds and reseats between them', async () => {
+    const table = await seatTable();
+    const clock = new FakeClock();
+
+    for (let round = 1; round <= 3; round++) {
+      await table.tablet.startGame(table.roomId, 100 + round);
+      await play(clock, runGame({
+        backend: table.tablet,
+        roomId: table.roomId,
+        clock,
+        dayConfig: FAST_DAY,
+        bots: allBots(table, NAMES.length, round),
+        random: seeded(round),
+      }));
+    }
+
+    const room = await readRoomOnce(table.phones[0]!, table.roomId);
+    expect(room.round).toBe(3);
+    // Everyone played all three, so everyone's record says three.
+    for (const s of room.standings) expect(s.roundsPlayed).toBe(3);
+    // And the scoreboard is a real ordering, not everybody on zero.
+    expect(Math.max(...room.standings.map((s) => s.points))).toBeGreaterThan(0);
+  });
+
+  it('lets somebody join mid-evening at the score of whoever is last', async () => {
+    const table = await seatTable();
+    const clock = new FakeClock();
+
+    for (let round = 1; round <= 2; round++) {
+      await table.tablet.startGame(table.roomId, 200 + round);
+      await play(clock, runGame({
+        backend: table.tablet,
+        roomId: table.roomId,
+        clock,
+        dayConfig: FAST_DAY,
+        bots: allBots(table, NAMES.length, round),
+        random: seeded(round),
+      }));
+    }
+
+    const before = await readRoomOnce(table.phones[0]!, table.roomId);
+    const lowest = Math.min(...before.standings.map((s) => s.points));
+
+    const late = table.world.device('u:Laat');
+    await late.joinRoom(table.roomId, 'Laat');
+
+    const after = await readRoomOnce(table.phones[0]!, table.roomId);
+    const row = after.standings.find((s) => s.uid === 'u:Laat')!;
+
+    // Level with the player in last place — at the back of the pack, not below
+    // it (Milan, 2026-08-26) — but credited with no rounds they did not play.
+    expect(row.points).toBe(lowest);
+    expect(row.seeded).toBe(lowest);
+    expect(row.roundsPlayed).toBe(0);
+    expect(row.wins).toBe(0);
+
+    // They sit down for round 3, and only then.
+    expect(after.seating).not.toContain('u:Laat');
+    await table.tablet.startGame(table.roomId, 999);
+    const playing = await readRoomOnce(table.phones[0]!, table.roomId);
+    expect(playing.seating).toContain('u:Laat');
+    expect(playing.round).toBe(3);
+  });
+
+  it('lets somebody leave without ending the evening', async () => {
+    const table = await seatTable();
+    const clock = new FakeClock();
+
+    await table.tablet.startGame(table.roomId, 1);
+    await play(clock, runGame({
+      backend: table.tablet,
+      roomId: table.roomId,
+      clock,
+      dayConfig: FAST_DAY,
+      bots: allBots(table, NAMES.length),
+      random: seeded(1),
+    }));
+
+    await table.phones[3]!.leaveRoom(table.roomId);
+
+    // The next round simply has one fewer chair, and the ring closes up — a
+    // hole in the seating is a hole in the Dorpsgek's rotation.
+    await table.tablet.startGame(table.roomId, 2);
+    const room = await readRoomOnce(table.phones[0]!, table.roomId);
+    expect(room.seating).not.toContain(table.phones[3]!.uid);
+    expect(room.seating).toHaveLength(NAMES.length - 1);
+    expect(room.seating).toEqual([...new Set(room.seating)]);
+
+    // Their finished round still counts. Leaving does not erase what happened.
+    const gone = room.standings.find((s) => s.uid === table.phones[3]!.uid)!;
+    expect(gone.roundsPlayed).toBe(1);
+    expect(gone.active).toBe(false);
+
+    // And the evening carries on for everyone else.
+    const seats = new Set<SeatIndex>();
+    for (let s = 0; s < room.seating.length; s++) seats.add(s);
+    await play(clock, runGame({
+      backend: table.tablet,
+      roomId: table.roomId,
+      clock,
+      dayConfig: FAST_DAY,
+      bots: {
+        seats,
+        bot: randomBot(7),
+        device: (seat: SeatIndex) =>
+          table.world.device(room.seating[seat]!),
+      },
+      random: seeded(2),
+    }));
+    const after = await readRoomOnce(table.phones[0]!, table.roomId);
+    expect(after.round).toBe(2);
+    expect(after.outcome).toBeTruthy();
+  });
+
+  it('does not record a test round in the evening', async () => {
+    const table = await seatTable();
+    const clock = new FakeClock();
+    await table.tablet.startGame(table.roomId, 5);
+    await play(clock, runGame({
+      backend: table.tablet,
+      roomId: table.roomId,
+      mode: 'test',
+      clock,
+      dayConfig: FAST_DAY,
+      bots: allBots(table, NAMES.length),
+      random: seeded(3),
+    }));
+
+    let rounds: RoundRecord[] = [];
+    table.phones[0]!.watchRounds(table.roomId, (r) => { rounds = r; });
+    expect(rounds).toEqual([]);
+    // Nobody's scoreboard moved.
+    const room = await readRoomOnce(table.phones[0]!, table.roomId);
+    expect(room.standings.every((s) => s.roundsPlayed === 0)).toBe(true);
   });
 });

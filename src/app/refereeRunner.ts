@@ -13,6 +13,7 @@ import { runNight, type NightRunResult, type WindowInfo } from '../orchestration
 import { SandboxStore, mayRecordResults, type GameMode } from '../orchestration/sandbox.js';
 import type { RoomStore } from '../orchestration/store.js';
 import type { Backend, GameResults, RoomView, SeatResult } from './backend.js';
+import type { RoundRecord } from './session.js';
 
 /**
  * One evening, start to finish, on the referee's device.
@@ -64,6 +65,8 @@ export interface GameRunResult {
   day: DayRunResult;
   /** The full record, as published. */
   results: GameResults;
+  /** The evening's row for this round. Written only for a live game. */
+  record: RoundRecord;
   /** Every seat's card at dawn (§6.0) — the one thing that becomes public. */
   finalRoles: Record<SeatIndex, RoleId>;
   outcome: string;
@@ -169,10 +172,31 @@ export async function runGame(opts: RefereeRunnerOptions): Promise<GameRunResult
   const persist = mayRecordResults(mode);
   await backend.publishResults(roomId, results, persist);
 
+  // The evening's record. Only a live round goes in: a bot game would
+  // permanently inflate somebody's scoreboard and every stats breakdown built
+  // on top of it, and these rows are append-only by design.
+  const record: RoundRecord = {
+    round: room.round,
+    activeRoles: room.activeRoles,
+    seatCount: room.seating.length,
+    outcome: results.outcome,
+    results: Object.entries(results.seats).map(([seatKey, seat]) => ({
+      uid: room.seating[Number(seatKey)] ?? '',
+      seat: Number(seatKey),
+      originalRole: seat.originalRole,
+      finalRole: seat.finalRole,
+      won: seat.won,
+      voteOutcome: seat.voteOutcome,
+      suspicionAccuracy: seat.suspicionAccuracy,
+    })).filter((r) => r.uid !== ''),
+  };
+  if (persist) await backend.recordRound(roomId, record);
+
   return {
     night,
     day,
     results,
+    record,
     finalRoles: results.finalRoles,
     outcome: results.outcome,
     resultsPersisted: persist,

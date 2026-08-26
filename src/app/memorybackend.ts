@@ -12,6 +12,10 @@ import {
   type PlayerView, type PrivateView, type RoomPhase, type RoomView,
   type SeatResult, type Unsubscribe,
 } from './backend.js';
+import {
+  seatingForNextRound, seedForJoiner, standings,
+  type RoundRecord, type SessionMember,
+} from './session.js';
 
 /**
  * A whole Dageraad server, in memory.
@@ -67,11 +71,16 @@ export class MemoryWorld {
         // (see backend.ts). In practice: create the room on the tablet.
         refereeUid: uid,
         phase: 'lobby',
+        round: 0,
         nightWindowIndex: 0,
         activeRoles: options.activeRoles,
         config: options.config,
         timeline: null,
         seating: playing ? [uid] : [],
+        members: playing
+          ? [{ uid, joinedAtRound: 1, leftAtRound: null, seeded: 0 }]
+          : [],
+        standings: [],
         publicEvents: [],
         shieldedSeats: [],
         revealedSeats: {},
@@ -83,29 +92,62 @@ export class MemoryWorld {
         outcome: null,
       },
       players: playing
-        ? new Map([[uid, { uid, displayName: options.displayName, seatIndex: 0 }]])
+        ? new Map([[uid, {
+            uid, displayName: options.displayName,
+            seatIndex: 0, playing: true, departed: false,
+          }]])
         : new Map(),
       privates: new Map(),
       submissions: new Map(),
       votes: new Map(),
       results: new Map(),
+      rounds: [],
       latency: [],
       state: null,
-      watchers: { room: new Set(), players: new Set(), private: new Map() },
+      watchers: {
+        room: new Set(), players: new Set(), private: new Map(), rounds: new Set(),
+      },
     });
     return roomId;
   }
 
   notify(roomId: string): void {
     const r = this.room(roomId);
+
+    // The scoreboard is DERIVED, every time, from the finished rounds. Never a
+    // counter anybody increments — see session.ts for why that matters.
+    r.view.standings = standings(r.view.members, r.rounds);
+
+    // Seat numbers follow the CURRENT seating, so somebody waiting for the
+    // next round genuinely has no seat rather than a stale one.
+    for (const p of r.players.values()) {
+      const seat = r.view.seating.indexOf(p.uid);
+      p.seatIndex = seat < 0 ? null : seat;
+      p.playing = seat >= 0;
+    }
+
     for (const cb of r.watchers.room) cb({ ...r.view });
-    const players = [...r.players.values()].sort((a, b) => a.seatIndex - b.seatIndex);
+    const players = [...r.players.values()].sort(sortPlayers);
     for (const cb of r.watchers.players) cb(players.map((p) => ({ ...p })));
+    for (const cb of r.watchers.rounds) cb(r.rounds.map((x) => ({ ...x })));
     for (const [uid, cbs] of r.watchers.private) {
       const own = r.privates.get(uid) ?? { originalRole: null, privateInfo: [] };
       for (const cb of cbs) cb({ ...own, privateInfo: [...own.privateInfo] });
     }
   }
+}
+
+/**
+ * Seated players first, in seat order; then everyone waiting for the next
+ * round; then whoever has gone home. That is the order the lobby wants to
+ * render, and putting it here keeps every subscriber consistent.
+ */
+function sortPlayers(a: PlayerView, b: PlayerView): number {
+  const rank = (p: PlayerView) => (p.departed ? 2 : p.seatIndex === null ? 1 : 0);
+  const byRank = rank(a) - rank(b);
+  if (byRank !== 0) return byRank;
+  if (a.seatIndex !== null && b.seatIndex !== null) return a.seatIndex - b.seatIndex;
+  return a.uid.localeCompare(b.uid);
 }
 
 interface RoomRecord {
@@ -116,12 +158,15 @@ interface RoomRecord {
   votes: Map<string, { target: string | null; abstain: boolean }>;
   /** Append-only, live games only. What profile stats aggregate from. */
   results: Map<string, SeatResult>;
+  /** Finished rounds. Append-only: the scoreboard is rebuilt from these. */
+  rounds: RoundRecord[];
   latency: LatencySample[];
   state: NightState | null;
   watchers: {
     room: Set<(r: RoomView | null) => void>;
     players: Set<(p: PlayerView[]) => void>;
     private: Map<string, Set<(p: PrivateView) => void>>;
+    rounds: Set<(r: RoundRecord[]) => void>;
   };
 }
 
@@ -136,8 +181,7 @@ class MemoryBackend implements Backend {
 
   async joinRoom(roomId: string, displayName: string): Promise<void> {
     const r = this.world.room(roomId);
-    // Mirrors the rule: you may only add yourself, and only in the lobby.
-    if (r.view.phase !== 'lobby') throw new Error('game already started');
+
     // A referee who sat the game out cannot change their mind and take a seat:
     // they have already seen the room from the one place every card is visible.
     // Sitting down now would be dealing a card to somebody who can read them
@@ -145,24 +189,85 @@ class MemoryBackend implements Backend {
     if (r.view.refereeUid === this.uid && !r.players.has(this.uid)) {
       throw new Error('the referee is not a player in this room');
     }
-    if (!r.players.has(this.uid)) {
-      r.players.set(this.uid, {
-        uid: this.uid,
-        displayName,
-        seatIndex: r.players.size,
-      });
-      r.view.seating = [...r.view.seating, this.uid];
-    } else {
-      r.players.get(this.uid)!.displayName = displayName;
+
+    const existing = r.players.get(this.uid);
+    if (existing) {
+      // Already here — this is a rename, or somebody coming back after
+      // leaving. Coming back re-uses their original seed rather than handing
+      // them a fresh one; otherwise stepping out for a round would be a way to
+      // top your score up off the bottom of the table.
+      existing.displayName = displayName;
+      existing.departed = false;
+      const member = r.view.members.find((m) => m.uid === this.uid);
+      if (member) member.leftAtRound = null;
+      this.world.notify(roomId);
+      return;
+    }
+
+    // Joining mid-evening: seated at the NEXT round, seeded with the score of
+    // whoever is currently last (Milan, 2026-08-26). In the lobby that is
+    // round 1 and a seed of zero, which is the same code path.
+    const inLobby = r.view.phase === 'lobby';
+    const nextRound = inLobby ? 1 : r.view.round + 1;
+    const seeded = inLobby ? 0 : seedForJoiner(r.view.standings);
+
+    r.players.set(this.uid, {
+      uid: this.uid,
+      displayName,
+      seatIndex: null,
+      playing: false,
+      departed: false,
+    });
+    r.view.members = [
+      ...r.view.members,
+      { uid: this.uid, joinedAtRound: nextRound, leftAtRound: null, seeded },
+    ];
+
+    // In the lobby they sit down immediately; mid-round they wait, because
+    // there is no card to hand somebody who walks in at second twenty.
+    if (inLobby) r.view.seating = [...r.view.seating, this.uid];
+
+    this.world.notify(roomId);
+  }
+
+  async leaveRoom(roomId: string): Promise<void> {
+    const r = this.world.room(roomId);
+    const member = r.view.members.find((m) => m.uid === this.uid);
+    if (!member) return;              // never here; nothing to do
+
+    const player = r.players.get(this.uid);
+    if (player) player.departed = true;
+
+    // `leftAtRound` is the LAST round they play, not the first they miss. Mid
+    // round that is the round now running: the deal already has their card in
+    // it, their outstanding decisions decline like an AFK player's, and the
+    // seat disappears at the next boundary. The evening does not stop.
+    member.leftAtRound = r.view.phase === 'lobby'
+      ? Math.max(0, r.view.round)
+      : r.view.round;
+
+    if (r.view.phase === 'lobby') {
+      r.view.seating = r.view.seating.filter((uid) => uid !== this.uid);
     }
     this.world.notify(roomId);
+  }
+
+  watchRounds(roomId: string, cb: (rounds: RoundRecord[]) => void): Unsubscribe {
+    const r = this.world.room(roomId);
+    r.watchers.rounds.add(cb);
+    cb(r.rounds.map((x) => ({ ...x })));
+    return () => r.watchers.rounds.delete(cb);
   }
 
   async setSeating(roomId: string, seating: string[]): Promise<void> {
     const r = this.world.room(roomId);
     this.requireHost(r);
     if (r.view.phase !== 'lobby') throw new Error('seating is frozen once the game starts');
-    if (seating.length !== r.players.size) throw new Error('seating must cover every player');
+    // Measured against who is SEATED, not who is in the room: somebody waiting
+    // for the next round has no seat to arrange yet.
+    if (seating.length !== r.view.seating.length) {
+      throw new Error('seating must cover every player');
+    }
     r.view.seating = [...seating];
     seating.forEach((uid, seat) => {
       const p = r.players.get(uid);
@@ -183,7 +288,32 @@ class MemoryBackend implements Backend {
   async startGame(roomId: string, seed: number): Promise<void> {
     const r = this.world.room(roomId);
     this.requireReferee(r);
-    if (r.view.phase !== 'lobby') throw new Error('already started');
+    // A round may start from the lobby or from the results of the last one.
+    // Anything else means a game is already running.
+    if (r.view.phase !== 'lobby' && r.view.phase !== 'results') {
+      throw new Error('a round is already running');
+    }
+
+    const nextRound = r.view.round + 1;
+
+    // THE ROUND BOUNDARY. Everybody waiting sits down, everybody who left is
+    // removed, and the ring closes up — a hole in the seating is a hole in the
+    // Dorpsgek's rotation (§13).
+    r.view.seating = seatingForNextRound(r.view.members, r.view.seating, nextRound);
+    r.view.round = nextRound;
+
+    // Clear last round's table so nothing bleeds across.
+    r.submissions.clear();
+    r.votes.clear();
+    r.privates.clear();
+    r.view.publicEvents = [];
+    r.view.shieldedSeats = [];
+    r.view.revealedSeats = {};
+    r.view.abstainCount = 0;
+    r.view.votesCast = 0;
+    r.view.discussionExtendedByMs = 0;
+    r.view.finalRoles = null;
+    r.view.outcome = null;
 
     const seatCount = r.view.seating.length;
     const cards = cardsForRoles(r.view.activeRoles, seatCount);
@@ -216,7 +346,7 @@ class MemoryBackend implements Backend {
   watchPlayers(roomId: string, cb: (players: PlayerView[]) => void): Unsubscribe {
     const r = this.world.room(roomId);
     r.watchers.players.add(cb);
-    cb([...r.players.values()].sort((a, b) => a.seatIndex - b.seatIndex));
+    cb([...r.players.values()].sort(sortPlayers));
     return () => r.watchers.players.delete(cb);
   }
 
@@ -295,6 +425,17 @@ class MemoryBackend implements Backend {
         if (uid) r.results.set(uid, seatResult);
       }
     }
+    this.world.notify(roomId);
+  }
+
+  async recordRound(roomId: string, record: RoundRecord): Promise<void> {
+    const r = this.world.room(roomId);
+    this.requireReferee(r);
+    // Append-only, exactly like the Firestore collection it mirrors. A round
+    // that is already recorded is not re-recorded — a referee refreshing their
+    // tab must not double-score the evening.
+    if (r.rounds.some((x) => x.round === record.round)) return;
+    r.rounds = [...r.rounds, record];
     this.world.notify(roomId);
   }
 

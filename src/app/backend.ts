@@ -3,6 +3,7 @@ import type {
 } from '../engine/types.js';
 import type { Timeline } from '../engine/timeline.js';
 import type { VoteOutcome } from '../engine/dayphase.js';
+import type { RoundRecord, SessionMember, SessionStanding } from './session.js';
 import type { DayStore } from '../orchestration/dayrunner.js';
 import type { RoomStore } from '../orchestration/store.js';
 
@@ -33,12 +34,27 @@ export interface RoomView {
    */
   refereeUid: string;
   phase: RoomPhase;
+  /**
+   * Which game of the evening this is, counting from 1.
+   *
+   * A room is a SESSION, not a single game (see session.ts). Joins and
+   * departures land on a round boundary, so this is what they are measured
+   * against — and it is what the scoreboard is rebuilt from.
+   */
+  round: number;
   nightWindowIndex: number;
   activeRoles: RoleId[];
   config: GameConfig;
   timeline: Timeline | null;
-  /** Seat order as uids, index = seat. Frozen once the game starts. */
+  /** Seat order as uids, index = seat. Frozen once a round starts. */
   seating: string[];
+  /**
+   * Everyone in the session, including people waiting for the next round and
+   * people who have gone home. Seating is who is PLAYING; this is who is HERE.
+   */
+  members: SessionMember[];
+  /** The evening's scoreboard, recomputed from the finished rounds. */
+  standings: SessionStanding[];
   publicEvents: NightEvent[];
   shieldedSeats: SeatIndex[];
   /** seat -> role, only for cards genuinely turned face up in play. */
@@ -59,7 +75,16 @@ export type RoomPhase = 'lobby' | 'night' | 'day' | 'voting' | 'results';
 export interface PlayerView {
   uid: string;
   displayName: string;
-  seatIndex: SeatIndex;
+  /**
+   * Seat in the CURRENT round, or null when they are not in it — someone who
+   * arrived mid-night and is waiting, or who has left. Null is a real state
+   * rather than a missing value, and the lobby renders it as "next round".
+   */
+  seatIndex: SeatIndex | null;
+  /** True once they are in the seating for the round now being played. */
+  playing: boolean;
+  /** Set when they have left. Their finished rounds still count (§session). */
+  departed: boolean;
 }
 
 /** What one device may know about its own seat. Never about anyone else's. */
@@ -124,17 +149,48 @@ export interface Backend {
   readonly uid: string;
 
   createRoom(options: CreateRoomOptions): Promise<string>;
+
+  /**
+   * Join the session. Allowed AT ANY TIME, not just in the lobby.
+   *
+   * If a round is already running you are added as a member and seated when
+   * the next one starts — there is no card to hand somebody who walks in at
+   * second twenty, and the Dorpsgek's shift needs stable adjacency (§13).
+   *
+   * A player arriving mid-evening is seeded with the points of whoever is
+   * currently LAST, so they join at the back of the pack rather than below it
+   * (Milan, 2026-08-26). Only rounds they actually play count toward their
+   * record; the seed stays visible as its own number rather than being
+   * laundered into a win count.
+   */
   joinRoom(roomId: string, displayName: string): Promise<void>;
+
+  /**
+   * Leave the session without ending it for everybody else.
+   *
+   * Mid-round this does NOT stop the game: the seat stays in the deal and its
+   * outstanding decisions decline, exactly as an AFK player's would. The seat
+   * disappears at the next round boundary. Ending the evening because one
+   * person has to drive home is the behaviour this exists to prevent.
+   */
+  leaveRoom(roomId: string): Promise<void>;
 
   /** Host only, lobby only. Order is uids, index = seat. */
   setSeating(roomId: string, seating: string[]): Promise<void>;
   setActiveRoles(roomId: string, roles: RoleId[], config: GameConfig): Promise<void>;
 
   /**
-   * Deal and begin. Referee only — it is the one device allowed to write the
-   * private documents, and the only one that ever sees the whole deal.
+   * Deal and begin the next round. Referee only — it is the one device allowed
+   * to write the private documents, and the only one that ever sees the deal.
+   *
+   * This is also the point at which the table is re-seated: everybody waiting
+   * sits down, everybody who left is removed, and the ring is closed up so the
+   * Dorpsgek's rotation has no holes.
    */
   startGame(roomId: string, seed: number): Promise<void>;
+
+  /** Finished rounds, for the scoreboard and for the stats screens. */
+  watchRounds(roomId: string, cb: (rounds: RoundRecord[]) => void): Unsubscribe;
 
   watchRoom(roomId: string, cb: (room: RoomView | null) => void): Unsubscribe;
   watchPlayers(roomId: string, cb: (players: PlayerView[]) => void): Unsubscribe;
@@ -176,6 +232,15 @@ export interface Backend {
    * permanently (§16).
    */
   publishResults(roomId: string, results: GameResults, persist: boolean): Promise<void>;
+
+  /**
+   * Append the finished round to the evening's record.
+   *
+   * Separate from `publishResults` on purpose. That one shows the table who
+   * won; this one is the row the scoreboard and every stats breakdown are
+   * rebuilt from, and a test round must produce the first without the second.
+   */
+  recordRound(roomId: string, record: RoundRecord): Promise<void>;
 
   /** Host: pause/resume for an absent player. Public and manual (§5.3). */
   setPaused(roomId: string, paused: boolean): Promise<void>;
