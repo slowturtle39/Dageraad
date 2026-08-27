@@ -6,6 +6,13 @@ import { AppController } from './app/controller.js';
 import { roomCodeFromUrl, roomUrl } from './app/roomlink.js';
 import { renderApp, type AppActions } from './ui/app.js';
 import { renderRecovery } from './ui/recovery.js';
+import {
+  renderAllTime, renderFriendPicker, renderModePicker, renderPracticeBadge,
+} from './ui/alltime.js';
+import { allTimeStandings, type HistoryRecord } from './stats/alltime.js';
+import {
+  rememberFriendId, rememberedFriendId, type FriendProfile,
+} from './app/friend.js';
 import { renderRoomSetup, controllerModeIsPlaying, type ControllerMode } from './ui/setup.js';
 import { renderPrompt, seatSelectable } from './ui/prompt.js';
 import { renderSheet } from './ui/sheet.js';
@@ -16,7 +23,7 @@ import {
   DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG, TWO_ROUND_CONFIG,
 } from './engine/presets.js';
 import { mayArrangeSeats, reorderForSwap } from './app/seating.js';
-import type { Backend } from './app/backend.js';
+import type { Backend, RoomMode } from './app/backend.js';
 import type { Choice, SeatIndex } from './engine/types.js';
 
 /**
@@ -58,6 +65,14 @@ interface Local {
   abstaining: boolean;
   /** True once this device has run the round it is refereeing. */
   refereeRunning: boolean;
+  /** Which human this device is, across evenings. Null until picked. */
+  friend: FriendProfile | null;
+  friends: FriendProfile[];
+  friendTyped: string;
+  /** Whether the room this device is about to create will count. */
+  roomMode: RoomMode;
+  history: HistoryRecord[];
+  showAllTime: boolean;
 }
 
 const local: Local = {
@@ -77,6 +92,14 @@ const local: Local = {
   voteTarget: null,
   abstaining: false,
   refereeRunning: false,
+  friend: null,
+  friends: [],
+  friendTyped: '',
+  // Practice unless somebody deliberately says otherwise. A test evening in
+  // append-only history cannot be taken back out.
+  roomMode: 'practice',
+  history: [],
+  showAllTime: false,
 };
 
 const NAME_KEY = 'dageraad.name';
@@ -190,6 +213,21 @@ async function start(): Promise<void> {
   controller = new AppController(backend);
   controller.onChange(() => render());
 
+  // The group, rather than one evening: both span every room, so both are
+  // watched for as long as the app is open.
+  backend.watchFriends((friends) => {
+    local.friends = friends;
+    const remembered = rememberedFriendId();
+    if (!local.friend && remembered) {
+      local.friend = friends.find((f) => f.id === remembered) ?? null;
+    }
+    render();
+  });
+  backend.watchHistory((history) => {
+    local.history = history;
+    render();
+  });
+
   // Arriving on a shared link goes straight to joining that room, with the
   // code already filled in. One link in a group chat is the whole
   // distribution story.
@@ -246,6 +284,10 @@ const actions: AppActions = {
         // a table device must not be dealt a card, because it can read them
         // all (see ui/setup.ts).
         playing: controllerModeIsPlaying(mode),
+        mode: local.roomMode,
+        ...(local.friend
+          ? { friend: { friendId: local.friend.id, friendName: local.friend.displayName } }
+          : {}),
       });
       local.code = roomId;
       // In demo mode the rest of the table sits down immediately, so one tab
@@ -271,7 +313,9 @@ const actions: AppActions = {
     rememberName(displayName);
     local.displayName = displayName;
     const ok = await attempt(
-      () => backend.joinRoom(code, displayName),
+      () => backend.joinRoom(code, displayName, local.friend
+        ? { friendId: local.friend.id, friendName: local.friend.displayName }
+        : undefined),
       t(local.lang, 'join.noSuchRoom'),
     );
     if (!ok) return;
@@ -438,6 +482,23 @@ function render(): void {
   // Creating a room is the one screen that needs a name before it exists, so
   // it gets its own path rather than being squeezed into renderApp's setup.
   if (screen.kind === 'setup') {
+    // Who you are comes first. Everything after it is about this evening; this
+    // is the one question whose answer outlives it.
+    if (!local.friend) {
+      app.append(friendPicker());
+      app.append(bottomBar(false));
+      if (local.error) app.append(fatal(local.error));
+      return;
+    }
+
+    app.append(renderModePicker({
+      lang: local.lang,
+      mode: local.roomMode,
+      onModeChange: (mode) => {
+        local.roomMode = mode;
+        render();
+      },
+    }));
     app.append(nameField(), renderRoomSetup({
       lang: local.lang,
       mode: local.mode,
@@ -463,7 +524,14 @@ function render(): void {
     actions,
   }));
 
+  // A practice evening says so the whole time it is being played, not
+  // afterwards. Above everything, so it is not something you scroll to.
+  if (state.room?.mode === 'practice') {
+    app.prepend(renderPracticeBadge(local.lang));
+  }
+
   if (state.roomId) app.append(bottomBar(true));
+  if (local.showAllTime) app.append(allTimeSheet());
 
   // Drawn OVER the table, never instead of it (§13.1): from across the room,
   // deciding and idly browsing have to look the same.
@@ -541,6 +609,14 @@ function menu(): HTMLElement {
     share.classList.add('menu__item');
     sheet.append(share);
   }
+
+  const table = button(t(local.lang, 'alltime.title'), () => {
+    local.menuOpen = false;
+    local.showAllTime = true;
+    render();
+  });
+  table.classList.add('menu__item');
+  sheet.append(table);
 
   const leave = button(t(local.lang, 'menu.leave'), () => {
     local.menuOpen = false;
@@ -780,4 +856,63 @@ function resultSheet(ownSeat: SeatIndex): HTMLElement {
   body.append(list);
 
   return renderSheet({ title: t(local.lang, 'results.title'), body });
+}
+
+/* --------------------------- who you are, all-time ----------------------- */
+
+function friendPicker(): HTMLElement {
+  return renderFriendPicker({
+    lang: local.lang,
+    profiles: local.friends,
+    rememberedId: rememberedFriendId(),
+    typed: local.friendTyped,
+    busy: local.busy,
+    onTyped: (value) => {
+      local.friendTyped = value;
+      render();
+    },
+    onPick: (profile) => {
+      local.friend = profile;
+      // Remembered so the common case is one tap next time. Losing it costs
+      // nothing: the list is shared, so picking the same name gets the SAME
+      // profile — which is the whole difference from keying off the uid.
+      rememberFriendId(profile.id);
+      if (!local.displayName) local.displayName = profile.displayName;
+      render();
+    },
+    onCreate: (displayName) => {
+      void attempt(async () => {
+        const profile = await backend.createFriend(displayName);
+        local.friend = profile;
+        local.friendTyped = '';
+        rememberFriendId(profile.id);
+        if (!local.displayName) local.displayName = profile.displayName;
+      });
+    },
+  });
+}
+
+/**
+ * The all-time table.
+ *
+ * Practice rounds are filtered out by never having been written, so this is
+ * simply everything there is — and the totals are recomputed here from the
+ * rows rather than read from any stored number.
+ */
+function allTimeSheet(): HTMLElement {
+  const body = renderAllTime({
+    lang: local.lang,
+    rows: allTimeStandings(local.history),
+    ownFriendId: local.friend?.id ?? null,
+    // The sheet supplies the heading.
+    heading: false,
+  });
+  return renderSheet({
+    title: t(local.lang, 'alltime.title'),
+    body,
+    onDismiss: () => {
+      local.showAllTime = false;
+      render();
+    },
+  });
 }

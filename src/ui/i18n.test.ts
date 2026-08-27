@@ -4,10 +4,31 @@ import { ROLES } from '../engine/roles.js';
 import type { RoleId } from '../engine/types.js';
 
 describe('translations', () => {
+  /**
+   * Words that are genuinely the same in both languages.
+   *
+   * Named explicitly rather than allowed for by a threshold. A count-based
+   * check passes for the wrong reason the moment somebody adds a fourth
+   * untranslated string, and says nothing about which three were fine.
+   */
+  const SAME_IN_BOTH = new Set([
+    'join.codePlaceholder',   // a room code, not a word
+    'menu.title',             // "Menu" is Dutch too
+    'alltime.solo',           // as is "solo"
+  ]);
+
   it('has an English string for every Dutch one', () => {
-    const missing = ALL_KEYS.filter((k) => t('en', k) === t('nl', k) && !/^\W*$/.test(k));
-    // A few may legitimately coincide (e.g. proper nouns); flag only if many do.
-    expect(missing.length).toBeLessThan(3);
+    const untranslated = ALL_KEYS.filter(
+      (k) => t('en', k) === t('nl', k) && !SAME_IN_BOTH.has(k),
+    );
+    expect(untranslated).toEqual([]);
+  });
+
+  it('does not carry an excuse for a key that no longer coincides', () => {
+    // Otherwise the allowlist quietly becomes a place to hide things.
+    for (const key of SAME_IN_BOTH) {
+      expect(t('en', key), `${key} is translated now`).toBe(t('nl', key));
+    }
   });
 
   it('never leaves a key showing through', () => {

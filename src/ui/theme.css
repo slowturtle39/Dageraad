@@ -1216,3 +1216,78 @@ body {
   color: var(--ink);
   border-left: 2px solid var(--gold);
 }
+
+/* ------------------------------------------------------------------ */
+/* Who you are, whether tonight counts, and the all-time table         */
+/* ------------------------------------------------------------------ */
+
+.friends,
+.alltime {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+
+.friends__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.friends__friend {
+  width: 100%;
+  text-align: left;
+}
+
+/* The one-tap path. Marked by border, not colour alone. */
+.friends__friend--last {
+  border-color: var(--gold);
+  color: var(--bone);
+}
+
+/* Visible the whole evening, not something you scroll to. No phase-specific
+   colour: §13.1 is about the palette never moving, and this sits over the
+   table view in every phase. */
+.practicebadge {
+  padding: 6px 12px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--gold-dim);
+  color: var(--gold);
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.alltime__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
+
+.alltime__row--own {
+  border-left: 2px solid var(--gold);
+}
+
+.alltime__name {
+  font-family: var(--font);
+  color: var(--bone);
+}
+
+.alltime__points {
+  font-family: var(--font);
+  font-size: 1.1rem;
+  color: var(--gold);
+  text-align: right;
+}
+
+.alltime__detail {
+  grid-column: 1 / -1;
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}

@@ -164,6 +164,36 @@ const nl: Dict = {
   'day.discussing': 'Overleg',
   'results.title': 'Uitslag',
   'results.nextRound': 'Volgende ronde',
+
+  // Practice is never hidden. A round that does not count has to say so while
+  // it is being played, not afterwards.
+  'mode.practice': 'Oefenpotje',
+  'mode.official': 'Telt mee',
+  'mode.practice.badge': 'Telt niet mee',
+  'mode.practice.explain':
+    'Dit is een oefenavond. Alles werkt gewoon, maar de uitslagen tellen niet ' +
+    'mee voor de eeuwige stand. Zo kun je rustig testen zonder de echte ' +
+    'geschiedenis te vervuilen.',
+  'mode.official.explain':
+    'Deze avond telt mee voor de eeuwige stand van de groep. Dat ligt vast ' +
+    'zodra de kamer bestaat — je kunt het later niet meer omzetten.',
+  'mode.pick': 'Telt deze avond mee?',
+
+  'friend.title': 'Wie ben je?',
+  'friend.sub':
+    'Kies je eigen naam, dan blijft je geschiedenis van je — ook op een ' +
+    'andere telefoon.',
+  'friend.newName': 'Nieuwe naam',
+  'friend.create': 'Voeg toe',
+  'friend.continueAs': 'Ga door als {name}',
+
+  'alltime.title': 'Eeuwige stand',
+  'alltime.empty': 'Nog geen enkele avond die meetelt.',
+  'alltime.rounds': 'potjes',
+  'alltime.evenings': 'avonden',
+  'alltime.wins': 'gewonnen',
+  'alltime.solo': 'solo',
+  'alltime.tonight': 'Vanavond',
 };
 
 const en: Dict = {
@@ -306,6 +336,34 @@ const en: Dict = {
   'day.discussing': 'Discussion',
   'results.title': 'Result',
   'results.nextRound': 'Next round',
+
+  'mode.practice': 'Practice game',
+  'mode.official': 'Counts',
+  'mode.practice.badge': 'Does not count',
+  'mode.practice.explain':
+    'This is a practice evening. Everything works normally, but the results ' +
+    'do not count toward the all-time table. Test as much as you like without ' +
+    'polluting the real history.',
+  'mode.official.explain':
+    'This evening counts toward the group\u2019s all-time table. That is fixed ' +
+    'the moment the room exists \u2014 you cannot switch it later.',
+  'mode.pick': 'Does this evening count?',
+
+  'friend.title': 'Who are you?',
+  'friend.sub':
+    'Pick your own name and your history stays yours \u2014 on a different ' +
+    'phone too.',
+  'friend.newName': 'New name',
+  'friend.create': 'Add',
+  'friend.continueAs': 'Continue as {name}',
+
+  'alltime.title': 'All-time',
+  'alltime.empty': 'No evening has counted yet.',
+  'alltime.rounds': 'games',
+  'alltime.evenings': 'evenings',
+  'alltime.wins': 'won',
+  'alltime.solo': 'solo',
+  'alltime.tonight': 'Tonight',
 };
 
 const DICTS: Record<Lang, Dict> = { nl, en };
