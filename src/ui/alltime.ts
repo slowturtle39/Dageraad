@@ -69,7 +69,6 @@ export function renderFriendPicker(view: FriendPickerView): HTMLElement {
   field.value = view.typed;
   field.placeholder = t(lang, 'friend.newName');
   field.setAttribute('aria-label', t(lang, 'friend.newName'));
-  field.addEventListener('input', () => view.onTyped?.(field.value));
   el.append(field);
 
   const create = document.createElement('button');
@@ -78,6 +77,12 @@ export function renderFriendPicker(view: FriendPickerView): HTMLElement {
   create.textContent = t(lang, 'friend.create');
   create.disabled = view.busy === true || view.typed.trim().length === 0;
   create.addEventListener('click', () => view.onCreate?.(view.typed.trim()));
+  // Replacing the whole app on every key loses focus after the first letter.
+  // Keep this field and its button in sync locally instead.
+  field.addEventListener('input', () => {
+    view.onTyped?.(field.value);
+    create.disabled = view.busy === true || field.value.trim().length === 0;
+  });
   el.append(create);
 
   return el;

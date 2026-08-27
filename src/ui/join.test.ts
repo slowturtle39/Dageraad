@@ -50,6 +50,10 @@ describe('typing a room code', () => {
 });
 
 describe('when the join button means something', () => {
+  it('explains that the host link is the easiest way in', () => {
+    expect(el({ lang: 'en' }).textContent).toContain('link shared by the host');
+  });
+
   it('needs a valid code AND a name', () => {
     expect(joinIsReady('ABCDE', 'Milan')).toBe(true);
     expect(joinIsReady('ABCDE', '')).toBe(false);

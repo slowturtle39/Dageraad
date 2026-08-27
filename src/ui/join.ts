@@ -41,6 +41,11 @@ export function renderJoin(view: JoinView): HTMLElement {
   title.textContent = t(lang, 'join.title');
   el.append(title);
 
+  const instructions = document.createElement('p');
+  instructions.className = 'sheet__sub';
+  instructions.textContent = t(lang, 'join.instructions');
+  el.append(instructions);
+
   const codeField = document.createElement('input');
   codeField.className = 'join__code';
   codeField.type = 'text';

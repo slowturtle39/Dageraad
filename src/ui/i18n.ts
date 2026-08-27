@@ -108,6 +108,8 @@ const nl: Dict = {
   'join.join': 'Doe mee',
   'join.joining': 'Bezig…',
   'join.back': 'Terug',
+  'join.open': 'Doe mee met een bestaande kamer',
+  'join.instructions': 'Open bij voorkeur de link die de host deelt. Heb je alleen de code, vul die dan hieronder in.',
   'join.noSuchRoom': 'Die kamer bestaat niet. Klopt de code?',
   'join.refereeCannotPlay':
     'Dit apparaat leidt het spel en speelt niet mee — het kan alle kaarten ' +
@@ -194,10 +196,10 @@ const nl: Dict = {
 
   'friend.title': 'Wie ben je?',
   'friend.sub':
-    'Kies je eigen naam, dan blijft je geschiedenis van je — ook op een ' +
-    'andere telefoon.',
-  'friend.newName': 'Nieuwe naam',
-  'friend.create': 'Voeg toe',
+    'Dit is geen account. Kies je eigen naam uit de lijst, zodat de eeuwige ' +
+    'stand jou ook op een andere telefoon herkent.',
+  'friend.newName': 'Voeg jezelf eenmalig toe',
+  'friend.create': 'Voeg mijn naam toe',
   'friend.continueAs': 'Ga door als {name}',
 
   'alltime.title': 'Eeuwige stand',
@@ -297,6 +299,8 @@ const en: Dict = {
   'join.join': 'Join',
   'join.joining': 'Joining\u2026',
   'join.back': 'Back',
+  'join.open': 'Join an existing room',
+  'join.instructions': 'Prefer opening the link shared by the host. If you only have the code, enter it below.',
   'join.noSuchRoom': 'No such room. Is the code right?',
   'join.refereeCannotPlay':
     'This device runs the game and does not play — it can see every card. ' +
@@ -377,10 +381,10 @@ const en: Dict = {
 
   'friend.title': 'Who are you?',
   'friend.sub':
-    'Pick your own name and your history stays yours \u2014 on a different ' +
-    'phone too.',
-  'friend.newName': 'New name',
-  'friend.create': 'Add',
+    'This is not an account. Pick your own name from the list so the all-time ' +
+    'table recognises you on a different phone too.',
+  'friend.newName': 'Add yourself once',
+  'friend.create': 'Add my name',
   'friend.continueAs': 'Continue as {name}',
 
   'alltime.title': 'All-time',

@@ -510,6 +510,7 @@ function render(): void {
     // is the one question whose answer outlives it.
     if (!local.friend && !demo) {
       app.append(friendPicker());
+      app.append(joinExistingButton());
       app.append(soloDemoButton());
       app.append(bottomBar(false));
       if (local.error) app.append(fatal(local.error));
@@ -531,6 +532,7 @@ function render(): void {
       onModeChange: actions.onModeChange,
       onCreate: actions.onCreate,
     }));
+    app.append(joinExistingButton());
     if (!demo) app.append(soloDemoButton());
     app.append(bottomBar(false));
     if (local.error) app.append(fatal(local.error));
@@ -613,6 +615,13 @@ function soloDemoButton(): HTMLElement {
   note.textContent = t(local.lang, 'demo.explain');
   wrap.append(start, note);
   return wrap;
+}
+
+function joinExistingButton(): HTMLElement {
+  return button(t(local.lang, 'join.open'), () => {
+    local.error = null;
+    controller.setJoining(true);
+  });
 }
 
 /**
@@ -910,7 +919,6 @@ function friendPicker(): HTMLElement {
     busy: local.busy,
     onTyped: (value) => {
       local.friendTyped = value;
-      render();
     },
     onPick: (profile) => {
       local.friend = profile;

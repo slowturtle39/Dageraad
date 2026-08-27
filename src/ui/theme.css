@@ -220,9 +220,10 @@ body {
 }
 
 .seat__card--revealed {
-  background: linear-gradient(160deg, var(--bone), var(--bone-shadow));
-  border-color: var(--bone-shadow);
-  /* Emblem above, name beneath — the layout of the printed card. */
+  /* A public role is a symbol, not a second white card around the player. */
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
   flex-direction: column;
   display: flex;
   align-items: center;
@@ -252,7 +253,11 @@ body {
 }
 
 .seat__card--revealed .emblem {
-  color: #2b2318;
+  color: var(--bone);
+}
+
+.seat__card--revealed .seat__role {
+  color: var(--bone);
 }
 
 .seat__card--suspected .emblem {

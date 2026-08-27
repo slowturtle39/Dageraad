@@ -66,6 +66,17 @@ describe('picking who you are', () => {
     expect(create('Joris').disabled).toBe(false);
   });
 
+  it('keeps typing local while enabling the create button', () => {
+    let typed = '';
+    const el = picker({ onTyped: (value) => { typed = value; } });
+    const field = el.querySelector<HTMLInputElement>('.join__name')!;
+    const create = el.querySelector<HTMLButtonElement>('.btn--primary')!;
+    field.value = 'M';
+    field.dispatchEvent(new Event('input'));
+    expect(typed).toBe('M');
+    expect(create.disabled).toBe(false);
+  });
+
   it('trims the new name before creating it', () => {
     let created = '';
     const el = picker({ typed: '  Joris ', onCreate: (n) => { created = n; } });
