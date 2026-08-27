@@ -938,3 +938,124 @@ describe('a member carries a friend label and nothing worth points', () => {
     );
   });
 });
+
+/* ==================================================================== */
+
+describe('a night prompt reaches exactly one seat', () => {
+  // pendingDecisions is how a player learns what it is being asked: the
+  // questions come from the deal, and the deal never leaves the referee. It
+  // rides on the private document, so the property to prove is that it
+  // inherits that document's privacy rather than quietly widening it.
+
+  const prompt = [{
+    seat: 0, actingAs: 'ziener', step: 1, key: 'ziener-target',
+    prompt: { kind: 'seat', exclude: [], optional: false },
+    dependsOnReveal: false,
+  }];
+
+  it('the referee can publish one to a seat', async () => {
+    await seed('night');
+    await assertSucceeds(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'private', ALICE),
+        { pendingDecisions: prompt }, { merge: true }),
+    );
+  });
+
+  it('a player cannot read somebody else\'s question', async () => {
+    // Knowing WHAT another seat is being asked is knowing what role it has.
+    await seed('night');
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'private', ALICE),
+        { originalRole: 'ziener', pendingDecisions: prompt }, { merge: true });
+    });
+    await assertFails(getDoc(doc(as(BOB), 'rooms', ROOM, 'private', ALICE)));
+    await assertSucceeds(getDoc(doc(as(ALICE), 'rooms', ROOM, 'private', ALICE)));
+  });
+
+  it('a player cannot write themselves a question', async () => {
+    // Forging a prompt is forging a turn.
+    await seed('night');
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'private', ALICE),
+        { pendingDecisions: prompt }, { merge: true }),
+    );
+  });
+
+  it('a player cannot plant one on somebody else', async () => {
+    await seed('night');
+    await assertFails(
+      setDoc(doc(as(BOB), 'rooms', ROOM, 'private', ALICE),
+        { pendingDecisions: prompt }, { merge: true }),
+    );
+  });
+
+  it('not even the host may publish prompts', async () => {
+    // The host runs the room; the referee runs the night. Only one of them
+    // holds the deal.
+    await seed('night');
+    await assertFails(
+      setDoc(doc(as(HOST), 'rooms', ROOM, 'private', ALICE),
+        { pendingDecisions: prompt }, { merge: true }),
+    );
+  });
+
+  it('the referee can clear it, which is how a stale question disappears', async () => {
+    await seed('night');
+    await assertSucceeds(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'private', ALICE),
+        { pendingDecisions: [] }, { merge: true }),
+    );
+  });
+});
+
+describe('what the table can see', () => {
+  // revealedSlots is the public face-up state, republished by the referee
+  // after every window so a reveal follows its card. It lives on the room
+  // document, which everybody reads — so the thing to prove is that only the
+  // referee writes it.
+
+  it('the referee can publish it', async () => {
+    await seed('night');
+    await assertSucceeds(
+      updateDoc(doc(as(REF), 'rooms', ROOM), {
+        revealedSlots: { 2: 'ziener' }, shieldedSeats: [1],
+      }),
+    );
+  });
+
+  it('a player cannot flip a card face up', async () => {
+    // Claiming a card is publicly revealed is claiming to know what it is.
+    await seed('night');
+    await assertFails(
+      updateDoc(doc(as(ALICE), 'rooms', ROOM), { revealedSlots: { 0: 'weerwolf' } }),
+    );
+  });
+
+  it('a player cannot shield a seat either', async () => {
+    await seed('night');
+    await assertFails(
+      updateDoc(doc(as(BOB), 'rooms', ROOM), { shieldedSeats: [0, 1, 2] }),
+    );
+  });
+
+  it('everybody can read it, because it is what is on the table', async () => {
+    await seed('night');
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), 'rooms', ROOM), {
+        revealedSlots: { 2: 'ziener' },
+      });
+    });
+    await assertSucceeds(getDoc(doc(as(ALICE), 'rooms', ROOM)));
+    await assertSucceeds(getDoc(doc(as(BOB), 'rooms', ROOM)));
+  });
+
+  it('publishing it still cannot smuggle the referee role across', async () => {
+    // The load-bearing rule holds regardless of what else is in the write.
+    await seed('night');
+    await assertFails(
+      updateDoc(doc(as(REF), 'rooms', ROOM), {
+        revealedSlots: { 2: 'ziener' }, refereeUid: ALICE,
+      }),
+    );
+  });
+});
