@@ -87,6 +87,8 @@ export type RoomPhase = 'lobby' | 'night' | 'day' | 'voting' | 'results';
 export interface PlayerView {
   uid: string;
   displayName: string;
+  /** An AI player. Labelled as such everywhere a person can see a name. */
+  isBot?: boolean;
   /**
    * Seat in the CURRENT round, or null when they are not in it — someone who
    * arrived mid-night and is waiting, or who has left. Null is a real state
@@ -264,6 +266,44 @@ export interface Backend {
    * published — who asked is a fact about how confident somebody is.
    */
   requestEarlyVote(roomId: string, requested: boolean): Promise<void>;
+
+  /**
+   * Add one AI player to a PRACTICE lobby. Controlling browser only.
+   *
+   * Bots exist so a real table can be filled out for a practice evening —
+   * three humans and five bots, or seven humans and one. They are not a
+   * separate way to play; they sit in the same seating, in the same rounds,
+   * under the same rules.
+   *
+   * PRACTICE ONLY, and that is checked against the room document rather than
+   * trusted from the caller. A bot in an official evening would put invented
+   * results in a permanent record that has no delete path.
+   *
+   * They have no device and no login. The controlling browser already holds
+   * the whole deal, so it answers for them — which is why only that browser
+   * may add them, and why they need no private screen of their own.
+   */
+  addBot(roomId: string): Promise<void>;
+
+  /** Remove one, by uid. Lobby only, so no round is ever half-played. */
+  removeBot(roomId: string, botUid: string): Promise<void>;
+
+  /**
+   * Cast a bot's day vote. Deliberately NOT "vote as any player".
+   *
+   * The controlling browser must be able to answer for a seat with nobody
+   * behind it, and there is no honest way around that. What there IS a way
+   * around is giving it a general power to vote as anyone: this refuses unless
+   * the target really is a bot, in a practice room, during voting. A generic
+   * capability would be one rule away from a referee quietly voting for a
+   * human, and no rule could tell the two writes apart.
+   */
+  voteAsBot(
+    roomId: string,
+    botUid: string,
+    target: string | null,
+    abstain: boolean,
+  ): Promise<void>;
 
   /** The referee's own view of the room, for runNight/runDay. */
   refereeStore(roomId: string): RoomStore & DayStore;

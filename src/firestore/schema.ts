@@ -152,6 +152,16 @@ export interface PlayerDoc {
   displayName: string;
   avatar: string | null;
   joinedAt: number;
+  /**
+   * An AI player, added by the controlling browser to fill out a practice
+   * table.
+   *
+   * Written ONLY by the referee, and only in a practice room. A human able to
+   * mark their own document as a bot would be a human the referee is then
+   * allowed to vote on behalf of — which is the one thing the narrow
+   * voteAsBot method exists to prevent.
+   */
+  isBot?: boolean;
 }
 
 /** SECRET. Readable only by its owner and the referee. */

@@ -101,7 +101,12 @@ describe('the rules refuse to let it be re-added from outside', () => {
     // hasOnly is what makes a re-added `seeded` a rejected write rather than a
     // field one client happens to ignore.
     const allowlists = members.match(/hasOnly\(\s*\[[^\]]*\]\s*\)/g) ?? [];
-    expect(allowlists).toHaveLength(2);
+    // One per write rule that exists — a human create, a human update, and the
+    // referee's create of an AI player's membership. Counted rather than
+    // hard-coded so a NEW write rule without an allowlist fails here.
+    const writes = members.match(/allow (create|update)[^:]*:/g) ?? [];
+    expect(allowlists).toHaveLength(writes.length);
+    expect(allowlists.length).toBeGreaterThanOrEqual(3);
     for (const list of allowlists) {
       expect(list).toContain("'uid'");
       expect(list).toContain("'joinedAtRound'");
@@ -122,8 +127,20 @@ describe('the rules refuse to let it be re-added from outside', () => {
     );
   });
 
-  it('keeps membership as history — no deletes', () => {
-    expect(members).toMatch(/allow delete: if false;/);
+  it('keeps a HUMAN membership as history — it can never be deleted', () => {
+    // This used to be `allow delete: if false;`. An AI player added to a
+    // practice lobby and then removed again is the one thing that may go, so
+    // the assertion moved from "nothing deletes" to the property that was
+    // always the point: a delete is impossible unless the target is a bot, in
+    // a practice room, before anything has been dealt. Drop ANY of those three
+    // and a host can erase the rounds somebody played.
+    const deletes = members.match(/allow delete:[^;]*;/g) ?? [];
+    expect(deletes).toHaveLength(1);
+    const rule = deletes[0]!;
+    expect(rule).toContain('isBotPlayer(roomId, memberUid)');
+    expect(rule).toContain("isPractice(roomId)");
+    expect(rule).toContain("inPhase(roomId, 'lobby')");
+    expect(rule).toContain('isReferee(roomId)');
   });
 
   it('keeps round records append-only, since they are now the score', () => {

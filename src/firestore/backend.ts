@@ -401,6 +401,7 @@ export class FirestoreBackend implements Backend {
    */
   watchPlayers(roomId: string, cb: (players: PlayerView[]) => void): Unsubscribe {
     let names = new Map<string, string>();
+    let botUids = new Set<string>();
     let seating: string[] = [];
     let members: SessionMember[] = [];
     let havePlayers = false;
@@ -418,6 +419,7 @@ export class FirestoreBackend implements Backend {
           seatIndex: seat < 0 ? null : (seat as SeatIndex),
           playing: seat >= 0,
           departed: departed.has(uid),
+          ...(botUids.has(uid) ? { isBot: true } : {}),
         };
       });
       out.sort((a, b) => {
@@ -435,6 +437,10 @@ export class FirestoreBackend implements Backend {
         havePlayers = true;
         names = new Map(
           snap.docs.map((d) => [d.id, (d.data() as PlayerDoc).displayName ?? d.id]),
+        );
+        botUids = new Set(
+          snap.docs.filter((d) => (d.data() as PlayerDoc).isBot === true)
+            .map((d) => d.id),
         );
         emit();
       },
@@ -542,6 +548,96 @@ export class FirestoreBackend implements Backend {
       { readyToVote: requested, castAt: Date.now() },
       { merge: true },
     );
+  }
+
+  /* --------------------------------- bots -------------------------------- */
+
+  /**
+   * Add one AI player to a practice lobby.
+   *
+   * Both writes go in one batch: a player document marked isBot and a real
+   * membership. The membership matters — it is what seats the bot through the
+   * ordinary round-boundary logic rather than through anything that knows what
+   * a bot is.
+   *
+   * Every check below is duplicated in the rules. These produce a sensible
+   * error before the round-trip; the rules are the protection.
+   */
+  async addBot(roomId: string): Promise<void> {
+    const room = await this.room(roomId);
+    if (room.refereeUid !== this.uid) throw new Error('referee only');
+    if ((room.mode ?? 'practice') !== 'practice') {
+      throw new Error('bots are only for practice rooms');
+    }
+    if (room.phase !== 'lobby') throw new Error('bots can only be added in the lobby');
+    if (room.seating.length >= 12) throw new Error('Maximaal 12 spelers.');
+
+    const players = await getDocs(collection(this.db, paths.players(roomId)));
+    const bots = players.docs.filter((d) => (d.data() as PlayerDoc).isBot).length;
+    const uid = `bot-${roomId}-${bots + 1}`;
+    const displayName = BOT_NAMES[bots % BOT_NAMES.length] ?? `AI ${bots + 1}`;
+
+    const batch = writeBatch(this.db);
+    batch.set(doc(this.db, paths.player(roomId, uid)), {
+      displayName, avatar: null, joinedAt: Date.now(), isBot: true,
+    });
+    batch.set(doc(this.db, paths.member(roomId, uid)), {
+      uid, joinedAtRound: room.currentRound + 1, leftAtRound: null,
+      friendId: '', friendName: displayName,
+    });
+    batch.update(this.roomRef(roomId), { seating: [...room.seating, uid] });
+    await batch.commit();
+  }
+
+  /**
+   * Remove one.
+   *
+   * The membership goes with the player document. Leaving it behind would keep
+   * the bot on the next round's roster and on the evening's scoreboard, which
+   * is exactly the incoherent history this is meant to avoid.
+   */
+  async removeBot(roomId: string, botUid: string): Promise<void> {
+    const room = await this.room(roomId);
+    if (room.refereeUid !== this.uid) throw new Error('referee only');
+    if ((room.mode ?? 'practice') !== 'practice') {
+      throw new Error('bots are only for practice rooms');
+    }
+    if (room.phase !== 'lobby') throw new Error('bots can only be removed in the lobby');
+
+    const player = await getDoc(doc(this.db, paths.player(roomId, botUid)));
+    if (!(player.data() as PlayerDoc | undefined)?.isBot) throw new Error('not a bot');
+
+    const batch = writeBatch(this.db);
+    batch.delete(doc(this.db, paths.player(roomId, botUid)));
+    batch.delete(doc(this.db, paths.member(roomId, botUid)));
+    batch.update(this.roomRef(roomId), {
+      seating: room.seating.filter((uid) => uid !== botUid),
+    });
+    await batch.commit();
+  }
+
+  /** A bot's day vote. Never a human's — see Backend.voteAsBot. */
+  async voteAsBot(
+    roomId: string,
+    botUid: string,
+    target: string | null,
+    abstain: boolean,
+  ): Promise<void> {
+    const room = await this.room(roomId);
+    if (room.refereeUid !== this.uid) throw new Error('referee only');
+    if ((room.mode ?? 'practice') !== 'practice') {
+      throw new Error('bots are only for practice rooms');
+    }
+    if (target === botUid) throw new Error('no self-votes');
+    const ok = room.phase === 'voting' || (room.phase === 'day' && target === null);
+    if (!ok) throw new Error(`cannot vote in phase ${room.phase}`);
+
+    const player = await getDoc(doc(this.db, paths.player(roomId, botUid)));
+    if (!(player.data() as PlayerDoc | undefined)?.isBot) throw new Error('not a bot');
+
+    await setDoc(doc(this.db, paths.vote(roomId, botUid)), {
+      target, abstain, castAt: Date.now(),
+    });
   }
 
   /* ------------------------------- referee ------------------------------- */
@@ -694,6 +790,12 @@ export class FirestoreBackend implements Backend {
     return profile;
   }
 }
+
+/** Names for AI players. Recognisably not people, and short enough to fit. */
+const BOT_NAMES = [
+  'AI Bram', 'AI Fleur', 'AI Joris', 'AI Noor', 'AI Daan',
+  'AI Eva', 'AI Tijn', 'AI Isa', 'AI Sam', 'AI Lot', 'AI Kees',
+];
 
 /**
  * A friend label, falling back to something usable.

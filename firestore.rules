@@ -70,6 +70,14 @@ service cloud.firestore {
     function currentRound(roomId) {
       return roomDoc(roomId).currentRound;
     }
+    /** Practice evenings never reach the all-time record, so bots may play. */
+    function isPractice(roomId) {
+      return roomDoc(roomId).mode == 'practice';
+    }
+    function isBotPlayer(roomId, playerUid) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)/players/$(playerUid))
+        .data.isBot == true;
+    }
     // Lobby members may arrange the physical table before the game starts.
     // They may reorder existing seats, or add only their own UID as one new
     // seat; they cannot remove, replace, or duplicate anybody already seated.
@@ -164,11 +172,27 @@ service cloud.firestore {
         // and is seated when the next round starts. The lobby-only rule that
         // used to be here dates from when a room was a single game, and it
         // would have refused every real mid-evening arrival.
+        // Yourself, at any time. NOT marked as a bot: a human able to flag
+        // their own document isBot would be a human the controlling browser is
+        // then allowed to vote on behalf of, which is the single thing the
+        // narrow bot-vote rule below exists to prevent.
         allow create: if signedIn()
           && playerUid == uid()
           && request.resource.data.keys().hasOnly(
                ['displayName', 'avatar', 'joinedAt']
              );
+
+        // ...or an AI player, added by the controlling browser to fill out a
+        // PRACTICE table. Practice is checked against the room rather than
+        // trusted from the write: a bot in an official evening would put
+        // invented results into a permanent record with no delete path.
+        allow create: if isReferee(roomId)
+          && inPhase(roomId, 'lobby')
+          && isPractice(roomId)
+          && request.resource.data.keys().hasOnly(
+               ['displayName', 'avatar', 'joinedAt', 'isBot']
+             )
+          && request.resource.data.isBot == true;
 
         // Your own name and picture, whenever. NOTE WHAT IS NOT HERE: a seat.
         // Seat order is the room document's ordered uid list, written by the
@@ -186,6 +210,15 @@ service cloud.firestore {
         allow delete: if signedIn()
           && inPhase(roomId, 'lobby')
           && (playerUid == uid() || isHost(roomId));
+
+        // ...and separately, an AI player removed before the first deal. Kept
+        // as its own rule rather than folded into the line above: adding
+        // `isReferee` there would have quietly given the controlling browser
+        // the power to delete a HUMAN, which is not what removing a bot needs.
+        allow delete: if isReferee(roomId)
+          && inPhase(roomId, 'lobby')
+          && isPractice(roomId)
+          && isBotPlayer(roomId, playerUid);
       }
 
       // ------------------------------------------------------------ private
@@ -267,6 +300,27 @@ service cloud.firestore {
                || (inPhase(roomId, 'day') && request.resource.data.target == null)
              );
 
+        // An AI PLAYER'S vote, cast by the controlling browser because there
+        // is nobody behind that seat. Deliberately NOT a general "the referee
+        // may vote as anyone": every clause below has to hold, and the one
+        // that matters is that the target really is a bot. Without it, a
+        // referee quietly voting for a human would be a write no rule could
+        // tell from this one.
+        //
+        // Practice only, so an invented vote can never reach the all-time
+        // record. Same phase rules and the same no-self-vote as a person's.
+        allow create, update: if isReferee(roomId)
+          && isPractice(roomId)
+          && isBotPlayer(roomId, playerUid)
+          && request.resource.data.keys().hasOnly(
+               ['target', 'abstain', 'readyToVote', 'castAt']
+             )
+          && request.resource.data.target != playerUid
+          && (
+               inPhase(roomId, 'voting')
+               || (inPhase(roomId, 'day') && request.resource.data.target == null)
+             );
+
         allow delete: if false;
       }
 
@@ -307,6 +361,25 @@ service cloud.firestore {
         // `joinedAtRound` is pinned to the room's CURRENT round — this single
         // comparison is what makes the derived seed unforgeable, because
         // joining is the only moment a player has any say over it at all.
+        // A bot's membership, written by the controlling browser. Same shape
+        // as anybody's, so a bot is seated by the ordinary round-boundary
+        // logic rather than by anything that knows what a bot is.
+        allow create: if isReferee(roomId)
+          && isPractice(roomId)
+          && inPhase(roomId, 'lobby')
+          && request.resource.data.keys().hasOnly(
+               ['uid', 'joinedAtRound', 'leftAtRound', 'friendId', 'friendName']
+             )
+          && request.resource.data.uid == memberUid
+          && request.resource.data.joinedAtRound is int
+          // Pinned exactly as a human's is. A bot that could name its own
+          // joining round would be a bot with a score floor, and the floor is
+          // derived from this number for everybody alike.
+          && request.resource.data.joinedAtRound == currentRound(roomId) + 1
+          && request.resource.data.leftAtRound == null
+          && request.resource.data.friendId == ''
+          && isBotPlayer(roomId, memberUid);
+
         allow create: if signedIn()
           && (memberUid == uid() || isHost(roomId))
           && request.resource.data.keys().hasOnly(
@@ -346,7 +419,15 @@ service cloud.firestore {
 
         // Membership is history. A round you played happened whether or not
         // you are still in the room, and the scoreboard is rebuilt from it.
-        allow delete: if false;
+        //
+        // The one exception is an AI player removed before the first deal:
+        // nothing has happened yet, and leaving the membership behind would
+        // keep a bot on the next round's roster and on the scoreboard. A bot
+        // has no history to preserve, because practice writes none.
+        allow delete: if isReferee(roomId)
+          && inPhase(roomId, 'lobby')
+          && isPractice(roomId)
+          && isBotPlayer(roomId, memberUid);
       }
 
       // ------------------------------------------------------------- rounds

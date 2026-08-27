@@ -20,6 +20,12 @@ import {
   type RoundRecord, type SessionMember,
 } from './session.js';
 
+/** Names for AI players. Recognisably not people, and short enough to fit. */
+const BOT_NAMES = [
+  'AI Bram', 'AI Fleur', 'AI Joris', 'AI Noor', 'AI Daan',
+  'AI Eva', 'AI Tijn', 'AI Isa', 'AI Sam', 'AI Lot', 'AI Kees',
+];
+
 /**
  * A whole Dageraad server, in memory.
  *
@@ -439,6 +445,89 @@ class MemoryBackend implements Backend {
     if (!ok) throw new Error(`cannot vote in phase ${phase}`);
     const existing = r.votes.get(this.uid);
     r.votes.set(this.uid, { target, abstain, readyToVote: existing?.readyToVote });
+    this.world.notify(roomId);
+  }
+
+  /* --------------------------------- bots --------------------------------- */
+
+  /**
+   * Add one AI player to a practice lobby.
+   *
+   * Every guard here is duplicated in the security rules; these exist to give
+   * a sensible error before the round-trip rather than to be the protection.
+   */
+  async addBot(roomId: string): Promise<void> {
+    const r = this.world.room(roomId);
+    this.requireReferee(r);
+    if (r.view.mode !== 'practice') {
+      throw new Error('bots are only for practice rooms');
+    }
+    if (r.view.phase !== 'lobby') throw new Error('bots can only be added in the lobby');
+    if (r.view.seating.length >= 12) throw new Error('Maximaal 12 spelers.');
+
+    const existing = [...r.players.values()].filter((p) => p.isBot).length;
+    const uid = `bot:${roomId}:${existing + 1}`;
+    const displayName = BOT_NAMES[existing % BOT_NAMES.length] ?? `AI ${existing + 1}`;
+
+    r.players.set(uid, {
+      uid, displayName, seatIndex: null, playing: false, departed: false,
+      isBot: true,
+    });
+    // A real membership, so a bot is seated by the ordinary round-boundary
+    // logic rather than by anything that knows what a bot is.
+    r.view.members = [
+      ...r.view.members,
+      {
+        // Pinned to the next round exactly as a human's is — in the lobby the
+        // round is 0, so this is 1 by the same arithmetic rather than by a
+        // special case for bots.
+        uid, joinedAtRound: r.view.round + 1,
+        leftAtRound: null, friendId: '', friendName: displayName,
+      },
+    ];
+    r.view.seating = [...r.view.seating, uid];
+    this.world.notify(roomId);
+  }
+
+  /**
+   * Remove one.
+   *
+   * Lobby only, so no round is ever half-played by a seat that vanishes. The
+   * membership goes with it: leaving a member behind would keep the bot on the
+   * next round's roster and on the evening's scoreboard.
+   */
+  async removeBot(roomId: string, botUid: string): Promise<void> {
+    const r = this.world.room(roomId);
+    this.requireReferee(r);
+    if (r.view.mode !== 'practice') throw new Error('bots are only for practice rooms');
+    if (r.view.phase !== 'lobby') throw new Error('bots can only be removed in the lobby');
+    const player = r.players.get(botUid);
+    if (!player?.isBot) throw new Error('not a bot');
+
+    r.players.delete(botUid);
+    r.view.members = r.view.members.filter((m) => m.uid !== botUid);
+    r.view.seating = r.view.seating.filter((uid) => uid !== botUid);
+    this.world.notify(roomId);
+  }
+
+  /** A bot's day vote. Never a human's — see Backend.voteAsBot. */
+  async voteAsBot(
+    roomId: string,
+    botUid: string,
+    target: string | null,
+    abstain: boolean,
+  ): Promise<void> {
+    const r = this.world.room(roomId);
+    this.requireReferee(r);
+    if (r.view.mode !== 'practice') throw new Error('bots are only for practice rooms');
+    const player = r.players.get(botUid);
+    if (!player?.isBot) throw new Error('not a bot');
+    if (target === botUid) throw new Error('no self-votes');
+    const phase = r.view.phase;
+    const ok = phase === 'voting' || (phase === 'day' && target === null);
+    if (!ok) throw new Error(`cannot vote in phase ${phase}`);
+
+    r.votes.set(botUid, { target, abstain });
     this.world.notify(roomId);
   }
 
