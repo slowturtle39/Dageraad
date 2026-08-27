@@ -105,6 +105,7 @@ export function renderApp(deps: AppDeps): HTMLElement {
 function renderTableScreen(deps: AppDeps): HTMLElement {
   const room = deps.state.room!;
   return renderTable({
+    lang: deps.lang,
     seats: seatViews({
       room,
       players: deps.state.players,
@@ -138,6 +139,7 @@ function renderLobbyScreen(deps: AppDeps): HTMLElement {
   }));
 
   return renderLobby({
+    lang: deps.lang,
     players,
     // Everyone PRESENT can agree the physical order before the first deal —
     // at a real table the person who moved the chairs is the one who knows.

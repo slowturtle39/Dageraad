@@ -1,4 +1,5 @@
 import type { SeatIndex } from '../engine/types.js';
+import { t, type Lang } from './i18n.js';
 
 /**
  * Seating arrangement (§13).
@@ -21,6 +22,7 @@ export interface LobbyPlayer {
 }
 
 export interface LobbyView {
+  lang: Lang;
   players: LobbyPlayer[];
   /** Everyone present may agree and arrange the physical order before a deal. */
   canArrange: boolean;
@@ -39,9 +41,9 @@ export function renderLobby(view: LobbyView): HTMLElement {
   hint.className = 'sheet__sub';
   hint.textContent = view.canArrange
     ? view.pendingSwap === null
-      ? 'Zet iedereen in de volgorde waarin jullie echt zitten. Tik twee spelers aan om ze te wisselen.'
-      : 'Tik nu de speler aan waarmee je wilt wisselen.'
-    : 'De stoelvolgorde is vastgezet zodra het spel begint.';
+      ? t(view.lang, 'lobby.arrange')
+      : t(view.lang, 'lobby.swap')
+    : t(view.lang, 'lobby.locked');
   el.append(hint);
 
   const ring = document.createElement('div');
@@ -85,16 +87,14 @@ export function renderLobby(view: LobbyView): HTMLElement {
   const start = document.createElement('button');
   start.type = 'button';
   start.className = 'btn btn--primary';
-  start.textContent = `Start het spel (${seated.length} spelers)`;
+  start.textContent = t(view.lang, 'lobby.start', { n: seated.length });
   start.disabled = !view.canStart;
   start.addEventListener('click', () => view.onStart?.());
   el.append(start);
 
   const note = document.createElement('p');
   note.className = 'sheet__note';
-  note.textContent =
-    'De volgorde moet kloppen met de echte tafel — de Dorpsgek schuift kaarten ' +
-    'een stoel op, en dat betekent alleen iets als de buren kloppen.';
+  note.textContent = t(view.lang, 'lobby.adjacency');
   el.append(note);
 
   return el;

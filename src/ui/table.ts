@@ -1,6 +1,6 @@
-import { ROLES } from '../engine/roles.js';
 import { roleArt } from './art.js';
 import type { RoleId, SeatIndex } from '../engine/types.js';
+import { roleName, t, type Lang } from './i18n.js';
 
 /**
  * The seating circle — the app's home screen, night AND day.
@@ -37,6 +37,7 @@ export interface SeatView {
 }
 
 export interface TableView {
+  lang: Lang;
   seats: SeatView[];
   centerCount: number;
   /** Whether the Alpha Wolf's extra wolf card is in play — public information. */
@@ -57,8 +58,6 @@ export interface TableView {
    */
   onNameTap?: (seat: SeatIndex) => void;
 }
-
-const NL = (role: RoleId) => ROLES[role]?.nl ?? role;
 
 export function renderTable(view: TableView): HTMLElement {
   const el = document.createElement('div');
@@ -87,7 +86,7 @@ export function renderTable(view: TableView): HTMLElement {
     // even after the Alpha Wolf has parked somebody's old card here. Sitting it
     // in the row would invite exactly the mistake the engine forbids.
     wolf.className = 'centercard centercard--wolf';
-    wolf.title = 'Alfawolf-kaart';
+    wolf.title = t(view.lang, 'table.alphaWolfCard');
     center.append(wolf);
   }
   el.append(center);
@@ -117,7 +116,7 @@ export function renderTable(view: TableView): HTMLElement {
       if (art) card.append(art);
       const label = document.createElement('span');
       label.className = 'seat__role';
-      label.textContent = NL(s.revealedRole);
+      label.textContent = roleName(view.lang, s.revealedRole);
       card.append(label);
     } else if (s.suspectedRole && s.suspicionVisible !== false) {
       // A guess never takes the bone face of a real reveal. Same dark card,
@@ -127,14 +126,14 @@ export function renderTable(view: TableView): HTMLElement {
       if (art) card.append(art);
       const label = document.createElement('span');
       label.className = 'seat__role seat__role--guess';
-      label.textContent = NL(s.suspectedRole);
+      label.textContent = roleName(view.lang, s.suspectedRole);
       card.append(label);
     }
     if (s.shielded) {
       card.classList.add('seat__card--shielded');
       const badge = document.createElement('span');
       badge.className = 'seat__badge';
-      badge.title = 'Beschermd door de Schildwacht';
+      badge.title = t(view.lang, 'table.shielded');
       card.append(badge);
     }
 

@@ -129,8 +129,21 @@ const nl: Dict = {
   'menu.close': 'Sluiten',
   'menu.share': 'Deel de link',
   'menu.copied': 'Gekopieerd',
+  'menu.home': 'Naar beginscherm',
   'menu.leave': 'Weggaan',
   'menu.recover': 'Spelleiding overnemen',
+
+  'lobby.arrange': 'Zet iedereen in de volgorde waarin jullie echt zitten. Tik twee spelers aan om ze te wisselen.',
+  'lobby.swap': 'Tik nu de speler aan waarmee je wilt wisselen.',
+  'lobby.locked': 'De stoelvolgorde is vastgezet zodra het spel begint.',
+  'lobby.start': 'Start het spel ({n} spelers)',
+  'lobby.adjacency': 'De volgorde moet kloppen met de echte tafel - de Dorpsgek schuift kaarten een stoel op, en dat betekent alleen iets als de buren kloppen.',
+
+  'table.alphaWolfCard': 'Alfawolf-kaart',
+  'table.shielded': 'Beschermd door de Schildwacht',
+
+  'demo.start': 'Speel alleen met 7 AI-spelers',
+  'demo.explain': 'Een snelle, lokale oefenavond. Er wordt niets naar Firebase geschreven en niets telt mee.',
 
   // The wording does not soften this. The group agreed to a trusted takeover;
   // that only stays a real agreement if the screen says what it costs.
@@ -305,8 +318,21 @@ const en: Dict = {
   'menu.close': 'Close',
   'menu.share': 'Share the link',
   'menu.copied': 'Copied',
+  'menu.home': 'Home',
   'menu.leave': 'Leave',
   'menu.recover': 'Take over running the game',
+
+  'lobby.arrange': 'Put everyone in the order in which you are really sitting. Tap two players to swap them.',
+  'lobby.swap': 'Now tap the player you want to swap with.',
+  'lobby.locked': 'The seating order is locked as soon as the game starts.',
+  'lobby.start': 'Start game ({n} players)',
+  'lobby.adjacency': 'The order must match the real table - the Village Idiot shifts cards one seat, so the neighbours have to be right.',
+
+  'table.alphaWolfCard': 'Alpha Wolf card',
+  'table.shielded': 'Shielded by the Bodyguard',
+
+  'demo.start': 'Play solo with 7 AI players',
+  'demo.explain': 'A quick local practice evening. Nothing is written to Firebase and nothing counts.',
 
   'recover.title': 'Take over running the game',
   'recover.why':

@@ -1,5 +1,7 @@
+// @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { renderTable } from './table.js';
 
 const raw = readFileSync('src/ui/table.ts', 'utf8');
 const src = raw
@@ -32,4 +34,13 @@ describe('the name is a usable target, not a strip of text', () => {
     const block = css.slice(css.indexOf('.seat__name {'));
     expect(block.slice(0, block.indexOf('}'))).toMatch(/padding:/);
   });
+});
+
+it('translates role labels on the in-room table', () => {
+  const el = renderTable({
+    lang: 'en', centerCount: 3, hasAlphaWolfCard: true,
+    seats: [{ seat: 0, name: 'Milan', revealedRole: 'ziener' }],
+  });
+  expect(el.textContent).toContain('Seer');
+  expect(el.querySelector('.centercard--wolf')?.getAttribute('title')).toBe('Alpha Wolf card');
 });

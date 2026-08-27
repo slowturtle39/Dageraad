@@ -3,7 +3,7 @@ import { firebaseConfig } from './firebase/config.js';
 import { FirestoreBackend } from './firestore/backend.js';
 import { botSeatsFor, demoTable, seatDemoBots, type DemoTable } from './app/demoworld.js';
 import { AppController } from './app/controller.js';
-import { roomCodeFromUrl, roomUrl } from './app/roomlink.js';
+import { homeUrl, roomCodeFromUrl, roomUrl } from './app/roomlink.js';
 import { renderApp, type AppActions } from './ui/app.js';
 import { renderRecovery } from './ui/recovery.js';
 import {
@@ -192,6 +192,9 @@ function fastDayConfig(): { discussionMs: number; voteWaitTimeoutMs: number;
 async function makeBackend(): Promise<Backend> {
   if (new URLSearchParams(location.search).has('demo')) {
     demo = demoTable(Math.random);
+    // A solo walk-through needs this browser to receive a seat alongside the
+    // bots. The normal table-device default would create only a neutral board.
+    local.mode = 'trusted-host';
     return demo.me;
   }
   const connection = await connect(firebaseConfig);
@@ -465,6 +468,27 @@ const actions: AppActions = {
   onNameTap() { /* stats-on-tap arrives with the profile sheet */ },
 };
 
+/** Return this browser to the start screen without removing it from the room. */
+function returnHome(): void {
+  controller.reset();
+  local.code = '';
+  local.menuOpen = false;
+  local.showAllTime = false;
+  local.recovering = false;
+  local.error = null;
+  history.replaceState(null, '', homeUrl(location.href));
+  render();
+}
+
+/** Start the existing local bot table through a discoverable UI action. */
+function startSoloDemo(): void {
+  const url = new URL(location.href);
+  url.hash = '';
+  url.searchParams.set('demo', '');
+  url.searchParams.set('fast', '');
+  location.assign(url.toString());
+}
+
 function defaultName(mode: ControllerMode): string {
   return mode === 'table-device' ? 'Tafel' : 'Speler';
 }
@@ -484,8 +508,9 @@ function render(): void {
   if (screen.kind === 'setup') {
     // Who you are comes first. Everything after it is about this evening; this
     // is the one question whose answer outlives it.
-    if (!local.friend) {
+    if (!local.friend && !demo) {
       app.append(friendPicker());
+      app.append(soloDemoButton());
       app.append(bottomBar(false));
       if (local.error) app.append(fatal(local.error));
       return;
@@ -506,6 +531,7 @@ function render(): void {
       onModeChange: actions.onModeChange,
       onCreate: actions.onCreate,
     }));
+    if (!demo) app.append(soloDemoButton());
     app.append(bottomBar(false));
     if (local.error) app.append(fatal(local.error));
     return;
@@ -578,6 +604,17 @@ function bottomBar(inRoom: boolean): HTMLElement {
   return bar;
 }
 
+function soloDemoButton(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'join';
+  const start = button(t(local.lang, 'demo.start'), startSoloDemo);
+  const note = document.createElement('p');
+  note.className = 'sheet__note';
+  note.textContent = t(local.lang, 'demo.explain');
+  wrap.append(start, note);
+  return wrap;
+}
+
 /**
  * The menu.
  *
@@ -617,6 +654,10 @@ function menu(): HTMLElement {
   });
   table.classList.add('menu__item');
   sheet.append(table);
+
+  const home = button(t(local.lang, 'menu.home'), returnHome);
+  home.classList.add('menu__item');
+  sheet.append(home);
 
   const leave = button(t(local.lang, 'menu.leave'), () => {
     local.menuOpen = false;

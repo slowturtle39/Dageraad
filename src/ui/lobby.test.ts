@@ -1,5 +1,6 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { seatingIsValid, swapSeats, type LobbyPlayer } from './lobby.js';
+import { renderLobby, seatingIsValid, swapSeats, type LobbyPlayer } from './lobby.js';
 
 const players: LobbyPlayer[] = [
   { uid: 'a', displayName: 'Milan', seatIndex: 0 },
@@ -34,4 +35,12 @@ describe('seating arrangement (§13)', () => {
       { uid: 'b', displayName: 'B', seatIndex: 0 },
     ])).toBe(false);
   });
+});
+
+it('translates the live lobby, not just the setup screen', () => {
+  const el = renderLobby({
+    lang: 'en', players, canArrange: true, pendingSwap: null, canStart: true,
+  });
+  expect(el.textContent).toContain('Start game (3 players)');
+  expect(el.textContent).toContain('Village Idiot');
 });

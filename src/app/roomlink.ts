@@ -20,6 +20,11 @@ export function roomUrl(base: string, code: string): string {
   return `${root}#/${clean}`;
 }
 
+/** Leave the shared-room hash behind without changing any query-mode flags. */
+export function homeUrl(base: string): string {
+  return base.split('#')[0] ?? base;
+}
+
 /**
  * The code somebody arrived with, or null.
  *

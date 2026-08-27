@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { roomCodeFromUrl, roomUrl } from './roomlink.js';
+import { homeUrl, roomCodeFromUrl, roomUrl } from './roomlink.js';
 
 /**
  * One link in a group chat is the entire distribution story: no app store, no
@@ -46,5 +46,12 @@ describe('reading the code somebody arrived with', () => {
     for (const code of ['ABCDE', 'ZZ234', 'MNPQR']) {
       expect(roomCodeFromUrl(roomUrl('https://x.dev/', code))).toBe(code);
     }
+  });
+});
+
+describe('leaving a room on this device', () => {
+  it('removes only the room hash and preserves an intentional query mode', () => {
+    expect(homeUrl('https://x.dev/?demo&fast#/ABCDE'))
+      .toBe('https://x.dev/?demo&fast');
   });
 });
