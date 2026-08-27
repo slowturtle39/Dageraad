@@ -270,6 +270,7 @@ function withPhaseHook(
     setWindowIndex: (i) => inner.setWindowIndex(i),
     readSubmissions: (i) => inner.readSubmissions(i),
     releasePrivateInfo: (seat, info) => inner.releasePrivateInfo(seat, info),
+    releaseDecisions: (seat, requests) => inner.releaseDecisions(seat, requests),
     appendPublicEvents: (events) => inner.appendPublicEvents(events),
     recordLatency: (samples) => inner.recordLatency(samples),
     readVotes: () => inner.readVotes(),

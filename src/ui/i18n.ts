@@ -146,6 +146,24 @@ const nl: Dict = {
   'recover.confirm': 'Neem de spelleiding over',
   'recover.cancel': 'Laat maar',
   'recover.failed': 'Overnemen lukte niet. Klopt het woord?',
+
+  'prompt.youAre': 'Je bent de {role}',
+  'prompt.pickSeat': 'Tik iemand aan de tafel aan.',
+  'prompt.pickTwoSeats': 'Tik twee spelers aan; hun kaarten wisselen.',
+  'prompt.pickCenter': 'Kies {n} van de middenkaarten.',
+  'prompt.confirm': 'Bevestig je actie.',
+  // Only the Dorpsgek ever sees a direction. Niemand anders hoort welke kant
+  // de kaarten op gingen, dus dit is het enige scherm dat er een noemt.
+  'prompt.dorpsgek': 'Welke kant schuiven de kaarten op? Alleen jij weet dit.',
+  'prompt.shiftLeft': 'Naar links',
+  'prompt.shiftRight': 'Naar rechts',
+  'prompt.waiting': 'Wacht op de anderen…',
+  'prompt.nothingToDo': 'Je hoeft nu niets te doen.',
+
+  'day.voteNow': 'Stemmen',
+  'day.discussing': 'Overleg',
+  'results.title': 'Uitslag',
+  'results.nextRound': 'Volgende ronde',
 };
 
 const en: Dict = {
@@ -272,6 +290,22 @@ const en: Dict = {
   'recover.confirm': 'Take over',
   'recover.cancel': 'Never mind',
   'recover.failed': 'Takeover did not work. Is the word right?',
+
+  'prompt.youAre': 'You are the {role}',
+  'prompt.pickSeat': 'Tap somebody at the table.',
+  'prompt.pickTwoSeats': 'Tap two players; their cards swap.',
+  'prompt.pickCenter': 'Choose {n} of the centre cards.',
+  'prompt.confirm': 'Confirm your action.',
+  'prompt.dorpsgek': 'Which way do the cards shift? Only you know this.',
+  'prompt.shiftLeft': 'To the left',
+  'prompt.shiftRight': 'To the right',
+  'prompt.waiting': 'Waiting for the others\u2026',
+  'prompt.nothingToDo': 'Nothing for you to do right now.',
+
+  'day.voteNow': 'Vote',
+  'day.discussing': 'Discussion',
+  'results.title': 'Result',
+  'results.nextRound': 'Next round',
 };
 
 const DICTS: Record<Lang, Dict> = { nl, en };

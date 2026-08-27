@@ -145,6 +145,9 @@ describe('starting a game', () => {
     const { world, tablet, roomId, phones } = await lobbyOfEight();
     await tablet.startGame(roomId, 4242);
 
+    const room = await readRoomOnce(phones[0]!.device, roomId);
+    const ordered = room.seating;
+
     const seen = new Map<string, PrivateView>();
     for (const p of phones) {
       p.device.watchPrivate(roomId, (own) => { seen.set(p.device.uid, own); });
@@ -157,10 +160,23 @@ describe('starting a game', () => {
       expect(own.privateInfo).toEqual([]);
     }
 
-    // And the private view carries no way to learn anyone else's — the only
-    // thing it holds is this device's own card.
+    // And the private view carries no way to learn anyone else's. Pinned as an
+    // exact key list on purpose: a field added here is a field one device can
+    // read, so adding one has to be a deliberate act with a test to change.
     const anyOwn = seen.get(phones[0]!.device.uid)!;
-    expect(Object.keys(anyOwn).sort()).toEqual(['originalRole', 'privateInfo']);
+    expect(Object.keys(anyOwn).sort())
+      .toEqual(['originalRole', 'pending', 'privateInfo']);
+
+    // `pending` is what this seat is being asked. It must never carry another
+    // seat's question — that is the whole reason the referee publishes it
+    // per-seat rather than broadcasting a list the client filters.
+    for (const p of phones) {
+      const own = seen.get(p.device.uid)!;
+      const seat = ordered.indexOf(p.device.uid);
+      for (const request of own.pending) {
+        expect(request.seat).toBe(seat);
+      }
+    }
 
     // The referee, and only the referee, holds the whole deal.
     const state = await tablet.refereeNightState(roomId);

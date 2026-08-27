@@ -1146,3 +1146,73 @@ body {
   border-color: var(--line);
   color: var(--ink-faint);
 }
+
+/* ------------------------------------------------------------------ */
+/* Night prompt, and the result at dawn                                */
+/* ------------------------------------------------------------------ */
+
+.prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.prompt__title {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 1.1rem;
+  color: var(--bone);
+}
+
+.prompt__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.prompt__actions .btn {
+  flex: 1 1 auto;
+}
+
+.prompt__centers {
+  display: flex;
+  gap: 10px;
+}
+
+.prompt__center {
+  flex: 1;
+  aspect-ratio: 2 / 3;
+  background: var(--bone);
+  color: var(--bg-deep);
+  border: 1px solid var(--bone-shadow);
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.prompt__center--picked {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.results__seats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.results__row {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--ink-dim);
+  font-size: 0.9rem;
+}
+
+.results__row--own {
+  color: var(--ink);
+  border-left: 2px solid var(--gold);
+}

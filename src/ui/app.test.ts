@@ -59,7 +59,7 @@ const players: PlayerView[] = [ME, OTHER].map((uid) => ({
   uid, displayName: uid.split('-')[0]!, seatIndex: null, playing: true, departed: false,
 }));
 
-const own: PrivateView = { originalRole: 'ziener', privateInfo: [] };
+const own: PrivateView = { originalRole: 'ziener', privateInfo: [], pending: [] };
 
 function state(over: Partial<AppState> = {}): AppState {
   return {

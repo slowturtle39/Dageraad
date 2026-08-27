@@ -1,5 +1,6 @@
 import type { LatencySample } from '../engine/telemetry.js';
-import type { NightEvent, PrivateInfo, SeatIndex } from '../engine/types.js';
+import type { NightEvent, PrivateInfo, SeatIndex, DecisionRequest,
+} from '../engine/types.js';
 import type { Vote } from '../engine/dayphase.js';
 import type { DayStore } from './dayrunner.js';
 import type { RoomStore } from './store.js';
@@ -55,6 +56,11 @@ export class SandboxStore implements RoomStore, DayStore {
   }
   releasePrivateInfo(seat: SeatIndex, info: PrivateInfo[]) {
     return this.inner.releasePrivateInfo(seat, info);
+  }
+  // Passed through: a test round still has to ask its bots' seats questions,
+  // and a prompt is not a permanent record of anything.
+  releaseDecisions(seat: SeatIndex, requests: DecisionRequest[]) {
+    return this.inner.releaseDecisions(seat, requests);
   }
   appendPublicEvents(events: NightEvent[]) {
     return this.inner.appendPublicEvents(events);

@@ -18,6 +18,7 @@ const REQUIRED = [
   'setWindowIndex',
   'readSubmissions',
   'releasePrivateInfo',
+  'releaseDecisions',
   'appendPublicEvents',
   'recordLatency',
   'setPhase',

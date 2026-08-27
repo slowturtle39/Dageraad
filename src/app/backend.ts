@@ -1,5 +1,6 @@
 import type {
   GameConfig, PrivateInfo, RoleId, SeatIndex, Choice, NightEvent, NightState,
+  DecisionRequest,
 } from '../engine/types.js';
 import type { Timeline } from '../engine/timeline.js';
 import type { VoteOutcome } from '../engine/dayphase.js';
@@ -89,6 +90,15 @@ export interface PlayerView {
 export interface PrivateView {
   originalRole: RoleId | null;
   privateInfo: PrivateInfo[];
+  /**
+   * What this device is being asked, for the window currently open.
+   *
+   * Written by the referee, because the questions come from the deal and the
+   * deal never leaves it. Empty means nothing is being asked of you right now
+   * — which is a real state and not a missing one, and is what clears the last
+   * window's question off the screen.
+   */
+  pending: DecisionRequest[];
 }
 
 export type Unsubscribe = () => void;

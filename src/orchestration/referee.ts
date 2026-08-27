@@ -100,6 +100,21 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
       closesAtMs: phase.endMs,
     });
 
+    // Each seat is told what IT is being asked, and nothing about anyone else.
+    // Published before the window's sleep, so a player has the whole window to
+    // answer rather than the tail of it. A seat with nothing to do this window
+    // is sent an empty list, which is what clears last window's prompt off
+    // their screen — silence would leave a stale question on the table.
+    const bySeat = new Map<SeatIndex, DecisionRequest[]>();
+    for (const seat of everySeat(state)) bySeat.set(seat, []);
+    for (const request of requests) {
+      bySeat.get(request.seat)?.push(request);
+    }
+    for (const [seat, forSeat] of bySeat) {
+      if (opts.bots?.seats.has(seat)) continue;   // a bot is not reading a screen
+      await store.releaseDecisions(seat, forSeat);
+    }
+
     const openedAt = clock.now();
 
     // RULE 1. Sleep the window's full duration unconditionally. Not "until
@@ -232,4 +247,9 @@ function resolveChoice(request: DecisionRequest, choice: Choice): Choice {
     policy: { wolf: choice.wolf, looier: choice.looier, village: choice.village },
   });
   return resolved ?? { kind: 'none' };
+}
+
+/** Every seat at the table, as indices. */
+function everySeat(state: { seatCount: number }): SeatIndex[] {
+  return Array.from({ length: state.seatCount }, (_, i) => i as SeatIndex);
 }

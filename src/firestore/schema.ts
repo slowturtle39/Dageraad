@@ -1,5 +1,6 @@
 import type {
   CardId, GameConfig, PrivateInfo, RoleId, Choice, NightEvent, NightState,
+  DecisionRequest,
 } from '../engine/types.js';
 import type { Timeline } from '../engine/timeline.js';
 import type { VoteOutcome } from '../engine/dayphase.js';
@@ -136,6 +137,12 @@ export interface PrivateDoc {
   privateInfo: PrivateInfo[];
   /** Released reveals only. The referee withholds later ones until due. */
   revealedThrough: number;
+  /**
+   * What this seat is being asked for the window now open, written by the
+   * referee. Empty when nothing is being asked — a real state, and what clears
+   * the previous window's question off the screen.
+   */
+  pendingDecisions?: DecisionRequest[];
 }
 
 /**

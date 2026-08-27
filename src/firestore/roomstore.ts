@@ -4,7 +4,9 @@ import {
 } from 'firebase/firestore';
 import type { Vote } from '../engine/dayphase.js';
 import type { LatencySample } from '../engine/telemetry.js';
-import type { Choice, NightEvent, PrivateInfo, SeatIndex } from '../engine/types.js';
+import type {
+  Choice, DecisionRequest, NightEvent, PrivateInfo, SeatIndex,
+} from '../engine/types.js';
 import type { DayStore } from '../orchestration/dayrunner.js';
 import type { RoomStore } from '../orchestration/store.js';
 import { paths, type RoomPhase } from './schema.js';
@@ -93,6 +95,25 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
         privateInfo: [...(existing?.privateInfo ?? []), ...info],
         revealedThrough: (existing?.privateInfo?.length ?? 0) + info.length,
       },
+      { merge: true },
+    );
+  }
+
+  /**
+   * Tell one seat what it is being asked this window.
+   *
+   * Into that seat's own private document, which the rules already make
+   * referee-write and owner-read — so no new surface, and no chance of one
+   * player reading another's question. REPLACES rather than appends: the
+   * pending list is what is being asked NOW, and an empty write is what clears
+   * the last window's question off somebody's screen.
+   */
+  async releaseDecisions(seat: SeatIndex, requests: DecisionRequest[]): Promise<void> {
+    const uid = await this.uidForSeat(seat);
+    if (!uid) return;
+    await setDoc(
+      doc(this.db, paths.private(this.roomId, uid)),
+      { pendingDecisions: requests },
       { merge: true },
     );
   }

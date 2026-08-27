@@ -442,6 +442,7 @@ export class FirestoreBackend implements Backend {
       cb({
         originalRole: data?.originalRole ?? null,
         privateInfo: data?.privateInfo ?? [],
+        pending: data?.pendingDecisions ?? [],
       });
     });
   }

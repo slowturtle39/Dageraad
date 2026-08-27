@@ -35,7 +35,7 @@ export interface AppState {
   joining: boolean;
 }
 
-const EMPTY_PRIVATE: PrivateView = { originalRole: null, privateInfo: [] };
+const EMPTY_PRIVATE: PrivateView = { originalRole: null, privateInfo: [], pending: [] };
 
 export class AppController {
   private stops: Unsubscribe[] = [];

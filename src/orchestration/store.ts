@@ -1,4 +1,6 @@
-import type { Choice, NightEvent, PrivateInfo, SeatIndex } from '../engine/types.js';
+import type {
+  Choice, DecisionRequest, NightEvent, PrivateInfo, SeatIndex,
+} from '../engine/types.js';
 import type { LatencySample } from '../engine/telemetry.js';
 
 /**
@@ -24,6 +26,21 @@ export interface RoomStore {
    * seat's reveal is DUE per the timeline — writing early is the leak.
    */
   releasePrivateInfo(seat: SeatIndex, info: PrivateInfo[]): Promise<void>;
+
+  /**
+   * Tell one seat what it is being asked, for the window now open.
+   *
+   * A player device cannot work this out for itself. The decisions come from
+   * the DEAL, and the deal only ever exists on the referee — that is the whole
+   * arrangement. So the referee, which already knows because it just asked,
+   * writes each seat's own request into that seat's private document.
+   *
+   * It leaks nothing: a request carries the asking seat's own role and its own
+   * reveal, both of which that player already has. What it must never do is
+   * carry somebody ELSE's request, which is why this is per-seat rather than a
+   * broadcast the client filters.
+   */
+  releaseDecisions(seat: SeatIndex, requests: DecisionRequest[]): Promise<void>;
 
   /** Spoiler-free events for the shared tablet (§12). */
   appendPublicEvents(events: NightEvent[]): Promise<void>;
@@ -54,6 +71,12 @@ export class InMemoryRoomStore implements RoomStore {
   async releasePrivateInfo(seat: SeatIndex, info: PrivateInfo[]): Promise<void> {
     const existing = this.released.get(seat) ?? [];
     this.released.set(seat, [...existing, ...info]);
+  }
+
+  readonly prompts = new Map<SeatIndex, DecisionRequest[]>();
+
+  async releaseDecisions(seat: SeatIndex, requests: DecisionRequest[]): Promise<void> {
+    this.prompts.set(seat, requests);
   }
 
   async appendPublicEvents(events: NightEvent[]): Promise<void> {

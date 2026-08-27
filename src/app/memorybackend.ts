@@ -3,7 +3,7 @@ import { buildTimeline } from '../engine/timeline.js';
 import type { LatencySample } from '../engine/telemetry.js';
 import type { Vote } from '../engine/dayphase.js';
 import type {
-  Choice, GameConfig, NightEvent, NightState, PrivateInfo, RoleId, SeatIndex,
+  Choice, GameConfig, NightEvent, NightState, PrivateInfo, RoleId, SeatIndex, DecisionRequest,
 } from '../engine/types.js';
 import type { DayStore } from '../orchestration/dayrunner.js';
 import type { RoomStore } from '../orchestration/store.js';
@@ -131,7 +131,7 @@ export class MemoryWorld {
     for (const cb of r.watchers.players) cb(players.map((p) => ({ ...p })));
     for (const cb of r.watchers.rounds) cb(r.rounds.map((x) => ({ ...x })));
     for (const [uid, cbs] of r.watchers.private) {
-      const own = r.privates.get(uid) ?? { originalRole: null, privateInfo: [] };
+      const own = r.privates.get(uid) ?? { originalRole: null, privateInfo: [], pending: [] };
       for (const cb of cbs) cb({ ...own, privateInfo: [...own.privateInfo] });
     }
   }
@@ -350,6 +350,7 @@ class MemoryBackend implements Backend {
       r.privates.set(uid, {
         originalRole: dealt.seatRoles[seat] ?? null,
         privateInfo: [],
+        pending: [],
       });
     });
 
@@ -375,7 +376,7 @@ class MemoryBackend implements Backend {
     const set = r.watchers.private.get(this.uid) ?? new Set();
     set.add(cb);
     r.watchers.private.set(this.uid, set);
-    cb(r.privates.get(this.uid) ?? { originalRole: null, privateInfo: [] });
+    cb(r.privates.get(this.uid) ?? { originalRole: null, privateInfo: [], pending: [] });
     return () => set.delete(cb);
   }
 
@@ -511,11 +512,20 @@ class MemoryRefereeStore implements RoomStore, DayStore {
   async releasePrivateInfo(seat: SeatIndex, info: PrivateInfo[]): Promise<void> {
     const uid = this.uidForSeat(seat);
     if (!uid) return;
-    const existing = this.r.privates.get(uid) ?? { originalRole: null, privateInfo: [] };
+    const existing = this.r.privates.get(uid) ?? { originalRole: null, privateInfo: [], pending: [] };
     this.r.privates.set(uid, {
       ...existing,
       privateInfo: [...existing.privateInfo, ...info],
     });
+    this.world.notify(this.roomId);
+  }
+
+  /** What this seat is being asked right now. Replaces, never appends. */
+  async releaseDecisions(seat: SeatIndex, requests: DecisionRequest[]): Promise<void> {
+    const uid = this.uidForSeat(seat);
+    if (!uid) return;
+    const existing = this.r.privates.get(uid) ?? { originalRole: null, privateInfo: [], pending: [] };
+    this.r.privates.set(uid, { ...existing, pending: [...requests] });
     this.world.notify(this.roomId);
   }
 
