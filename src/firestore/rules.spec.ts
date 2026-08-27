@@ -40,7 +40,8 @@ beforeAll(async () => {
 afterAll(async () => { await env?.cleanup(); });
 
 /** Seed a room mid-night with Alice and Bob seated and dealt. */
-async function seed(phase = 'night', nightWindowIndex = 0, currentRound = 1) {
+async function seed(phase = 'night', nightWindowIndex = 0, currentRound = 1,
+                    mode: 'practice' | 'official' = 'official') {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
@@ -50,6 +51,7 @@ async function seed(phase = 'night', nightWindowIndex = 0, currentRound = 1) {
       phase,
       nightWindowIndex,
       currentRound,
+      mode,
       activeRoles: ['droomwolf', 'alphawolf', 'mystiekewolf', 'dubbelganger'],
       seating: [ALICE, BOB],
     });
@@ -733,6 +735,206 @@ describe('the round counter only ever goes forward', () => {
     await seed('results', 0, 4);
     await assertFails(
       updateDoc(doc(as(REF), 'rooms', ROOM), { currentRound: 99 }),
+    );
+  });
+});
+
+/* ==================================================================== */
+
+describe('whether an evening counts is decided once', () => {
+  it('a room may be created either way', async () => {
+    await env.clearFirestore();
+    for (const mode of ['practice', 'official'] as const) {
+      await assertSucceeds(
+        setDoc(doc(as(HOST), 'rooms', `R${mode}`), {
+          hostUid: HOST, refereeUid: REF, phase: 'lobby', mode,
+          currentRound: 0,
+        }),
+      );
+    }
+  });
+
+  it('refuses a room that does not say which it is', async () => {
+    await env.clearFirestore();
+    await assertFails(
+      setDoc(doc(as(HOST), 'rooms', 'RX'), {
+        hostUid: HOST, refereeUid: REF, phase: 'lobby', currentRound: 0,
+      }),
+    );
+  });
+
+  it('refuses promoting a practice evening to official afterwards', async () => {
+    // The one that matters. A room that could be promoted would let a good
+    // night be retconned into the record — and a bad one quietly demoted.
+    await seed('results', 0, 4, 'practice');
+    await assertFails(updateDoc(doc(as(HOST), 'rooms', ROOM), { mode: 'official' }));
+    await assertFails(updateDoc(doc(as(REF), 'rooms', ROOM), { mode: 'official' }));
+    await assertFails(updateDoc(doc(as(ALICE), 'rooms', ROOM), { mode: 'official' }));
+  });
+
+  it('refuses demoting an official evening too', async () => {
+    await seed('results', 0, 4, 'official');
+    await assertFails(updateDoc(doc(as(HOST), 'rooms', ROOM), { mode: 'practice' }));
+  });
+
+  it('still lets the phase move, which is the legitimate case', async () => {
+    await seed('day', 0, 4, 'official');
+    await assertSucceeds(updateDoc(doc(as(HOST), 'rooms', ROOM), { phase: 'voting' }));
+  });
+});
+
+describe('the shared address book', () => {
+  const FRIEND = { id: 'f:milan', displayName: 'Milan', createdAt: 1 };
+
+  it('lets anybody add a friend, because it is an address book', async () => {
+    await seed();
+    await assertSucceeds(setDoc(doc(as(ALICE), 'friends', 'f:milan'), FRIEND));
+  });
+
+  it('refuses a friend whose id does not match its document', async () => {
+    // Otherwise two ids point at one row and two histories silently merge.
+    await seed();
+    await assertFails(
+      setDoc(doc(as(ALICE), 'friends', 'f:milan'), { ...FRIEND, id: 'f:someone' }),
+    );
+  });
+
+  it('refuses a score smuggled onto a friend', async () => {
+    await seed();
+    await assertFails(
+      setDoc(doc(as(ALICE), 'friends', 'f:milan'), { ...FRIEND, points: 9999 }),
+    );
+    await assertFails(
+      setDoc(doc(as(ALICE), 'friends', 'f:milan'), { ...FRIEND, wins: 40 }),
+    );
+  });
+
+  it('refuses a nameless friend', async () => {
+    await seed();
+    await assertFails(
+      setDoc(doc(as(ALICE), 'friends', 'f:milan'), { ...FRIEND, displayName: '' }),
+    );
+  });
+
+  it('allows a rename but never moves the id', async () => {
+    await seed();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'friends', 'f:milan'), FRIEND);
+    });
+    await assertSucceeds(
+      updateDoc(doc(as(BOB), 'friends', 'f:milan'), { displayName: 'Milan M' }),
+    );
+    await assertFails(
+      updateDoc(doc(as(BOB), 'friends', 'f:milan'), { id: 'f:other' }),
+    );
+  });
+
+  it('never lets a friend be deleted', async () => {
+    // The history rows would survive and point at nobody.
+    await seed();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'friends', 'f:milan'), FRIEND);
+    });
+    await assertFails(deleteDoc(doc(as(ALICE), 'friends', 'f:milan')));
+  });
+});
+
+describe('the all-time record cannot be forged', () => {
+  const entry = (over: Record<string, unknown> = {}) => ({
+    roomId: ROOM, round: 4, friendId: 'f:milan', name: 'Milan', seat: 0,
+    originalRole: 'ziener', finalRole: 'ziener', won: true,
+    voteOutcome: 'correct', suspicionAccuracy: null, recordedAt: 1,
+    ...over,
+  });
+  const id = (roomId = ROOM, round = 4, friendId = 'f:milan') =>
+    `${roomId}_${round}_${friendId}`;
+
+  it('the referee of an official evening can record it', async () => {
+    await seed('results', 0, 4, 'official');
+    await assertSucceeds(setDoc(doc(as(REF), 'history', id()), entry()));
+  });
+
+  it('a player cannot write their own history row', async () => {
+    // This is a player writing their own all-time scoreboard.
+    await seed('results', 0, 4, 'official');
+    await assertFails(setDoc(doc(as(ALICE), 'history', id()), entry()));
+  });
+
+  it('not even the host can', async () => {
+    await seed('results', 0, 4, 'official');
+    await assertFails(setDoc(doc(as(HOST), 'history', id()), entry()));
+  });
+
+  it('a PRACTICE evening reaches the record through nobody', async () => {
+    // The whole point of the mode. Testing must never touch real history, and
+    // this is checked against the room rather than trusted from the write.
+    await seed('results', 0, 4, 'practice');
+    await assertFails(setDoc(doc(as(REF), 'history', id()), entry()));
+  });
+
+  it('refuses a row filed under an id that is not its own room/round/friend', async () => {
+    // Create-only stops a row being overwritten; binding the id is what stops
+    // the same round being counted twice under another name.
+    await seed('results', 0, 4, 'official');
+    await assertFails(setDoc(doc(as(REF), 'history', 'anything'), entry()));
+    await assertFails(setDoc(doc(as(REF), 'history', id(ROOM, 9)), entry()));
+    await assertFails(
+      setDoc(doc(as(REF), 'history', id(ROOM, 4, 'f:someone')), entry()),
+    );
+  });
+
+  it('refuses a smuggled points field', async () => {
+    await seed('results', 0, 4, 'official');
+    await assertFails(
+      setDoc(doc(as(REF), 'history', id()), entry({ points: 9999 })),
+    );
+  });
+
+  it('refuses a row with no friend to belong to', async () => {
+    await seed('results', 0, 4, 'official');
+    await assertFails(
+      setDoc(doc(as(REF), 'history', `${ROOM}_4_`), entry({ friendId: '' })),
+    );
+  });
+
+  it('is immutable once written, by anybody', async () => {
+    await seed('results', 0, 4, 'official');
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'history', id()), entry());
+    });
+    await assertFails(updateDoc(doc(as(REF), 'history', id()), { won: false }));
+    await assertFails(updateDoc(doc(as(ALICE), 'history', id()), { won: false }));
+    await assertFails(deleteDoc(doc(as(REF), 'history', id())));
+    await assertFails(deleteDoc(doc(as(HOST), 'history', id())));
+  });
+
+  it('is readable by everyone, because the table is the whole point', async () => {
+    await seed('results', 0, 4, 'official');
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'history', id()), entry());
+    });
+    await assertSucceeds(getDoc(doc(as(ALICE), 'history', id())));
+  });
+});
+
+describe('a member carries a friend label and nothing worth points', () => {
+  it('accepts a join carrying who this person is', async () => {
+    await seed('day', 0, 4, 'official');
+    await assertSucceeds(
+      setDoc(doc(as('carl-uid'), 'rooms', ROOM, 'members', 'carl-uid'), {
+        uid: 'carl-uid', joinedAtRound: 5, leftAtRound: null,
+        friendId: 'f:carl', friendName: 'Carl',
+      }),
+    );
+  });
+
+  it('still refuses a seed alongside it', async () => {
+    await seed('day', 0, 4, 'official');
+    await assertFails(
+      setDoc(doc(as('carl-uid'), 'rooms', ROOM, 'members', 'carl-uid'), {
+        uid: 'carl-uid', joinedAtRound: 5, leftAtRound: null,
+        friendId: 'f:carl', friendName: 'Carl', seeded: 9999,
+      }),
     );
   });
 });

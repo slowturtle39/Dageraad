@@ -15,7 +15,8 @@ const A = 'a-uid', B = 'b-uid', C = 'c-uid', LATE = 'late-uid';
 
 function room(over: Partial<RoomView> = {}): RoomView {
   return {
-    roomId: 'ROOM1', hostUid: A, refereeUid: 'tablet', phase: 'lobby', round: 0,
+    roomId: 'ROOM1', hostUid: A, refereeUid: 'tablet', phase: 'lobby',
+    mode: 'practice', round: 0,
     nightWindowIndex: 0, activeRoles: [], config: {} as RoomView['config'],
     timeline: null, seating: [A, B, C],
     members: [A, B, C].map((uid) => ({ uid, joinedAtRound: 1, leftAtRound: null })),

@@ -5,6 +5,8 @@ import type {
 import type { Timeline } from '../engine/timeline.js';
 import type { VoteOutcome } from '../engine/dayphase.js';
 import type { RoundRecord, SessionMember, SessionStanding } from './session.js';
+import type { HistoryRecord } from '../stats/alltime.js';
+import type { FriendProfile } from './friend.js';
 import type { DayStore } from '../orchestration/dayrunner.js';
 import type { RoomStore } from '../orchestration/store.js';
 
@@ -54,6 +56,8 @@ export interface RoomView {
   members: SessionMember[];
   /** The evening's scoreboard, recomputed from the finished rounds. */
   standings: SessionStanding[];
+  /** Whether this evening counts toward all-time history. Immutable. */
+  mode: RoomMode;
   publicEvents: NightEvent[];
   shieldedSeats: SeatIndex[];
   /**
@@ -145,6 +149,17 @@ export interface GameResults {
 
 export interface CreateRoomOptions {
   displayName: string;
+  /**
+   * Whether this evening counts toward the group's all-time history.
+   *
+   * DEFAULTS TO 'practice' and is immutable once the room exists. The failure
+   * we can afford is a real evening accidentally not counting; the one we
+   * cannot is a test round in a year of append-only history that has no delete
+   * path by design.
+   */
+  mode?: RoomMode;
+  /** Which human is creating it, for history that spans evenings. */
+  friend?: FriendLabel;
   activeRoles: RoleId[];
   config: GameConfig;
   /**
@@ -158,6 +173,14 @@ export interface CreateRoomOptions {
    */
   playing?: boolean;
 }
+
+/** Who a device says it is across evenings. A label, never an authorisation. */
+export interface FriendLabel {
+  friendId: string;
+  friendName: string;
+}
+
+export type RoomMode = 'practice' | 'official';
 
 export interface Backend {
   /** This device's stable id. Every security rule keys off it. */
@@ -185,7 +208,7 @@ export interface Backend {
    * record; the seed stays visible as its own number rather than being
    * laundered into a win count.
    */
-  joinRoom(roomId: string, displayName: string): Promise<void>;
+  joinRoom(roomId: string, displayName: string, friend?: FriendLabel): Promise<void>;
 
   /**
    * Leave the session without ending it for everybody else.
@@ -263,6 +286,21 @@ export interface Backend {
    * rebuilt from, and a test round must produce the first without the second.
    */
   recordRound(roomId: string, record: RoundRecord): Promise<void>;
+
+  /**
+   * The group's all-time record, across every evening.
+   *
+   * Append-only per player per official round. Practice rooms contribute
+   * nothing, and that is decided against the room document rather than trusted
+   * from the caller. Totals are DERIVED from these on read (stats/alltime.ts)
+   * — there is no stored aggregate, because a stored total is a number
+   * somebody has to be trusted to have incremented correctly.
+   */
+  watchHistory(cb: (records: HistoryRecord[]) => void): Unsubscribe;
+
+  /** The shared address book. Chosen from when joining; created once. */
+  watchFriends(cb: (friends: FriendProfile[]) => void): Unsubscribe;
+  createFriend(displayName: string): Promise<FriendProfile>;
 
   /** Host: pause/resume for an absent player. Public and manual (§5.3). */
   setPaused(roomId: string, paused: boolean): Promise<void>;

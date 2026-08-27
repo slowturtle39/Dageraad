@@ -27,6 +27,7 @@ function room(over: Partial<RoomView> = {}): RoomView {
     hostUid: TABLET,
     refereeUid: TABLET,
     phase: 'night',
+    mode: 'practice',
     round: 1,
     nightWindowIndex: 0,
     activeRoles: [],

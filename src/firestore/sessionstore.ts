@@ -7,6 +7,12 @@ import {
   type RoundRecord, type SessionMember, type SessionStanding,
 } from '../app/session.js';
 import type { Unsubscribe } from '../app/backend.js';
+
+/** Who this device says it is, across evenings. Never an authorisation. */
+export interface FriendLabel {
+  friendId: string;
+  friendName: string;
+}
 import { paths, type RoundDoc, type SessionMemberDoc } from './schema.js';
 
 /**
@@ -27,7 +33,7 @@ import { paths, type RoundDoc, type SessionMemberDoc } from './schema.js';
  */
 export interface SessionStore {
   /** Add this device to the evening, at whatever round it is currently on. */
-  join(uid: string): Promise<void>;
+  join(uid: string, friend: FriendLabel): Promise<void>;
   /** Go home after the round now being played. Never ends it for anybody else. */
   leave(uid: string): Promise<void>;
   /** Come back. Re-uses the original joinedAtRound, and so the original seed. */
@@ -67,7 +73,7 @@ export class FirestoreSessionStore implements SessionStore {
    * recomputed from it. Nothing here decides how many points they start with,
    * because nothing here is allowed to.
    */
-  async join(uid: string): Promise<void> {
+  async join(uid: string, friend: FriendLabel): Promise<void> {
     // The NEXT round, not the one running: the deal is fixed the moment the
     // night starts, so an arrival plays from the following game. In the lobby
     // that is round 1, which is the same arithmetic rather than a special case.
@@ -75,6 +81,11 @@ export class FirestoreSessionStore implements SessionStore {
       uid,
       joinedAtRound: await this.currentRound() + 1,
       leftAtRound: null,
+      // Written once, at join. Whose row a finished round belongs to has to
+      // survive that person going home, so it lives on the membership rather
+      // than being looked up from a device that may be gone.
+      friendId: friend.friendId,
+      friendName: friend.friendName,
     };
     await setDoc(doc(this.db, paths.member(this.roomId, uid)), member);
   }
@@ -111,6 +122,8 @@ export class FirestoreSessionStore implements SessionStore {
           uid: d.id,
           joinedAtRound: typeof data.joinedAtRound === 'number' ? data.joinedAtRound : 1,
           leftAtRound: typeof data.leftAtRound === 'number' ? data.leftAtRound : null,
+          ...(data.friendId ? { friendId: data.friendId } : {}),
+          ...(data.friendName ? { friendName: data.friendName } : {}),
         };
       }));
     });

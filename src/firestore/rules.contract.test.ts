@@ -52,17 +52,31 @@ function interfaceFields(src: string, name: string): string[] {
 
 describe('the seed is not a stored field anywhere', () => {
   it('is absent from the session model', () => {
-    // If this fails, somebody has re-added the forgeable field to the type
-    // that Firestore documents are written from.
+    // Pinned as an exact list: a field added to a member document is a field
+    // one player can write, so adding one has to be deliberate and come with
+    // an argument. friendId/friendName are LABELS for history spanning
+    // evenings — they carry no points and authorise nothing, and the uid above
+    // is still what every rule checks.
     expect(interfaceFields(session, 'SessionMember')).toEqual([
-      'uid', 'joinedAtRound', 'leftAtRound',
+      'uid', 'joinedAtRound', 'leftAtRound', 'friendId', 'friendName',
     ]);
   });
 
   it('is absent from the Firestore document shape', () => {
     expect(interfaceFields(schema, 'SessionMemberDoc')).toEqual([
-      'uid', 'joinedAtRound', 'leftAtRound',
+      'uid', 'joinedAtRound', 'leftAtRound', 'friendId', 'friendName',
     ]);
+  });
+
+  it('carries no field that could be worth points', () => {
+    // The actual property, stated directly rather than implied by the list
+    // above: whatever a member document grows, none of it may be a score.
+    for (const iface of ['SessionMember', 'SessionMemberDoc'] as const) {
+      const src = iface === 'SessionMember' ? session : schema;
+      for (const field of interfaceFields(src, iface)) {
+        expect(field).not.toMatch(/seed|point|score|win|round(s)?Played/i);
+      }
+    }
   });
 
   it('is still visible on the scoreboard, because hiding it would be worse', () => {

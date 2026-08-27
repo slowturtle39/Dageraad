@@ -103,7 +103,7 @@ describe('the store cannot write a score even by accident', () => {
     // The moment this becomes a parameter, the joining device picks its own
     // seed again and the rules are the only thing left standing.
     expect(src).toMatch(/joinedAtRound: await this\.currentRound\(\) \+ 1/);
-    expect(src).toMatch(/async join\(uid: string\): Promise<void>/);
+    expect(src).toMatch(/async join\(uid: string, friend: FriendLabel\): Promise<void>/);
   });
 
   it('files a round under its own number, so it can be recorded once', () => {

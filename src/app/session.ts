@@ -86,6 +86,15 @@ export interface SessionMember {
   joinedAtRound: number;
   /** Round at which they left, or null if still here. */
   leftAtRound: number | null;
+  /**
+   * Which human this is, for history spanning evenings (friend.ts).
+   *
+   * A LABEL and never an authorisation: the uid above is what every security
+   * rule checks. Optional here because the evening's own scoreboard has never
+   * needed it and must keep working without it.
+   */
+  friendId?: string;
+  friendName?: string;
 }
 
 /** The round a member arrived for, defended against a nonsense value. */

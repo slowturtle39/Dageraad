@@ -10,8 +10,9 @@ import type {
 import type { DayStore } from '../orchestration/dayrunner.js';
 import type { RoomStore } from '../orchestration/store.js';
 import {
-  generateRoomCode, type Backend, type CreateRoomOptions, type GameResults,
-  type PlayerView, type PrivateView, type RoomView, type Unsubscribe,
+  generateRoomCode, type Backend, type CreateRoomOptions, type FriendLabel,
+  type GameResults, type PlayerView, type PrivateView, type RoomView,
+  type Unsubscribe,
 } from '../app/backend.js';
 import {
   canStartRound, seatingForNextRound, standings,
@@ -19,8 +20,11 @@ import {
 } from '../app/session.js';
 import { FirestoreRoomStore } from './roomstore.js';
 import { FirestoreSessionStore } from './sessionstore.js';
+import { newFriendId, normaliseName, type FriendProfile } from '../app/friend.js';
+import type { HistoryRecord } from '../stats/alltime.js';
 import {
   engineStateFromDoc, engineStateToDoc, paths,
+  type FriendDoc, type HistoryDoc,
   type EngineStateDoc, type PlayerDoc, type PrivateDoc, type RoomDoc,
 } from './schema.js';
 
@@ -77,6 +81,8 @@ export class FirestoreBackend implements Backend {
       refereeUid: this.uid,
       recoveryPhrase: null,
       phase: 'lobby',
+      // Practice unless somebody deliberately said otherwise.
+      mode: options.mode ?? 'practice',
       // 0 means "nothing played yet". Somebody joining now is a round-1
       // member, which is currentRound + 1 — the same arithmetic as joining
       // mid-evening rather than a special case.
@@ -108,7 +114,7 @@ export class FirestoreBackend implements Backend {
 
     if (playing) {
       await this.writePlayer(roomId, options.displayName);
-      await this.session(roomId).join(this.uid);
+      await this.session(roomId).join(this.uid, friendLabel(options.friend, options.displayName));
     }
     return roomId;
   }
@@ -153,7 +159,11 @@ export class FirestoreBackend implements Backend {
    * allowed to: the seed is derived from joinedAtRound, which the rules pin to
    * the room's own round counter. See sessionstore.ts.
    */
-  async joinRoom(roomId: string, displayName: string): Promise<void> {
+  async joinRoom(
+    roomId: string,
+    displayName: string,
+    friend?: FriendLabel,
+  ): Promise<void> {
     const room = await this.room(roomId);
 
     // A referee who sat the game out cannot change their mind and take a seat:
@@ -178,7 +188,7 @@ export class FirestoreBackend implements Backend {
       return;
     }
 
-    await this.session(roomId).join(this.uid);
+    await this.session(roomId).join(this.uid, friendLabel(friend, displayName));
 
     // In the lobby they sit down immediately; mid-round they wait. Seating is
     // the room document's, and in the lobby present members may rearrange it.
@@ -360,6 +370,7 @@ export class FirestoreBackend implements Backend {
       refereeUid: room.refereeUid,
       phase: room.phase,
       round: room.currentRound,
+      mode: room.mode ?? 'practice',
       nightWindowIndex: room.nightWindowIndex ?? 0,
       activeRoles: room.activeRoles ?? [],
       config: room.config,
@@ -578,5 +589,98 @@ export class FirestoreBackend implements Backend {
     const existing = await getDoc(doc(this.db, paths.round(roomId, record.round)));
     if (existing.exists()) return;
     await this.session(roomId).recordRound(record);
+
+    // ...and, for an official evening only, the group's all-time record.
+    const room = await this.room(roomId);
+    if ((room.mode ?? 'practice') !== 'official') return;
+    await this.writeHistory(roomId, record, await this.readMembers(roomId));
   }
+
+  /**
+   * One append-only row per player per official round.
+   *
+   * Keyed by room, round and friend, so recording the same round twice is a
+   * collision rather than a second row — the rules allow create and never
+   * update, so a referee refreshing their tab cannot double-count a year.
+   *
+   * A player with no friend profile is SKIPPED rather than written under a
+   * placeholder. We do not know who they were; inventing an identity for them
+   * would put a stranger in the group's history permanently.
+   */
+  private async writeHistory(
+    roomId: string,
+    record: RoundRecord,
+    members: SessionMember[],
+  ): Promise<void> {
+    const byUid = new Map(members.map((m) => [m.uid, m]));
+    const batch = writeBatch(this.db);
+    let wrote = 0;
+
+    for (const line of record.results) {
+      const member = byUid.get(line.uid);
+      const friendId = member?.friendId;
+      if (!friendId) continue;
+
+      const entry: HistoryDoc = {
+        roomId,
+        round: record.round,
+        friendId,
+        name: member.friendName ?? friendId,
+        seat: line.seat,
+        // Public at dawn: every card becomes public when the game ends (§6.0),
+        // and the vote outcome is already in the per-room results.
+        originalRole: line.originalRole,
+        finalRole: line.finalRole,
+        won: line.won,
+        voteOutcome: line.voteOutcome,
+        suspicionAccuracy: line.suspicionAccuracy,
+        recordedAt: Date.now(),
+      };
+      batch.set(doc(this.db, paths.historyEntry(roomId, record.round, friendId)), entry);
+      wrote += 1;
+    }
+
+    if (wrote > 0) await batch.commit();
+  }
+
+  /** The all-time record. Aggregated on read; nothing here is a total. */
+  watchHistory(cb: (records: HistoryRecord[]) => void): Unsubscribe {
+    return onSnapshot(collection(this.db, paths.history()), (snap) => {
+      cb(snap.docs.map((d) => d.data() as HistoryDoc));
+    });
+  }
+
+  watchFriends(cb: (friends: FriendProfile[]) => void): Unsubscribe {
+    return onSnapshot(collection(this.db, paths.friends()), (snap) => {
+      cb(snap.docs.map((d) => {
+        const data = d.data() as Partial<FriendDoc>;
+        return {
+          id: d.id,
+          displayName: data.displayName ?? d.id,
+          createdAt: data.createdAt ?? 0,
+        };
+      }));
+    });
+  }
+
+  async createFriend(displayName: string): Promise<FriendProfile> {
+    const profile: FriendProfile = {
+      id: newFriendId(),
+      displayName: normaliseName(displayName),
+      createdAt: Date.now(),
+    };
+    await setDoc(doc(this.db, paths.friend(profile.id)), profile);
+    return profile;
+  }
+}
+
+/**
+ * A friend label, falling back to something usable.
+ *
+ * A device that never picked a profile still has to be able to play — the
+ * evening works without any of this. It simply will not appear in the
+ * all-time table, which is the honest outcome: we do not know who it was.
+ */
+function friendLabel(friend: FriendLabel | undefined, displayName: string): FriendLabel {
+  return friend ?? { friendId: '', friendName: displayName };
 }

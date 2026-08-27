@@ -7,10 +7,12 @@ import type {
 } from '../engine/types.js';
 import type { DayStore } from '../orchestration/dayrunner.js';
 import type { RoomStore } from '../orchestration/store.js';
+import { newFriendId, normaliseName, type FriendProfile } from './friend.js';
+import type { HistoryRecord } from '../stats/alltime.js';
 import type { PublicNightView } from '../engine/publicview.js';
 import {
   generateRoomCode, type Backend, type CreateRoomOptions, type GameResults,
-  type PlayerView, type PrivateView, type RoomPhase, type RoomView,
+  type FriendLabel, type PlayerView, type PrivateView, type RoomPhase, type RoomView,
   type SeatResult, type Unsubscribe,
 } from './backend.js';
 import {
@@ -33,7 +35,20 @@ import {
  */
 export class MemoryWorld {
   private readonly rooms = new Map<string, RoomRecord>();
-  private readonly random: () => number;
+  readonly random: () => number;
+
+  /**
+   * The group, not one evening.
+   *
+   * Friends and all-time history sit on the WORLD rather than on a room,
+   * because that is exactly what makes them all-time: a friend is the same
+   * person in every room, and the record spans them. In Firestore these are
+   * top-level collections for the same reason.
+   */
+  readonly friends: FriendProfile[] = [];
+  readonly history: HistoryRecord[] = [];
+  readonly friendWatchers = new Set<(f: FriendProfile[]) => void>();
+  readonly historyWatchers = new Set<(h: HistoryRecord[]) => void>();
 
   constructor(random: () => number = Math.random) {
     this.random = random;
@@ -72,6 +87,7 @@ export class MemoryWorld {
         // can take over if this device fails (see Backend.takeEmergencyControl).
         refereeUid: uid,
         phase: 'lobby',
+        mode: options.mode ?? 'practice',
         round: 0,
         nightWindowIndex: 0,
         activeRoles: options.activeRoles,
@@ -79,7 +95,11 @@ export class MemoryWorld {
         timeline: null,
         seating: playing ? [uid] : [],
         members: playing
-          ? [{ uid, joinedAtRound: 1, leftAtRound: null }]
+          ? [{
+              uid, joinedAtRound: 1, leftAtRound: null,
+              friendId: options.friend?.friendId ?? '',
+              friendName: options.friend?.friendName ?? options.displayName,
+            }]
           : [],
         standings: [],
         publicEvents: [],
@@ -190,7 +210,11 @@ class MemoryBackend implements Backend {
     this.world.notify(roomId);
   }
 
-  async joinRoom(roomId: string, displayName: string): Promise<void> {
+  async joinRoom(
+    roomId: string,
+    displayName: string,
+    friend?: FriendLabel,
+  ): Promise<void> {
     const r = this.world.room(roomId);
 
     // A referee who sat the game out cannot change their mind and take a seat:
@@ -234,7 +258,11 @@ class MemoryBackend implements Backend {
     });
     r.view.members = [
       ...r.view.members,
-      { uid: this.uid, joinedAtRound: nextRound, leftAtRound: null },
+      {
+        uid: this.uid, joinedAtRound: nextRound, leftAtRound: null,
+        friendId: friend?.friendId ?? '',
+        friendName: friend?.friendName ?? displayName,
+      },
     ];
 
     // In the lobby they sit down immediately; mid-round they wait, because
@@ -450,6 +478,30 @@ class MemoryBackend implements Backend {
     this.world.notify(roomId);
   }
 
+  /** The all-time record. Aggregated on read; nothing stored is a total. */
+  watchHistory(cb: (records: HistoryRecord[]) => void): Unsubscribe {
+    this.world.historyWatchers.add(cb);
+    cb([...this.world.history]);
+    return () => this.world.historyWatchers.delete(cb);
+  }
+
+  watchFriends(cb: (friends: FriendProfile[]) => void): Unsubscribe {
+    this.world.friendWatchers.add(cb);
+    cb([...this.world.friends]);
+    return () => this.world.friendWatchers.delete(cb);
+  }
+
+  async createFriend(displayName: string): Promise<FriendProfile> {
+    const profile: FriendProfile = {
+      id: newFriendId(this.world.random),
+      displayName: normaliseName(displayName),
+      createdAt: Date.now(),
+    };
+    this.world.friends.push(profile);
+    for (const cb of this.world.friendWatchers) cb([...this.world.friends]);
+    return profile;
+  }
+
   async recordRound(roomId: string, record: RoundRecord): Promise<void> {
     const r = this.world.room(roomId);
     this.requireReferee(r);
@@ -458,6 +510,36 @@ class MemoryBackend implements Backend {
     // tab must not double-score the evening.
     if (r.rounds.some((x) => x.round === record.round)) return;
     r.rounds = [...r.rounds, record];
+
+    // Only an official evening reaches the group's all-time record, and a
+    // player with no friend profile is skipped rather than invented: we do not
+    // know who they were, and this record is append-only.
+    if (r.view.mode === 'official') {
+      const byUid = new Map(r.view.members.map((m) => [m.uid, m]));
+      for (const line of record.results) {
+        const member = byUid.get(line.uid);
+        if (!member?.friendId) continue;
+        const already = this.world.history.some(
+          (h) => h.roomId === roomId && h.round === record.round
+            && h.friendId === member.friendId,
+        );
+        if (already) continue;
+        this.world.history.push({
+          roomId, round: record.round,
+          friendId: member.friendId,
+          name: member.friendName ?? member.friendId,
+          seat: line.seat,
+          originalRole: line.originalRole,
+          finalRole: line.finalRole,
+          won: line.won,
+          voteOutcome: line.voteOutcome,
+          suspicionAccuracy: line.suspicionAccuracy,
+          recordedAt: Date.now(),
+        });
+      }
+      for (const cb of this.world.historyWatchers) cb([...this.world.history]);
+    }
+
     this.world.notify(roomId);
   }
 

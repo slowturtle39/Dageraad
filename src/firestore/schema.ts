@@ -28,6 +28,9 @@ import type { RoundResult } from '../app/session.js';
 /** Room lifecycle. Several rules key off this, so the order matters. */
 export type RoomPhase = 'lobby' | 'night' | 'day' | 'voting' | 'results';
 
+/** Practice rounds are played and stored in full; they are never counted. */
+export type RoomMode = 'practice' | 'official';
+
 export interface RoomDoc {
   /** Created the room and normally manages its setup. */
   hostUid: string;
@@ -45,6 +48,20 @@ export interface RoomDoc {
    */
   recoveryPhrase: string | null;
   phase: RoomPhase;
+  /**
+   * Whether this evening counts.
+   *
+   * IMMUTABLE AFTER CREATION, and the rules enforce it. A room that could be
+   * promoted from practice to official after the fact would let a good night
+   * be retconned into the record and a bad one quietly demoted, which is worse
+   * than having no history at all.
+   *
+   * Defaults to 'practice' EVERYWHERE, deliberately: the failure we can afford
+   * is a real evening accidentally not counting, which is annoying. The one we
+   * cannot is a test round polluting a year of history, because the records
+   * are append-only and there is no delete path by design.
+   */
+  mode: RoomMode;
   /**
    * Which game of the evening this is, counting from 1 (0 in the lobby).
    *
@@ -278,6 +295,17 @@ export interface SessionMemberDoc {
   joinedAtRound: number;
   /** The LAST round they play, not the first they miss. Null while still here. */
   leftAtRound: number | null;
+  /**
+   * Which human this device is, for history that spans evenings.
+   *
+   * A LABEL, never an authorisation. Every rule still keys off the uid; this
+   * only says whose row in the all-time table a finished round belongs to. It
+   * is on the member document rather than looked up later because a player can
+   * go home, and the record of who was here has to survive them leaving.
+   */
+  friendId: string;
+  /** What they were called this evening, so old rounds stay readable. */
+  friendName: string;
 }
 
 /**
@@ -296,6 +324,51 @@ export interface RoundDoc {
   seatCount: number;
   outcome: string;
   results: RoundResult[];
+  recordedAt: number;
+}
+
+/**
+ * A friend of the group. Chosen from a list when joining, created once.
+ *
+ * Deliberately thin, and deliberately not owned by anybody: it is a shared
+ * address book for eight people who know each other, not an account. There is
+ * no password because there is nothing here worth taking — claiming to be
+ * somebody else buys you their board game scoreboard and nothing whatsoever
+ * inside a game, where the uid is still what every rule checks.
+ */
+export interface FriendDoc {
+  id: string;
+  displayName: string;
+  createdAt: number;
+}
+
+/**
+ * One player's line in one finished OFFICIAL round. The all-time record.
+ *
+ * Append-only and immutable, like the per-room results it mirrors, and for a
+ * stronger reason: this is the only thing the group's history is made of, so
+ * an editable row is an editable year.
+ *
+ * EVERYTHING HERE IS PUBLIC AT DAWN. Roles become public when the game ends
+ * (§6.0) and the vote outcome is already in the per-room results. Nothing
+ * about the night — targets, reveals, what anybody saw — appears, and nothing
+ * that was ever secret is made public a moment earlier than it already was.
+ *
+ * Practice rooms write nothing here at all. That is checked in the rules
+ * against the room document rather than trusted from the write.
+ */
+export interface HistoryDoc {
+  roomId: string;
+  round: number;
+  friendId: string;
+  /** Name snapshot at the time, so an old evening reads correctly. */
+  name: string;
+  seat: number;
+  originalRole: RoleId;
+  finalRole: RoleId;
+  won: boolean;
+  voteOutcome: VoteOutcome;
+  suspicionAccuracy: number | null;
   recordedAt: number;
 }
 
@@ -341,5 +414,11 @@ export const paths = {
   /** Keyed by round number, so recording the same round twice is a collision. */
   round: (roomId: string, round: number) => `rooms/${roomId}/rounds/${round}`,
   profile: (uid: string) => `profiles/${uid}`,
+  friends: () => 'friends',
+  friend: (friendId: string) => `friends/${friendId}`,
+  /** Append-only, one document per player per official round, across evenings. */
+  history: () => 'history',
+  historyEntry: (roomId: string, round: number, friendId: string) =>
+    `history/${roomId}_${round}_${friendId}`,
   calibration: () => 'calibration',
 } as const;

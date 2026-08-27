@@ -119,6 +119,10 @@ service cloud.firestore {
 
       allow create: if signedIn()
         && request.resource.data.hostUid == uid()
+        // Practice unless somebody deliberately said otherwise. The failure we
+        // can afford is a real evening not counting; the one we cannot is a
+        // test round in append-only history with no delete path.
+        && request.resource.data.mode in ['practice', 'official']
         // The creator may hand the referee role to the tablet. An explicit,
         // trusted-group recovery route is the sole way it can move later.
         && request.resource.data.refereeUid is string
@@ -132,6 +136,11 @@ service cloud.firestore {
           ((isHost(roomId) || isReferee(roomId) || memberArrangesLobbySeating(roomId))
             && !changed('refereeUid')
             && !changed('hostUid')
+        // Whether this evening counts is fixed when the room is made. A room
+        // that could be promoted afterwards would let a good night be
+        // retconned into the record and a bad one quietly demoted — worse
+        // than having no history at all, because you could not tell.
+        && !changed('mode')
             // currentRound only ever goes forward. It is what a joining member's
             // `joinedAtRound` is pinned to, and therefore the sole input to their
             // seed: rewinding it would let the referee re-admit somebody against a
@@ -292,7 +301,7 @@ service cloud.firestore {
         allow create: if signedIn()
           && (memberUid == uid() || isHost(roomId))
           && request.resource.data.keys().hasOnly(
-               ['uid', 'joinedAtRound', 'leftAtRound']
+               ['uid', 'joinedAtRound', 'leftAtRound', 'friendId', 'friendName']
              )
           && request.resource.data.uid == memberUid
           && request.resource.data.joinedAtRound is int
@@ -310,7 +319,7 @@ service cloud.firestore {
         allow update: if signedIn()
           && (memberUid == uid() || isHost(roomId))
           && request.resource.data.keys().hasOnly(
-               ['uid', 'joinedAtRound', 'leftAtRound']
+               ['uid', 'joinedAtRound', 'leftAtRound', 'friendId', 'friendName']
              )
           && request.resource.data.uid == resource.data.uid
           && request.resource.data.joinedAtRound == resource.data.joinedAtRound
@@ -385,6 +394,90 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(
              ['role', 'key', 'latencyMs', 'outcome', 'paused', 'sessionId', 'createdAt']
            );
+      allow update, delete: if false;
+    }
+
+    // -------------------------------------------------------------- friends
+    // The group's shared address book: which humans exist, so a history can
+    // follow a person across phones and rooms (see app/friend.ts).
+    //
+    // Deliberately owned by nobody and protected by nothing. This is eight
+    // people who know each other, and claiming to be one of them buys you
+    // their board game scoreboard and NOTHING inside a game — every rule in
+    // this file still keys off the uid. Putting a password on it would be
+    // security theatre with a real cost in friction.
+    //
+    // What the rules DO enforce is shape: a friend is an id, a name and a
+    // date, and nothing that could ever be worth points.
+    match /friends/{friendId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['id', 'displayName', 'createdAt'])
+        && request.resource.data.id == friendId
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 40;
+
+      // Renaming is allowed — people change what they go by, and the id is
+      // what history is keyed on, so a rename costs nothing. The id itself
+      // never moves, because moving it would silently merge two histories.
+      allow update: if signedIn()
+        && request.resource.data.keys().hasOnly(['id', 'displayName', 'createdAt'])
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0;
+
+      // A deleted friend is a deleted history. The rows would survive and
+      // point at nobody, which is worse than an unused name in a list.
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------- history
+    // The group's all-time record: one document per player per OFFICIAL
+    // round, across every evening.
+    //
+    // Append-only and immutable, like the per-room results it mirrors, and for
+    // a stronger reason: this is the only thing the group's history is made
+    // of, so an editable row is an editable year.
+    //
+    // THERE IS NO STORED TOTAL, deliberately. Totals are recomputed from these
+    // rows on every read (stats/alltime.ts). A stored aggregate is a number
+    // somebody has to be trusted to have incremented correctly, and this
+    // schema has already been bitten once by exactly that.
+    //
+    // Everything written here is PUBLIC AT DAWN: roles become public when the
+    // game ends (§6.0) and the vote outcome is already in the per-room
+    // results. Nothing about the night appears — no targets, no reveals, no
+    // unrevealed card ever gets named.
+    match /history/{entryId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        // Only the referee of the room being recorded. A player writing their
+        // own history row is a player writing their own scoreboard.
+        && isReferee(request.resource.data.roomId)
+        // ...and only for an evening that was declared official when it was
+        // created. Checked against the room, never trusted from the write.
+        && roomDoc(request.resource.data.roomId).mode == 'official'
+        && request.resource.data.keys().hasOnly([
+             'roomId', 'round', 'friendId', 'name', 'seat',
+             'originalRole', 'finalRole', 'won', 'voteOutcome',
+             'suspicionAccuracy', 'recordedAt'
+           ])
+        && request.resource.data.round is int
+        && request.resource.data.seat is int
+        && request.resource.data.won is bool
+        && request.resource.data.friendId is string
+        && request.resource.data.friendId.size() > 0
+        // The id binds the row to its room, round and player, so recording the
+        // same round twice is a collision rather than a second row — a referee
+        // refreshing a tab cannot double-count a year.
+        && entryId == request.resource.data.roomId + '_'
+             + string(request.resource.data.round) + '_'
+             + request.resource.data.friendId;
+
       allow update, delete: if false;
     }
 
