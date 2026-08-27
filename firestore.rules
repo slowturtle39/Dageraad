@@ -248,8 +248,17 @@ service cloud.firestore {
         // Naming a target is still confined to 'voting'. Letting someone lock a
         // target in during the discussion would quietly turn a simultaneous
         // vote into a first-mover one, even though nobody can read it yet.
+        // A vote document also carries `readyToVote` — "let us open the
+        // ballot now". It is a decision about the CLOCK rather than the
+        // outcome, so it is allowed during the discussion exactly as an
+        // abstain is, and it is subject to the same refusals: still no self
+        // vote, and still no named target before voting opens. Asking to vote
+        // must not become a way to smuggle a target in early.
         allow create, update: if signedIn()
           && playerUid == uid()
+          && request.resource.data.keys().hasOnly(
+               ['target', 'abstain', 'readyToVote', 'castAt']
+             )
           // §7: never allowed to vote for yourself. Enforced here as well as
           // in the UI, so a hand-crafted write cannot do it either.
           && request.resource.data.target != uid()

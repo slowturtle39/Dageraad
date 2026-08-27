@@ -39,6 +39,17 @@ export interface VotingView {
   onTarget: (seat: SeatIndex) => void;
   onAbstain: (next: boolean) => void;
   onConfirm: () => void;
+  /**
+   * "I am ready — let us vote now."
+   *
+   * A separate toggle from the abstain, and separate on purpose: abstaining is
+   * a decision about the OUTCOME, this is one about the CLOCK. Collapsing them
+   * into one control would make a table that has simply finished arguing look
+   * like a table that has given up.
+   */
+  readyToVote?: boolean;
+  earlyVoteCount?: number;
+  onReadyToVote?: (next: boolean) => void;
 }
 
 export function renderVoting(view: VotingView): HTMLElement {
@@ -94,6 +105,29 @@ export function renderVoting(view: VotingView): HTMLElement {
     `${view.abstainCount} van de ${view.seatCount} willen niet stemmen. ` +
     `Vanaf ${needed} gaat de stemming niet door.`;
   el.append(tally);
+
+  // Only during the discussion. Once the ballot is open there is nothing left
+  // to ask for, and a button that does nothing is worse than no button.
+  if (!view.votingOpen && view.onReadyToVote) {
+    const ready = document.createElement('button');
+    ready.type = 'button';
+    ready.className = view.readyToVote ? 'btn btn--primary' : 'btn';
+    ready.dataset.ready = 'true';
+    ready.textContent = view.readyToVote
+      ? t(view.lang, 'day.readyToVoteOn', {
+          n: view.earlyVoteCount ?? 0, needed,
+        })
+      : t(view.lang, 'day.readyToVote');
+    ready.addEventListener('click', () => view.onReadyToVote?.(!view.readyToVote));
+    el.append(ready);
+
+    // Said every time, because the two toggles sit next to each other and the
+    // difference between them is the whole point.
+    const explain = document.createElement('p');
+    explain.className = 'sheet__note';
+    explain.textContent = t(view.lang, 'day.readyExplain');
+    el.append(explain);
+  }
 
   if (view.votingOpen) {
     // Voting is MANDATORY once the timer has expired and the group did not

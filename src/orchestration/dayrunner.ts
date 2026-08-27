@@ -1,4 +1,7 @@
-import { resolveDay, voteOutcomes, type DayOptions, type DayResult, type Vote, type VoteOutcome } from '../engine/dayphase.js';
+import {
+  isMajorityReadyToVote, readyToVoteCount, resolveDay, voteOutcomes,
+  type DayOptions, type DayResult, type Vote, type VoteOutcome,
+} from '../engine/dayphase.js';
 import type { NightState, SeatIndex } from '../engine/types.js';
 import type { Clock } from './clock.js';
 
@@ -63,6 +66,14 @@ export interface DayRunnerHooks {
   onVoteProgress?: (cast: number, total: number) => void;
   /** Live abstain count, for the same reason. Runs the whole discussion. */
   onAbstainProgress?: (abstaining: number, needed: number) => void;
+  /**
+   * How many have asked to start voting, and how many it would take.
+   *
+   * A count, like the others. Publishing WHO asked would turn a show of hands
+   * into a record of who was impatient, and at a table that is information
+   * about how confident somebody is.
+   */
+  onEarlyVoteProgress?: (ready: number, needed: number) => void;
 }
 
 export interface DayRunResult {
@@ -116,18 +127,24 @@ export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
   // that there is nothing to gain can simply stop, rather than sitting out a
   // timer they have all already given up on.
   if (config.discussionEnabled) {
-    endedByAbstain = await watchForAbstain(
+    let ending = await watchDiscussion(
       store, clock, config, config.discussionMs, hooks,
     );
+    endedByAbstain = ending === 'abstain';
 
     // Rolled only AFTER the timer expires, so nobody can time their accusation
     // around a known answer. Public the moment it happens.
-    if (!endedByAbstain && config.suspenseExtension && random() < 0.5) {
+    //
+    // Skipped entirely when the table ASKED to vote: the extension exists to
+    // stretch a discussion nobody has finished, and a group that has just said
+    // it is finished would read two more minutes as the app ignoring them.
+    if (ending === 'expired' && config.suspenseExtension && random() < 0.5) {
       extended = true;
       await store.announceExtension(config.suspenseExtensionMs);
-      endedByAbstain = await watchForAbstain(
+      ending = await watchDiscussion(
         store, clock, config, config.suspenseExtensionMs, hooks,
       );
+      endedByAbstain = ending === 'abstain';
     }
   }
 
@@ -155,22 +172,33 @@ export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
   };
 }
 
+/** Why the discussion stopped. */
+type DiscussionEnd = 'abstain' | 'early' | 'expired';
+
 /**
- * Watch for a majority abstain, for the whole stretch handed to us.
+ * Watch the discussion, for the whole stretch handed to us.
  *
- * The check is "more than half have the toggle on AT THE SAME TIME", not "more
- * than half have touched it at some point" — it is a simultaneous show of
- * hands, so somebody switching theirs back off genuinely undoes it. That is
- * what stops an early majority being irreversible: the group can change its
- * mind right up until the moment it holds.
+ * TWO majorities can end it, and they mean different things. A majority
+ * ABSTAINING is a decision about the outcome: nobody hangs, and the round is
+ * over. A majority READY TO VOTE is a decision about the clock: we have
+ * finished arguing, open the ballot. Both are checked here because both are
+ * simultaneous shows of hands with the same reversibility.
+ *
+ * The check is "more than half hold it AT THE SAME TIME", not "more than half
+ * touched it at some point" — so putting your hand back down genuinely undoes
+ * it, and the group can change its mind right up until the moment it holds.
+ *
+ * Abstain is tested first. If a table somehow reaches both at once it has said
+ * both "let us vote" and "let us not"; the stronger statement wins, and it is
+ * the one that ends the round rather than starting a ballot nobody wanted.
  */
-async function watchForAbstain(
+async function watchDiscussion(
   store: DayStore,
   clock: Clock,
   config: DayConfig,
   durationMs: number,
   hooks: DayRunnerHooks,
-): Promise<boolean> {
+): Promise<DiscussionEnd> {
   const needed = Math.floor(config.seatCount / 2) + 1;
   let elapsed = 0;
   while (elapsed < durationMs) {
@@ -181,9 +209,12 @@ async function watchForAbstain(
     const votes = await store.readVotes();
     const abstaining = [...votes.values()].filter((v) => v.abstain).length;
     hooks.onAbstainProgress?.(abstaining, needed);
-    if (isMajorityAbstaining(votes, config.seatCount)) return true;
+    hooks.onEarlyVoteProgress?.(readyToVoteCount(votes), needed);
+
+    if (isMajorityAbstaining(votes, config.seatCount)) return 'abstain';
+    if (isMajorityReadyToVote(votes, config.seatCount)) return 'early';
   }
-  return false;
+  return 'expired';
 }
 
 /**

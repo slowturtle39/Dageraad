@@ -72,6 +72,8 @@ export interface RoomView {
   /** Live counts, published by the referee. Never who voted for whom. */
   abstainCount: number;
   votesCast: number;
+  /** How many have asked to start voting. A count, never a list of names. */
+  earlyVoteCount: number;
   pausedAt: number | null;
   /** Set when the 50/50 suspense extension fires (§7). Public on purpose. */
   discussionExtendedByMs: number;
@@ -252,6 +254,16 @@ export interface Backend {
    * any moment, but nobody may lock in a target early.
    */
   vote(roomId: string, target: string | null, abstain: boolean): Promise<void>;
+
+  /**
+   * "I am ready — let us vote now." Reversible, and not an abstain.
+   *
+   * A decision about the CLOCK, not the outcome: abstaining says nobody
+   * hangs, this says we have finished arguing. Strictly more than half of the
+   * seated players holding it at once opens the ballot. Only the COUNT is ever
+   * published — who asked is a fact about how confident somebody is.
+   */
+  requestEarlyVote(roomId: string, requested: boolean): Promise<void>;
 
   /** The referee's own view of the room, for runNight/runDay. */
   refereeStore(roomId: string): RoomStore & DayStore;

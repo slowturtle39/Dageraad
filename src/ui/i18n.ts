@@ -176,6 +176,13 @@ const nl: Dict = {
   'prompt.nothingToDo': 'Je hoeft nu niets te doen.',
 
   'day.voteNow': 'Stemmen',
+  // A decision about the CLOCK, not the uitslag. Het scherm zegt dat erbij,
+  // anders leest het als een tweede manier om af te zien van stemmen.
+  'day.readyToVote': 'Ik ben klaar — laten we stemmen',
+  'day.readyToVoteOn': 'Je wacht op de rest ({n}/{needed})',
+  'day.readyExplain':
+    'Dit is niet hetzelfde als afzien van stemmen. Zodra meer dan de helft ' +
+    'dit tegelijk aan heeft, gaat de stemming meteen open.',
   'day.discussing': 'Overleg',
   'results.title': 'Uitslag',
   'results.nextRound': 'Volgende ronde',
@@ -363,6 +370,11 @@ const en: Dict = {
   'prompt.nothingToDo': 'Nothing for you to do right now.',
 
   'day.voteNow': 'Vote',
+  'day.readyToVote': 'I\u2019m ready \u2014 let\u2019s vote',
+  'day.readyToVoteOn': 'Waiting for the others ({n}/{needed})',
+  'day.readyExplain':
+    'This is not the same as voting not to vote. The moment more than half ' +
+    'hold this at once, the ballot opens.',
   'day.discussing': 'Discussion',
   'results.title': 'Result',
   'results.nextRound': 'Next round',

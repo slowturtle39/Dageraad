@@ -301,12 +301,19 @@ describe('voting', () => {
     expect(room!.votesCast).toBe(2);
     expect(room!.abstainCount).toBe(1);
     // The seating order is public — who voted for whom is not. Everything the
-    // room view says about the vote is these two counts and nothing else.
+    // room view says about the vote is COUNTS, and nothing else.
     const voteFields = Object.entries(room!)
       .filter(([k]) => /vote|abstain|target/i.test(k))
-      .map(([k]) => k)
-      .sort();
-    expect(voteFields).toEqual(['abstainCount', 'votesCast']);
+      .sort(([a], [b]) => a.localeCompare(b));
+    expect(voteFields.map(([k]) => k))
+      .toEqual(['abstainCount', 'earlyVoteCount', 'votesCast']);
+
+    // The property, stated directly rather than implied by that list: every
+    // one of them is a number. A field here that held seats or uids would be
+    // a public record of who did what, whatever it was called.
+    for (const [key, value] of voteFields) {
+      expect(typeof value, `${key} must be a count`).toBe('number');
+    }
   });
 });
 

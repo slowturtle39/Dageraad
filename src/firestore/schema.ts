@@ -112,6 +112,14 @@ export interface RoomDoc {
    */
   votesCast: number;
   abstainCount: number;
+  /**
+   * How many have asked to open the ballot early.
+   *
+   * A COUNT. Publishing which seats asked would turn a show of hands into a
+   * record of who was impatient, and at a table that is information about how
+   * confident somebody is feeling.
+   */
+  earlyVoteCount: number;
   /** Set when the 50/50 suspense extension fires (§7). Public on purpose. */
   discussionExtendedByMs: number;
   /**
@@ -239,6 +247,8 @@ export interface VoteDoc {
   /** null = abstained without naming anyone. Never equal to your own uid (§7). */
   target: string | null;
   abstain: boolean;
+  /** "Let us vote now." Separate from abstain; see Backend.requestEarlyVote. */
+  readyToVote?: boolean;
   castAt: number;
 }
 

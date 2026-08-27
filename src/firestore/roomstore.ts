@@ -167,15 +167,28 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
     for (const d of snap.docs) {
       const seat = seats.get(d.id);
       if (seat === undefined) continue;
-      const data = d.data() as { target?: string | null; abstain?: boolean };
+      const data = d.data() as {
+        target?: string | null; abstain?: boolean; readyToVote?: boolean;
+      };
       const targetSeat =
         data.target == null ? null : (seats.get(data.target) ?? null);
       out.set(seat, {
         voter: seat,
         target: targetSeat,
         abstain: data.abstain === true,
+        readyToVote: data.readyToVote === true,
       });
     }
+
+    // The public counts, republished from what was just read. Counts only:
+    // who abstained, who asked to vote, and who targeted whom all stay
+    // referee-only until the results (§7).
+    await updateDoc(this.room(), {
+      abstainCount: [...out.values()].filter((v) => v.abstain).length,
+      earlyVoteCount: [...out.values()].filter((v) => v.readyToVote === true).length,
+      votesCast: [...out.values()].filter((v) => v.target !== null || v.abstain).length,
+    });
+
     return out;
   }
 

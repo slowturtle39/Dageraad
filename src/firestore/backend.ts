@@ -104,6 +104,7 @@ export class FirestoreBackend implements Backend {
       pausedAt: null,
       votesCast: 0,
       abstainCount: 0,
+      earlyVoteCount: 0,
       discussionExtendedByMs: 0,
       finalRoles: null,
       outcome: null,
@@ -382,6 +383,7 @@ export class FirestoreBackend implements Backend {
       shieldedSeats: room.shieldedSeats ?? [],
       revealedSlots: room.revealedSlots ?? {},
       abstainCount: room.abstainCount ?? 0,
+      earlyVoteCount: room.earlyVoteCount ?? 0,
       votesCast: room.votesCast ?? 0,
       pausedAt: room.pausedAt ?? null,
       discussionExtendedByMs: room.discussionExtendedByMs ?? 0,
@@ -521,6 +523,25 @@ export class FirestoreBackend implements Backend {
     await setDoc(doc(this.db, paths.vote(roomId, this.uid)), {
       target, abstain, castAt: Date.now(),
     });
+  }
+
+  /**
+   * Ask to open the ballot now. Reversible, and not an abstain.
+   *
+   * Written onto this device's own vote document, which only its owner may
+   * write and only the referee may read — so the request is private in exactly
+   * the way a vote is, and only the count ever becomes public.
+   */
+  async requestEarlyVote(roomId: string, requested: boolean): Promise<void> {
+    const room = await this.room(roomId);
+    if (room.phase !== 'day' && room.phase !== 'voting') {
+      throw new Error(`cannot ask to vote in phase ${room.phase}`);
+    }
+    await setDoc(
+      doc(this.db, paths.vote(roomId, this.uid)),
+      { readyToVote: requested, castAt: Date.now() },
+      { merge: true },
+    );
   }
 
   /* ------------------------------- referee ------------------------------- */

@@ -47,6 +47,7 @@ function room(over: Partial<RoomView> = {}): RoomView {
     shieldedSeats: [],
     revealedSlots: {},
     abstainCount: 0,
+    earlyVoteCount: 0,
     votesCast: 0,
     pausedAt: null,
     discussionExtendedByMs: 0,

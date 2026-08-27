@@ -106,6 +106,7 @@ export class MemoryWorld {
         shieldedSeats: [],
         revealedSlots: {},
         abstainCount: 0,
+        earlyVoteCount: 0,
         votesCast: 0,
         pausedAt: null,
         discussionExtendedByMs: 0,
@@ -176,7 +177,7 @@ interface RoomRecord {
   players: Map<string, PlayerView>;
   privates: Map<string, PrivateView>;
   submissions: Map<string, { windowIndex: number; choices: Record<string, Choice> }>;
-  votes: Map<string, { target: string | null; abstain: boolean }>;
+  votes: Map<string, { target: string | null; abstain: boolean; readyToVote?: boolean }>;
   /** Append-only, live games only. What profile stats aggregate from. */
   results: Map<string, SeatResult>;
   /** Finished rounds. Append-only: the scoreboard is rebuilt from these. */
@@ -436,7 +437,21 @@ class MemoryBackend implements Backend {
     const phase = r.view.phase;
     const ok = phase === 'voting' || (phase === 'day' && target === null);
     if (!ok) throw new Error(`cannot vote in phase ${phase}`);
-    r.votes.set(this.uid, { target, abstain });
+    const existing = r.votes.get(this.uid);
+    r.votes.set(this.uid, { target, abstain, readyToVote: existing?.readyToVote });
+    this.world.notify(roomId);
+  }
+
+  /** "Let us vote now." Reversible, private, and not an abstain. */
+  async requestEarlyVote(roomId: string, requested: boolean): Promise<void> {
+    const r = this.world.room(roomId);
+    const phase = r.view.phase;
+    if (phase !== 'day' && phase !== 'voting') {
+      throw new Error(`cannot ask to vote in phase ${phase}`);
+    }
+    const existing = r.votes.get(this.uid) ?? { target: null, abstain: false };
+    r.votes.set(this.uid, { ...existing, readyToVote: requested });
+    this.world.notify(roomId);
   }
 
   async setPaused(roomId: string, paused: boolean): Promise<void> {

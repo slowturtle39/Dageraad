@@ -63,6 +63,8 @@ interface Local {
   /** Day phase: who this device is voting for, and whether it is abstaining. */
   voteTarget: SeatIndex | null;
   abstaining: boolean;
+  /** "Let us vote now." A decision about the clock, not the outcome. */
+  readyToVote: boolean;
   /** True once this device has run the round it is refereeing. */
   refereeRunning: boolean;
   /** Which human this device is, across evenings. Null until picked. */
@@ -91,6 +93,7 @@ const local: Local = {
   pickedCenters: [],
   voteTarget: null,
   abstaining: false,
+  readyToVote: false,
   refereeRunning: false,
   friend: null,
   friends: [],
@@ -866,6 +869,16 @@ function voteSheet(ownSeat: SeatIndex): HTMLElement {
         render();
       },
       onConfirm: () => cast(local.voteTarget, false),
+      readyToVote: local.readyToVote,
+      earlyVoteCount: room.earlyVoteCount,
+      // Sent immediately, like the abstain, because it is counted
+      // simultaneously — a request that only lands when you confirm something
+      // else is not a show of hands.
+      onReadyToVote: (next) => {
+        local.readyToVote = next;
+        void attempt(() => backend.requestEarlyVote(roomId, next));
+        render();
+      },
     }),
   });
 }

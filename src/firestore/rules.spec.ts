@@ -1059,3 +1059,90 @@ describe('what the table can see', () => {
     );
   });
 });
+
+/* ==================================================================== */
+
+describe('asking to open the ballot early', () => {
+  // A decision about the CLOCK rather than the outcome. It rides on the vote
+  // document, so the properties to prove are that it inherits a vote's privacy
+  // and cannot be used to smuggle a target in before voting opens.
+
+  it('is accepted during the discussion', async () => {
+    await seed('day');
+    await assertSucceeds(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
+        target: null, abstain: false, readyToVote: true,
+      }),
+    );
+  });
+
+  it('can be withdrawn, because it is a show of hands', async () => {
+    await seed('day');
+    await assertSucceeds(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
+        target: null, abstain: false, readyToVote: false,
+      }),
+    );
+  });
+
+  it('cannot smuggle a target in during the discussion', async () => {
+    // The refusal that matters. Asking to vote must not become a way to lock
+    // a target in early — that would quietly turn a simultaneous vote into a
+    // first-mover one.
+    await seed('day');
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
+        target: BOB, abstain: false, readyToVote: true,
+      }),
+    );
+  });
+
+  it('still refuses a self-vote alongside it', async () => {
+    await seed('voting');
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
+        target: ALICE, abstain: false, readyToVote: true,
+      }),
+    );
+  });
+
+  it('cannot be asked on somebody else\'s behalf', async () => {
+    await seed('day');
+    await assertFails(
+      setDoc(doc(as(BOB), 'rooms', ROOM, 'votes', ALICE), {
+        target: null, abstain: false, readyToVote: true,
+      }),
+    );
+  });
+
+  it('stays as private as the vote it rides on', async () => {
+    // Who asked is information about how confident somebody is feeling. Only
+    // the count is ever public, and the count lives on the room document.
+    await seed('day');
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'votes', ALICE), {
+        target: null, abstain: false, readyToVote: true,
+      });
+    });
+    await assertFails(getDoc(doc(as(BOB), 'rooms', ROOM, 'votes', ALICE)));
+    await assertSucceeds(getDoc(doc(as(REF), 'rooms', ROOM, 'votes', ALICE)));
+  });
+
+  it('refuses a field the vote schema does not name', async () => {
+    await seed('day');
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
+        target: null, abstain: false, readyToVote: true, points: 99,
+      }),
+    );
+  });
+
+  it('cannot be cast before the day begins', async () => {
+    await seed('night');
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
+        target: null, abstain: false, readyToVote: true,
+      }),
+    );
+  });
+});

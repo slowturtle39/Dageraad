@@ -8,6 +8,19 @@ export interface Vote {
   target: SeatIndex | null;
   /** The "vote not to vote" toggle (§7). */
   abstain: boolean;
+  /**
+   * "I am ready, let us vote now."
+   *
+   * A SEPARATE thing from abstaining, and the distinction matters at the
+   * table: abstaining is a decision about the OUTCOME — the group agrees
+   * nobody hangs — while this is a decision about the CLOCK. A table that has
+   * finished arguing twelve minutes early should not have to choose between
+   * sitting out the timer and throwing the round away.
+   *
+   * Reversible, and counted simultaneously for the same reason the abstain is:
+   * it is a show of hands, so putting yours back down genuinely undoes it.
+   */
+  readyToVote?: boolean;
 }
 
 /**
@@ -346,4 +359,29 @@ export function voteAccuracy(
     out[Number(seat)] = isScored(outcome) ? isCorrect(outcome) : null;
   }
   return out;
+}
+
+/**
+ * Has a majority asked to start voting now?
+ *
+ * Strictly more than half of the SEATED players, held at the same moment.
+ * Exactly half is not enough — a table split down the middle has not agreed on
+ * anything, and letting it cut the discussion short would let one half take
+ * the clock away from the other.
+ *
+ * Same shape as the abstain majority on purpose. They are two different
+ * questions with the same voting mechanism, and answering them differently
+ * would be a rule nobody could remember at a table.
+ */
+export function isMajorityReadyToVote(
+  votes: ReadonlyMap<SeatIndex, Vote>,
+  seatCount: number,
+): boolean {
+  const ready = [...votes.values()].filter((v) => v.readyToVote === true).length;
+  return ready * 2 > seatCount;
+}
+
+/** How many are currently asking to vote. A COUNT — never who they are. */
+export function readyToVoteCount(votes: ReadonlyMap<SeatIndex, Vote>): number {
+  return [...votes.values()].filter((v) => v.readyToVote === true).length;
 }
