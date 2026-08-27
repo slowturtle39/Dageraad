@@ -101,7 +101,7 @@ export class FirestoreBackend implements Backend {
       discussionExtendedByMs: 0,
       finalRoles: null,
       outcome: null,
-      revealedSeats: {},
+      revealedSlots: {},
       shieldedSeats: [],
     };
     await setDoc(this.roomRef(roomId), room);
@@ -291,7 +291,7 @@ export class FirestoreBackend implements Backend {
       // Clear last round's table so nothing bleeds across.
       publicEvents: [],
       shieldedSeats: [],
-      revealedSeats: {},
+      revealedSlots: {},
       votesCast: 0,
       abstainCount: 0,
       discussionExtendedByMs: 0,
@@ -369,7 +369,7 @@ export class FirestoreBackend implements Backend {
       standings: standings(members, rounds),
       publicEvents: room.publicEvents ?? [],
       shieldedSeats: room.shieldedSeats ?? [],
-      revealedSeats: room.revealedSeats ?? {},
+      revealedSlots: room.revealedSlots ?? {},
       abstainCount: room.abstainCount ?? 0,
       votesCast: room.votesCast ?? 0,
       pausedAt: room.pausedAt ?? null,

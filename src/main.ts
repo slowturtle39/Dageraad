@@ -12,7 +12,9 @@ import { renderSheet } from './ui/sheet.js';
 import { renderVoting } from './ui/voting.js';
 import { runGame } from './app/refereeRunner.js';
 import { detectLang, roleName, setLang, t, type Lang } from './ui/i18n.js';
-import { DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG } from './engine/presets.js';
+import {
+  DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG, TWO_ROUND_CONFIG,
+} from './engine/presets.js';
 import { mayArrangeSeats, reorderForSwap } from './app/seating.js';
 import type { Backend } from './app/backend.js';
 import type { Choice, SeatIndex } from './engine/types.js';
@@ -117,6 +119,33 @@ function isFast(): boolean {
 }
 
 /**
+ * Which resolution mode a new room uses.
+ *
+ * `?mode=dependency` picks the longer variant where everyone acts live and
+ * waits for each other; the default is the two-round one the group plays. A
+ * URL flag rather than a setup screen for now — the host picking this is a
+ * real feature and this is the walkthrough hook for it.
+ */
+function configFromUrl() {
+  return new URLSearchParams(location.search).get('mode') === 'dependency'
+    ? DEPENDENCY_CONFIG
+    : TWO_ROUND_CONFIG;
+}
+
+/**
+ * The deal seed, when one was asked for.
+ *
+ * `?seed=N` makes a round reproducible, which is what lets a specific
+ * situation be walked through deliberately rather than waited for. The engine
+ * shuffle has always been seeded; this just stops the seed being random.
+ */
+function seedFromUrl(): number {
+  const asked = new URLSearchParams(location.search).get('seed');
+  const parsed = asked === null ? Number.NaN : Number(asked);
+  return Number.isFinite(parsed) ? parsed : Math.floor(Math.random() * 1e9);
+}
+
+/**
  * `?fast` shortens the whole round so the flow can be walked in seconds.
  *
  * BOTH halves, which is the bit that is easy to get wrong: shortening only the
@@ -212,7 +241,7 @@ const actions: AppActions = {
       const roomId = await backend.createRoom({
         displayName: name,
         activeRoles: DEFAULT_ACTIVE_ROLES,
-        config: TWO_ROUND_CONFIG,
+        config: configFromUrl(),
         // The single point where the player-facing choice becomes technical:
         // a table device must not be dealt a card, because it can read them
         // all (see ui/setup.ts).
@@ -283,9 +312,7 @@ const actions: AppActions = {
     if (!roomId || local.refereeRunning) return;
     // A fresh seed per round, so two rounds of one evening are not the same
     // deal. The engine's shuffle is seeded so a round stays replayable.
-    const dealt = await attempt(
-      () => backend.startGame(roomId, Math.floor(Math.random() * 1e9)),
-    );
+    const dealt = await attempt(() => backend.startGame(roomId, seedFromUrl()));
     if (!dealt) return;
 
     local.refereeRunning = true;

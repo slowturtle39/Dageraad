@@ -103,8 +103,15 @@ export interface RoomDoc {
    */
   finalRoles: Record<number, RoleId> | null;
   outcome: string | null;
-  /** seat -> role, only for cards genuinely turned face up in play (§12). */
-  revealedSeats: Record<number, RoleId>;
+  /**
+   * SLOT -> the role lying face up there right now (§12).
+   *
+   * Republished by the referee after every window, derived from which CARDS
+   * were flipped and where those cards currently are. Never accumulated from
+   * old reveal events: a reveal belongs to the card, and everything that moves
+   * cards acts after the Medium.
+   */
+  revealedSlots: Record<number, RoleId>;
   shieldedSeats: number[];
 }
 

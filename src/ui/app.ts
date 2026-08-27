@@ -175,7 +175,7 @@ export function tabletViewFor(deps: AppDeps): TabletView {
     // Only a card genuinely turned face up in play. Note this reads the public
     // room document, not finalRoles — at the end of the game the table sees
     // the result on the results screen, not smuggled onto the tablet.
-    const revealed = room.revealedSeats[seat];
+    const revealed = room.revealedSlots[seat];
     if (revealed) view.revealedRole = revealed;
     return view;
   });

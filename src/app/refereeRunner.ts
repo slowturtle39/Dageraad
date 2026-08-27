@@ -272,6 +272,7 @@ function withPhaseHook(
     releasePrivateInfo: (seat, info) => inner.releasePrivateInfo(seat, info),
     releaseDecisions: (seat, requests) => inner.releaseDecisions(seat, requests),
     appendPublicEvents: (events) => inner.appendPublicEvents(events),
+    publishPublicView: (view) => inner.publishPublicView(view),
     recordLatency: (samples) => inner.recordLatency(samples),
     readVotes: () => inner.readVotes(),
     announceExtension: (ms) => inner.announceExtension(ms),

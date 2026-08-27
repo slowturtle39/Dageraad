@@ -1,6 +1,7 @@
 import type {
   Choice, DecisionRequest, NightEvent, PrivateInfo, SeatIndex,
 } from '../engine/types.js';
+import type { PublicNightView } from '../engine/publicview.js';
 import type { LatencySample } from '../engine/telemetry.js';
 
 /**
@@ -45,6 +46,22 @@ export interface RoomStore {
   /** Spoiler-free events for the shared tablet (§12). */
   appendPublicEvents(events: NightEvent[]): Promise<void>;
 
+  /**
+   * Publish what the table can currently SEE, derived fresh from the resolved
+   * state (see engine/publicview.ts).
+   *
+   * Replaces wholesale rather than accumulating, and that is the entire point.
+   * A face-up card belongs to the CARD, not to the seat it was flipped at, and
+   * every role that moves cards acts after the Medium — so a map built up from
+   * old reveal events is right until the interesting part of the night and
+   * quietly wrong afterwards.
+   *
+   * Called only when a scheduled window RESOLVES, never when somebody taps.
+   * Publishing on a tap would leak the fact that a decision had been made, and
+   * to anyone watching the timing, roughly what it was.
+   */
+  publishPublicView(view: PublicNightView): Promise<void>;
+
   /** Append-only timing samples (see telemetry.ts). */
   recordLatency(samples: LatencySample[]): Promise<void>;
 
@@ -71,6 +88,12 @@ export class InMemoryRoomStore implements RoomStore {
   async releasePrivateInfo(seat: SeatIndex, info: PrivateInfo[]): Promise<void> {
     const existing = this.released.get(seat) ?? [];
     this.released.set(seat, [...existing, ...info]);
+  }
+
+  published: PublicNightView = { revealed: {}, shielded: [] };
+
+  async publishPublicView(view: PublicNightView): Promise<void> {
+    this.published = { revealed: { ...view.revealed }, shielded: [...view.shielded] };
   }
 
   readonly prompts = new Map<SeatIndex, DecisionRequest[]>();

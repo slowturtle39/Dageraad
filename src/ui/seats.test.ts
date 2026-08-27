@@ -33,7 +33,7 @@ function room(over: Partial<RoomView> = {}): RoomView {
     standings: [],
     publicEvents: [],
     shieldedSeats: [],
-    revealedSeats: {},
+    revealedSlots: {},
     abstainCount: 0,
     votesCast: 0,
     pausedAt: null,
@@ -80,7 +80,7 @@ describe('what may never appear on somebody else\'s seat', () => {
     // The Medium's flip (§12). Written by the referee into the public room
     // document, so it is already on the shared tablet.
     const seats = seatViews({
-      room: room({ revealedSeats: { 1: 'weerwolf' as RoleId } }),
+      room: room({ revealedSlots: { 1: 'weerwolf' as RoleId } }),
       players, uid: ME, ownRole: 'ziener',
     });
     expect(seats[1]!.revealedRole).toBe('weerwolf');

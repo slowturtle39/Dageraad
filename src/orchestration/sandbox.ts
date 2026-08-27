@@ -4,6 +4,7 @@ import type { NightEvent, PrivateInfo, SeatIndex, DecisionRequest,
 import type { Vote } from '../engine/dayphase.js';
 import type { DayStore } from './dayrunner.js';
 import type { RoomStore } from './store.js';
+import type { PublicNightView } from '../engine/publicview.js';
 
 /**
  * TEST MODE (§16).
@@ -64,6 +65,11 @@ export class SandboxStore implements RoomStore, DayStore {
   }
   appendPublicEvents(events: NightEvent[]) {
     return this.inner.appendPublicEvents(events);
+  }
+  // What the table can see is not a permanent record of anything, so a test
+  // round publishes it exactly as a live one does.
+  publishPublicView(view: PublicNightView) {
+    return this.inner.publishPublicView(view);
   }
   setPhase(phase: 'lobby' | 'night' | 'day' | 'voting' | 'results') {
     return this.inner.setPhase(phase);

@@ -19,7 +19,7 @@ function room(over: Partial<RoomView> = {}): RoomView {
     nightWindowIndex: 0, activeRoles: [], config: {} as RoomView['config'],
     timeline: null, seating: [A, B, C],
     members: [A, B, C].map((uid) => ({ uid, joinedAtRound: 1, leftAtRound: null })),
-    standings: [], publicEvents: [], shieldedSeats: [], revealedSeats: {},
+    standings: [], publicEvents: [], shieldedSeats: [], revealedSlots: {},
     abstainCount: 0, votesCast: 0, pausedAt: null, discussionExtendedByMs: 0,
     finalRoles: null, outcome: null, ...over,
   };

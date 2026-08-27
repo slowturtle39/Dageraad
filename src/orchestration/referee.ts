@@ -9,6 +9,7 @@ import type { Bot } from '../engine/bot.js';
 import type { Clock } from './clock.js';
 import { PausableClock } from './clock.js';
 import { answerKey, probe, requestsForWindow } from './replay.js';
+import { publicView } from '../engine/publicview.js';
 import { resolvePrecommit } from '../engine/precommit.js';
 import type { RoomStore } from './store.js';
 
@@ -177,6 +178,17 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
       await store.appendPublicEvents(events);
       publicEventsWritten = after.result.events.length;
     }
+
+    // What the table can see, recomputed from the state this window resolved
+    // to. AFTER the window, never on a tap: publishing when somebody answers
+    // would leak that a decision had been made, and from the timing, roughly
+    // which one.
+    //
+    // Published every window rather than only when something changed, because
+    // "nothing was revealed this window" and "this window did not run" must
+    // look identical from outside — the same reason a window sleeps its full
+    // length whether or not anyone is in it.
+    await store.publishPublicView(publicView(after.result.state));
   }
 
   // Final pass with every answer in hand.
@@ -186,6 +198,7 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
   );
   const tail = final.result.events.slice(publicEventsWritten);
   if (tail.length > 0) await store.appendPublicEvents(tail);
+  await store.publishPublicView(publicView(final.result.state));
 
   await store.recordLatency(samples);
   await store.setPhase('day');

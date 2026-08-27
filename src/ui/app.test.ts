@@ -44,7 +44,7 @@ function room(over: Partial<RoomView> = {}): RoomView {
     standings: [],
     publicEvents: [],
     shieldedSeats: [],
-    revealedSeats: {},
+    revealedSlots: {},
     abstainCount: 0,
     votesCast: 0,
     pausedAt: null,
@@ -107,7 +107,7 @@ describe('the shared tablet stays spoiler-free', () => {
 
   it('shows a card that was genuinely turned face up', () => {
     const view = tabletViewFor(deps({ kind: 'tablet' }, {
-      state: state({ room: room({ revealedSeats: { 1: 'weerwolf' as RoleId } }) }),
+      state: state({ room: room({ revealedSlots: { 1: 'weerwolf' as RoleId } }) }),
     }));
     expect(view.seats[1]!.revealedRole).toBe('weerwolf');
     expect(view.seats[0]!.revealedRole).toBeUndefined();

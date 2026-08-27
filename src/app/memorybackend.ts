@@ -7,6 +7,7 @@ import type {
 } from '../engine/types.js';
 import type { DayStore } from '../orchestration/dayrunner.js';
 import type { RoomStore } from '../orchestration/store.js';
+import type { PublicNightView } from '../engine/publicview.js';
 import {
   generateRoomCode, type Backend, type CreateRoomOptions, type GameResults,
   type PlayerView, type PrivateView, type RoomPhase, type RoomView,
@@ -83,7 +84,7 @@ export class MemoryWorld {
         standings: [],
         publicEvents: [],
         shieldedSeats: [],
-        revealedSeats: {},
+        revealedSlots: {},
         abstainCount: 0,
         votesCast: 0,
         pausedAt: null,
@@ -328,7 +329,7 @@ class MemoryBackend implements Backend {
     r.privates.clear();
     r.view.publicEvents = [];
     r.view.shieldedSeats = [];
-    r.view.revealedSeats = {};
+    r.view.revealedSlots = {};
     r.view.abstainCount = 0;
     r.view.votesCast = 0;
     r.view.discussionExtendedByMs = 0;
@@ -532,15 +533,21 @@ class MemoryRefereeStore implements RoomStore, DayStore {
   async appendPublicEvents(events: NightEvent[]): Promise<void> {
     const r = this.r;
     r.view.publicEvents = [...r.view.publicEvents, ...events];
-    // Mirror the two things the table can legitimately see.
-    for (const e of events) {
-      if (e.kind === 'shield-placed' && e.slot < r.view.seating.length) {
-        r.view.shieldedSeats = [...new Set([...r.view.shieldedSeats, e.slot])];
-      }
-      if (e.kind === 'card-publicly-revealed' && e.slot < r.view.seating.length) {
-        r.view.revealedSeats = { ...r.view.revealedSeats, [e.slot]: e.role };
-      }
-    }
+    this.world.notify(this.roomId);
+  }
+
+  /**
+   * What the table can see, replaced wholesale.
+   *
+   * Deliberately NOT accumulated from the reveal events above. Those record
+   * that a card was turned over at a slot, which stops being where the card is
+   * the moment anything moves it — and everything that moves cards acts after
+   * the Medium.
+   */
+  async publishPublicView(view: PublicNightView): Promise<void> {
+    const r = this.r;
+    r.view.revealedSlots = { ...view.revealed };
+    r.view.shieldedSeats = [...view.shielded];
     this.world.notify(this.roomId);
   }
 

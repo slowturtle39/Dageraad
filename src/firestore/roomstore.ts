@@ -10,6 +10,7 @@ import type {
 import type { DayStore } from '../orchestration/dayrunner.js';
 import type { RoomStore } from '../orchestration/store.js';
 import { paths, type RoomPhase } from './schema.js';
+import type { PublicNightView } from '../engine/publicview.js';
 
 /**
  * The referee's read/write path for ONE night.
@@ -116,6 +117,21 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
       { pendingDecisions: requests },
       { merge: true },
     );
+  }
+
+  /**
+   * What the table can see, replaced wholesale on the room document.
+   *
+   * Only cards that were turned face up in front of everybody, and only their
+   * CURRENT position — nothing here is a card identity nobody has seen, a
+   * private choice, or any part of the deal. Those live in the engine document
+   * the rules keep referee-only.
+   */
+  async publishPublicView(view: PublicNightView): Promise<void> {
+    await updateDoc(this.room(), {
+      revealedSlots: view.revealed,
+      shieldedSeats: view.shielded,
+    });
   }
 
   async appendPublicEvents(events: NightEvent[]): Promise<void> {

@@ -56,8 +56,15 @@ export interface RoomView {
   standings: SessionStanding[];
   publicEvents: NightEvent[];
   shieldedSeats: SeatIndex[];
-  /** seat -> role, only for cards genuinely turned face up in play. */
-  revealedSeats: Record<SeatIndex, RoleId>;
+  /**
+   * SLOT -> the role lying face up there, right now.
+   *
+   * Slots rather than seats, because a revealed card swapped into the centre
+   * is still face up when it lands. Recomputed by the referee after every
+   * window from the card identities that were flipped, so it follows the card
+   * — a reveal belongs to the card, not to the seat it happened at.
+   */
+  revealedSlots: Record<number, RoleId>;
   /** Live counts, published by the referee. Never who voted for whom. */
   abstainCount: number;
   votesCast: number;

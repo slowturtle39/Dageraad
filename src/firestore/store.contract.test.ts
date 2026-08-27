@@ -20,6 +20,7 @@ const REQUIRED = [
   'releasePrivateInfo',
   'releaseDecisions',
   'appendPublicEvents',
+  'publishPublicView',
   'recordLatency',
   'setPhase',
   'readVotes',

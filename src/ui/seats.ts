@@ -88,7 +88,7 @@ function revealedRoleFor(
   ownRole: RoleId | null,
 ): RoleId | undefined {
   if (room.finalRoles) return room.finalRoles[seat];
-  const flipped = room.revealedSeats[seat];
+  const flipped = room.revealedSlots[seat];
   if (flipped) return flipped;
   if (isSelf && ownRole) return ownRole;
   return undefined;
