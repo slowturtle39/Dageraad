@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canDeal, nextRoundRoster, roundsUntilSeated, screenFor } from './shell.js';
+import { canDeal, mayManageBots, nextRoundRoster, roundsUntilSeated, screenFor } from './shell.js';
 import type { PlayerView, RoomView } from './backend.js';
 import type { SessionMember } from './session.js';
 
@@ -179,6 +179,30 @@ describe('who may deal', () => {
 
   it('is never a player, however settled the room', () => {
     expect(canDeal(room({ phase: 'lobby' }), ALICE)).toBe(false);
+  });
+});
+
+describe('who may change the AI roster', () => {
+  it('is the referee, in a practice lobby, and that is all three', () => {
+    expect(mayManageBots(room({ phase: 'lobby' }), TABLET)).toBe(true);
+  });
+
+  it('is never anybody else, however practice the room', () => {
+    // A player who could add a bot could add a seat the referee is then
+    // allowed to vote for.
+    expect(mayManageBots(room({ phase: 'lobby' }), ALICE)).toBe(false);
+  });
+
+  it('is never in an official evening', () => {
+    // Official rounds are the append-only input to every all-time statistic,
+    // and there is no delete path. An invented player in one is permanent.
+    expect(mayManageBots(room({ phase: 'lobby', mode: 'official' }), TABLET)).toBe(false);
+  });
+
+  it('is never once the cards are dealt', () => {
+    for (const phase of ['night', 'day', 'voting', 'results'] as const) {
+      expect(mayManageBots(room({ phase }), TABLET)).toBe(false);
+    }
   });
 });
 

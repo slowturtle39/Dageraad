@@ -469,6 +469,27 @@ const actions: AppActions = {
   },
 
   onNameTap() { /* stats-on-tap arrives with the profile sheet */ },
+
+  /**
+   * Add one AI player to a practice lobby.
+   *
+   * One tap, one bot, so a table can be any mix of people and machines. The
+   * button is only rendered on the browser that resolves the room, in a
+   * practice lobby, and every one of those conditions is re-checked by the
+   * backend and again by the security rules — this handler is the convenience,
+   * not the protection.
+   */
+  onAddBot() {
+    const roomId = controller.current().roomId;
+    if (!roomId) return;
+    void attempt(() => backend.addBot(roomId));
+  },
+
+  onRemoveBot(uid: string) {
+    const roomId = controller.current().roomId;
+    if (!roomId) return;
+    void attempt(() => backend.removeBot(roomId, uid));
+  },
 };
 
 /** Return this browser to the start screen without removing it from the room. */
@@ -483,13 +504,27 @@ function returnHome(): void {
   render();
 }
 
-/** Start the existing local bot table through a discoverable UI action. */
-function startSoloDemo(): void {
-  const url = new URL(location.href);
-  url.hash = '';
-  url.searchParams.set('demo', '');
-  url.searchParams.set('fast', '');
-  location.assign(url.toString());
+/**
+ * Open a practice room this browser plays in and controls.
+ *
+ * This replaces a button that said "play solo with 7 AI players" and meant it
+ * literally: seven bots, no way to seat a friend beside them, and a night
+ * window of 400ms because the same flag that summoned the bots also
+ * fast-forwarded the clock. Four hundred milliseconds is not a decision, it is
+ * a flicker — which is why the Doppelganger's copied-role prompt was never
+ * answerable by the person holding the phone.
+ *
+ * So: a real room, in practice mode, at the timings a person can actually use.
+ * The AI players are added one at a time in the lobby, beside however many
+ * friends are in the room. Nothing about this path is a special mode — it is
+ * the ordinary room, opened with the two choices already made.
+ */
+async function startPractice(): Promise<void> {
+  local.roomMode = 'practice';
+  // Playing, not a neutral board: the point of a playtest is to sit at the
+  // table and be asked the questions, and a table device is never dealt a card.
+  local.mode = 'trusted-host';
+  await actions.onCreate('trusted-host');
 }
 
 function defaultName(mode: ControllerMode): string {
@@ -514,7 +549,7 @@ function render(): void {
     if (!local.friend && !demo) {
       app.append(friendPicker());
       app.append(joinExistingButton());
-      app.append(soloDemoButton());
+      app.append(practiceButton());
       app.append(bottomBar(false));
       if (local.error) app.append(fatal(local.error));
       return;
@@ -536,7 +571,7 @@ function render(): void {
       onCreate: actions.onCreate,
     }));
     app.append(joinExistingButton());
-    if (!demo) app.append(soloDemoButton());
+    if (!demo) app.append(practiceButton());
     app.append(bottomBar(false));
     if (local.error) app.append(fatal(local.error));
     return;
@@ -609,10 +644,10 @@ function bottomBar(inRoom: boolean): HTMLElement {
   return bar;
 }
 
-function soloDemoButton(): HTMLElement {
+function practiceButton(): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'join';
-  const start = button(t(local.lang, 'demo.start'), startSoloDemo);
+  const start = button(t(local.lang, 'demo.start'), () => { void startPractice(); });
   const note = document.createElement('p');
   note.className = 'sheet__note';
   note.textContent = t(local.lang, 'demo.explain');

@@ -15,6 +15,7 @@ describe('translations', () => {
     'join.codePlaceholder',   // a room code, not a word
     'menu.title',             // "Menu" is Dutch too
     'alltime.solo',           // as is "solo"
+    'lobby.botTag',           // "AI" reads the same in both
   ]);
 
   it('has an English string for every Dutch one', () => {

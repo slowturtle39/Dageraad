@@ -241,3 +241,36 @@ describe('latency calibration', () => {
     expect(buildTimeline(DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG, tuned)).toEqual(t);
   });
 });
+
+describe('a window has to be long enough to be answered', () => {
+  /**
+   * These are not decoration. `?fast` shortens every window to 400ms so the
+   * flow can be walked in seconds — and for months the only path that seated
+   * AI players set that flag too, because one button did both. The result was
+   * a Dubbelganger whose copied-role prompt appeared and vanished inside half
+   * a second: the role looked broken when it was only unanswerable.
+   *
+   * So: the shipped defaults, checked against a human. A practice table uses
+   * these, and `?fast` stays what it always was — a deliberate walkthrough.
+   */
+  const HUMAN_MS = 5_000;
+
+  it('gives the Dubbelganger long enough to read what it copied and act as it', () => {
+    const t = buildTimeline(DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG);
+    const follow = t.phases.find((p) => p.role === 'dubbelganger');
+    expect(follow, 'the Dubbelganger has no follow-up window at all').toBeDefined();
+    expect(follow!.endMs - follow!.startMs).toBeGreaterThanOrEqual(HUMAN_MS);
+  });
+
+  it('gives every live follow-up the same courtesy, in both modes', () => {
+    for (const config of [TWO_ROUND_CONFIG, DEPENDENCY_CONFIG]) {
+      const t = buildTimeline(DEFAULT_ACTIVE_ROLES, config);
+      for (const phase of t.phases) {
+        expect(
+          phase.endMs - phase.startMs,
+          `${phase.role ?? 'open'} window is too short to answer`,
+        ).toBeGreaterThanOrEqual(HUMAN_MS);
+      }
+    }
+  });
+});

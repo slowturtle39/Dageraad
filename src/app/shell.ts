@@ -117,6 +117,24 @@ export function canDeal(room: RoomView, uid: string): boolean {
 }
 
 /**
+ * Whether this device may change the AI roster.
+ *
+ * All three conditions, always together. Being the referee is not a game role
+ * and not a mode — it is whichever browser resolves the room, and it is the
+ * only one that can answer for a seat with no phone behind it. Practice is
+ * checked because an official evening's rounds are the permanent record, and
+ * lobby because a seat cannot appear or vanish half-way through a night.
+ *
+ * The rules enforce the same three independently; this is what stops the
+ * button being drawn for somebody whose tap would be refused.
+ */
+export function mayManageBots(room: RoomView, uid: string): boolean {
+  return room.refereeUid === uid
+    && room.mode === 'practice'
+    && room.phase === 'lobby';
+}
+
+/**
  * Everyone who will be at the table for the next round, in seat order.
  *
  * Includes people currently waiting, because that is what the lobby and the

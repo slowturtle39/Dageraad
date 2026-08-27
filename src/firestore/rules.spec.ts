@@ -1146,3 +1146,196 @@ describe('asking to open the ballot early', () => {
     );
   });
 });
+
+describe('AI players, and the narrow capability that answers for them', () => {
+  const BOT = 'bot-room1-1';
+
+  /** A practice lobby with one AI player already in it. */
+  async function withBot(phase = 'lobby') {
+    await seed(phase, 0, phase === 'lobby' ? 0 : 1, 'practice');
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'rooms', ROOM, 'players', BOT), {
+        displayName: 'AI Bram', avatar: null, joinedAt: 1, isBot: true,
+      });
+      await setDoc(doc(db, 'rooms', ROOM, 'members', BOT), {
+        uid: BOT, joinedAtRound: 1, leftAtRound: null, friendId: '', friendName: 'AI Bram',
+      });
+    });
+  }
+
+  const botPlayer = { displayName: 'AI Fleur', avatar: null, joinedAt: 1, isBot: true };
+
+  /* ---------------------------- creating one ---------------------------- */
+
+  it('lets the controlling browser add one to a practice lobby', async () => {
+    await seed('lobby', 0, 0, 'practice');
+    await assertSucceeds(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'players', 'bot-room1-9'), botPlayer),
+    );
+  });
+
+  it('refuses a player marking their OWN document as a bot', async () => {
+    // The attack this rule exists for. A human flagged isBot is a human the
+    // controlling browser is then allowed to vote on behalf of.
+    await seed('lobby', 0, 0, 'practice');
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'players', ALICE), {
+        displayName: 'Alice', avatar: null, joinedAt: 1, isBot: true,
+      }),
+    );
+  });
+
+  it('refuses a bot created by anybody but the controlling browser', async () => {
+    await seed('lobby', 0, 0, 'practice');
+    await assertFails(
+      setDoc(doc(as(HOST), 'rooms', ROOM, 'players', 'bot-room1-9'), botPlayer),
+    );
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'players', 'bot-room1-9'), botPlayer),
+    );
+  });
+
+  it('refuses a bot in an official evening, by anybody at all', async () => {
+    // Official rounds are the append-only input to every all-time statistic
+    // and there is no delete path: an invented player in one is permanent.
+    await seed('lobby', 0, 0, 'official');
+    await assertFails(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'players', 'bot-room1-9'), botPlayer),
+    );
+  });
+
+  it('refuses a bot added once the cards are dealt', async () => {
+    await seed('night', 0, 1, 'practice');
+    await assertFails(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'players', 'bot-room1-9'), botPlayer),
+    );
+  });
+
+  it('refuses a bot membership for a uid that is not a bot', async () => {
+    await seed('lobby', 0, 0, 'practice');
+    await assertFails(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'members', CHARLIE), {
+        uid: CHARLIE, joinedAtRound: 1, leftAtRound: null, friendId: '', friendName: 'AI',
+      }),
+    );
+  });
+
+  /* ---------------------------- removing one ---------------------------- */
+
+  it('lets the controlling browser remove one, player and membership both', async () => {
+    await withBot();
+    await assertSucceeds(deleteDoc(doc(as(REF), 'rooms', ROOM, 'members', BOT)));
+    await assertSucceeds(deleteDoc(doc(as(REF), 'rooms', ROOM, 'players', BOT)));
+  });
+
+  it('refuses removing a HUMAN membership, which is history', async () => {
+    // The rule that replaced `allow delete: if false`. A round somebody played
+    // happened, and the scoreboard is rebuilt from these documents.
+    await withBot();
+    await assertFails(deleteDoc(doc(as(REF), 'rooms', ROOM, 'members', ALICE)));
+    await assertFails(deleteDoc(doc(as(HOST), 'rooms', ROOM, 'members', ALICE)));
+    await assertFails(deleteDoc(doc(as(ALICE), 'rooms', ROOM, 'members', ALICE)));
+  });
+
+  it('refuses removing a bot once the game has started', async () => {
+    await withBot('night');
+    await assertFails(deleteDoc(doc(as(REF), 'rooms', ROOM, 'members', BOT)));
+  });
+
+  it('refuses a player removing a bot', async () => {
+    await withBot();
+    await assertFails(deleteDoc(doc(as(ALICE), 'rooms', ROOM, 'members', BOT)));
+  });
+
+  /* --------------------------- voting for one --------------------------- */
+
+  it('lets the controlling browser cast a bot vote once the ballot is open', async () => {
+    await withBot('voting');
+    await assertSucceeds(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'votes', BOT), {
+        target: ALICE, abstain: false, castAt: 1,
+      }),
+    );
+  });
+
+  it('REFUSES the controlling browser casting a vote for a human', async () => {
+    // The single most important refusal in this file. If this ever succeeds,
+    // the referee decides everyone's vote while the table is still arguing.
+    await withBot('voting');
+    await assertFails(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'votes', ALICE), {
+        target: BOB, abstain: false, castAt: 1,
+      }),
+    );
+  });
+
+  it('refuses a bot vote in an official evening', async () => {
+    await seed('voting', 0, 1, 'official');
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'players', BOT), {
+        displayName: 'AI Bram', avatar: null, joinedAt: 1, isBot: true,
+      });
+    });
+    await assertFails(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'votes', BOT), {
+        target: ALICE, abstain: false, castAt: 1,
+      }),
+    );
+  });
+
+  it('refuses a bot naming itself', async () => {
+    await withBot('voting');
+    await assertFails(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'votes', BOT), {
+        target: BOT, abstain: false, castAt: 1,
+      }),
+    );
+  });
+
+  it('refuses a bot target during the discussion, exactly as for a human', async () => {
+    await withBot('day');
+    await assertFails(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'votes', BOT), {
+        target: ALICE, abstain: false, castAt: 1,
+      }),
+    );
+  });
+
+  it('refuses a bot vote before the day begins', async () => {
+    await withBot('night');
+    await assertFails(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'votes', BOT), {
+        target: ALICE, abstain: false, castAt: 1,
+      }),
+    );
+  });
+
+  it('refuses a player voting on a bot\'s behalf', async () => {
+    await withBot('voting');
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', BOT), {
+        target: BOB, abstain: false, castAt: 1,
+      }),
+    );
+  });
+
+  it('refuses a field the vote schema does not name, bot or not', async () => {
+    await withBot('voting');
+    await assertFails(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'votes', BOT), {
+        target: ALICE, abstain: false, castAt: 1, points: 99,
+      }),
+    );
+  });
+
+  /* ------------------------------- privacy ------------------------------ */
+
+  it('gives a bot no reading of anybody\'s role', async () => {
+    // A bot has no login, so there is nothing to authenticate as — but the
+    // property worth stating is that adding one changed no read boundary.
+    await withBot('night');
+    await assertFails(getDoc(doc(as(ALICE), 'rooms', ROOM, 'private', BOB)));
+    await assertFails(getDoc(doc(as(HOST), 'rooms', ROOM, 'private', ALICE)));
+  });
+});

@@ -1,5 +1,5 @@
 import type { AppState } from '../app/controller.js';
-import { canDeal, nextRoundRoster, type Screen } from '../app/shell.js';
+import { canDeal, mayManageBots, nextRoundRoster, type Screen } from '../app/shell.js';
 import { mayArrangeSeats } from '../app/seating.js';
 import type { PlayerView, RoomView } from '../app/backend.js';
 import type { RoleId, SeatIndex } from '../engine/types.js';
@@ -51,6 +51,8 @@ export interface AppActions {
   onSeatTap(seat: SeatIndex): void;
   onCardTap(seat: SeatIndex): void;
   onNameTap(seat: SeatIndex): void;
+  onAddBot?(): void;
+  onRemoveBot?(uid: string): void;
 }
 
 export function renderApp(deps: AppDeps): HTMLElement {
@@ -136,6 +138,7 @@ function renderLobbyScreen(deps: AppDeps): HTMLElement {
     uid: p.uid,
     displayName: p.displayName,
     seatIndex: i as SeatIndex,
+    ...(p.isBot ? { isBot: true } : {}),
   }));
 
   return renderLobby({
@@ -150,6 +153,9 @@ function renderLobbyScreen(deps: AppDeps): HTMLElement {
     canStart: canDeal(room, deps.state.uid) && players.length >= 3,
     onSeatTap: deps.actions.onSeatTap,
     onStart: deps.actions.onDeal,
+    canManageBots: mayManageBots(room, deps.state.uid),
+    ...(deps.actions.onAddBot ? { onAddBot: deps.actions.onAddBot } : {}),
+    ...(deps.actions.onRemoveBot ? { onRemoveBot: deps.actions.onRemoveBot } : {}),
   });
 }
 

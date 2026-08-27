@@ -140,12 +140,17 @@ const nl: Dict = {
   'lobby.locked': 'De stoelvolgorde is vastgezet zodra het spel begint.',
   'lobby.start': 'Start het spel ({n} spelers)',
   'lobby.adjacency': 'De volgorde moet kloppen met de echte tafel - de Dorpsgek schuift kaarten een stoel op, en dat betekent alleen iets als de buren kloppen.',
+  'lobby.addBot': 'AI-speler erbij',
+  'lobby.removeBot': 'Weg',
+  'lobby.botsTitle': 'AI-spelers',
+  'lobby.botsNote': 'Alleen om te oefenen. Een potje met AI-spelers telt nooit mee voor de statistieken.',
+  'lobby.botTag': 'AI',
 
   'table.alphaWolfCard': 'Alfawolf-kaart',
   'table.shielded': 'Beschermd door de Schildwacht',
 
-  'demo.start': 'Speel alleen met 7 AI-spelers',
-  'demo.explain': 'Een snelle, lokale oefenavond. Er wordt niets naar Firebase geschreven en niets telt mee.',
+  'demo.start': 'Begin een oefenpotje',
+  'demo.explain': 'Een gewone tafel om mee te oefenen: nodig vrienden uit met de link en zet er zoveel AI-spelers bij als je wilt. Een oefenpotje telt nooit mee voor de statistieken.',
 
   // The wording does not soften this. The group agreed to a trusted takeover;
   // that only stays a real agreement if the screen says what it costs.
@@ -338,12 +343,17 @@ const en: Dict = {
   'lobby.locked': 'The seating order is locked as soon as the game starts.',
   'lobby.start': 'Start game ({n} players)',
   'lobby.adjacency': 'The order must match the real table - the Village Idiot shifts cards one seat, so the neighbours have to be right.',
+  'lobby.addBot': 'Add an AI player',
+  'lobby.removeBot': 'Remove',
+  'lobby.botsTitle': 'AI players',
+  'lobby.botsNote': 'For practice only. A game with AI players never counts towards the statistics.',
+  'lobby.botTag': 'AI',
 
   'table.alphaWolfCard': 'Alpha Wolf card',
   'table.shielded': 'Shielded by the Bodyguard',
 
-  'demo.start': 'Play solo with 7 AI players',
-  'demo.explain': 'A quick local practice evening. Nothing is written to Firebase and nothing counts.',
+  'demo.start': 'Start a practice game',
+  'demo.explain': 'An ordinary table to practise on: invite friends with the link and add as many AI players as you like. A practice game never counts towards the statistics.',
 
   'recover.title': 'Take over running the game',
   'recover.why':

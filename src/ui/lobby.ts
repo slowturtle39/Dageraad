@@ -19,6 +19,9 @@ export interface LobbyPlayer {
   uid: string;
   displayName: string;
   seatIndex: SeatIndex;
+  /** An AI player. Labelled on the ring, because a seat that is not a person
+   * has to be legible from across the table. */
+  isBot?: boolean;
 }
 
 export interface LobbyView {
@@ -31,6 +34,17 @@ export interface LobbyView {
   onSeatTap?: (seat: SeatIndex) => void;
   onStart?: () => void;
   canStart: boolean;
+  /**
+   * Whether this browser may change the AI roster.
+   *
+   * True only on the browser that resolves the room, only in a practice
+   * lobby. It is not a mode and not a role — it is one browser, and the
+   * security rules refuse every other one. Everybody else sees the bots on
+   * the ring, labelled, with no buttons.
+   */
+  canManageBots?: boolean;
+  onAddBot?: () => void;
+  onRemoveBot?: (uid: string) => void;
 }
 
 export function renderLobby(view: LobbyView): HTMLElement {
@@ -76,6 +90,15 @@ export function renderLobby(view: LobbyView): HTMLElement {
     const name = document.createElement('span');
     name.className = 'seat__name';
     name.textContent = p.displayName;
+    if (p.isBot) {
+      btn.dataset.bot = 'true';
+      // On the seat itself, not only in the list below: this is the label
+      // somebody reads while deciding whether to believe what that seat said.
+      const tag = document.createElement('span');
+      tag.className = 'seat__role';
+      tag.textContent = t(view.lang, 'lobby.botTag');
+      card.append(tag);
+    }
 
     btn.append(card, name);
     btn.addEventListener('click', () => view.onSeatTap?.(p.seatIndex));
@@ -92,12 +115,69 @@ export function renderLobby(view: LobbyView): HTMLElement {
   start.addEventListener('click', () => view.onStart?.());
   el.append(start);
 
+  if (view.canManageBots) el.append(botRoster(view, seated));
+
   const note = document.createElement('p');
   note.className = 'sheet__note';
   note.textContent = t(view.lang, 'lobby.adjacency');
   el.append(note);
 
   return el;
+}
+
+/**
+ * Add and remove AI players, one at a time.
+ *
+ * One at a time on purpose. The path this replaces was a single "play solo
+ * with seven AI players" button, which could not do the thing a playtest
+ * actually needs: three friends and four bots, or five and one. The count is
+ * the thing being chosen, so it is chosen one tap at a time.
+ */
+function botRoster(view: LobbyView, seated: LobbyPlayer[]): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'lobby__bots';
+  box.dataset.bots = 'true';
+
+  const title = document.createElement('p');
+  title.className = 'sheet__sub';
+  title.textContent = t(view.lang, 'lobby.botsTitle');
+  box.append(title);
+
+  for (const bot of seated.filter((p) => p.isBot)) {
+    const row = document.createElement('div');
+    row.className = 'rolerow';
+
+    const name = document.createElement('span');
+    name.className = 'rolerow__name';
+    name.textContent = bot.displayName;
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn';
+    remove.dataset.removeBot = bot.uid;
+    remove.textContent = t(view.lang, 'lobby.removeBot');
+    remove.addEventListener('click', () => view.onRemoveBot?.(bot.uid));
+
+    row.append(name, remove);
+    box.append(row);
+  }
+
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'btn';
+  add.dataset.addBot = 'true';
+  add.textContent = t(view.lang, 'lobby.addBot');
+  // The same twelve as for people. A table is a table.
+  add.disabled = seated.length >= 12;
+  add.addEventListener('click', () => view.onAddBot?.());
+  box.append(add);
+
+  const note = document.createElement('p');
+  note.className = 'sheet__note';
+  note.textContent = t(view.lang, 'lobby.botsNote');
+  box.append(note);
+
+  return box;
 }
 
 /** Swap two players' seats. Pure, so the caller can undo by calling it again. */
