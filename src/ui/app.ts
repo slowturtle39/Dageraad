@@ -138,8 +138,8 @@ function renderLobbyScreen(deps: AppDeps): HTMLElement {
 
   return renderLobby({
     players,
-    // Seating is the host's to arrange, and only before a round starts.
-    canArrange: room.hostUid === deps.state.uid && room.phase === 'lobby',
+    // Everyone present can agree the physical order before the first deal.
+    canArrange: room.phase === 'lobby',
     pendingSwap: deps.selected ?? null,
     canStart: canDeal(room, deps.state.uid) && players.length >= 3,
     onSeatTap: deps.actions.onSeatTap,

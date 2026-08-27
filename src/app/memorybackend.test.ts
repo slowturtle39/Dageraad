@@ -75,28 +75,30 @@ describe('lobby', () => {
     expect(players.map((p) => p.seatIndex)).toEqual(players.map((_, i) => i));
   });
 
-  it('makes the creating device the referee, permanently', async () => {
+  it('lets an active member consciously take control when the tablet has failed', async () => {
     const { world, roomId } = await lobbyOfEight();
     let room: RoomView | null = null;
     world.device('u:Milan').watchRoom(roomId, (r) => { room = r; });
 
     expect(room!.refereeUid).toBe('tablet');
-    // There is deliberately no method to change it — the interface itself is
-    // the enforcement, mirroring the immutability rule in firestore.rules.
-    expect(Object.keys(world.device('u:Milan'))).not.toContain('setReferee');
+    await expect(world.device('u:Milan').takeEmergencyControl(roomId, 'wrong'))
+      .rejects.toThrow(/type referee/);
+    await world.device('u:Milan').takeEmergencyControl(roomId, 'referee');
+    expect(room!.hostUid).toBe('u:Milan');
+    expect(room!.refereeUid).toBe('u:Milan');
   });
 
-  it('refuses seating changes from a player', async () => {
+  it('lets a lobby player arrange physical seating', async () => {
     const { world, roomId, phones } = await lobbyOfEight();
     const seating = NAMES.map((n) => `u:${n}`).reverse();
-    await expect(phones[0]!.device.setSeating(roomId, seating)).rejects.toThrow(/host only/);
+    await expect(phones[0]!.device.setSeating(roomId, seating)).resolves.toBeUndefined();
     await expect(world.device('tablet').setSeating(roomId, seating)).resolves.toBeUndefined();
   });
 
   it('refuses a seating that does not cover every player', async () => {
     const { world, roomId } = await lobbyOfEight();
     await expect(world.device('tablet').setSeating(roomId, ['u:Milan']))
-      .rejects.toThrow(/every player/);
+      .rejects.toThrow(/every seated player/);
   });
 
   it('refuses to seat a referee who sat the game out', async () => {

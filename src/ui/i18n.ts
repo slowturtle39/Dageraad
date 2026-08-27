@@ -71,8 +71,8 @@ const nl: Dict = {
   'day.noVote': 'De groep heeft besloten niet te stemmen.',
   'day.tie': 'Gelijkspel — er wordt niemand gelyncht.',
 
-  // Which device runs the game. Player-facing wording only: internally this is
-  // still refereeUid, and it is still immutable once the room exists.
+  // Which device runs the game. A later recovery handover is deliberately
+  // phrase-confirmed because the receiving device can read every card.
   'setup.title': 'Wie leidt het spel?',
   'setup.sub':
     'Eén apparaat deelt de kaarten en rekent de nacht uit. Dat apparaat heet ' +
@@ -93,8 +93,8 @@ const nl: Dict = {
     'kaarten en kan ze technisch gezien allemaal inzien, ook die van jou. ' +
     'Kies dit alleen in een groep die elkaar vertrouwt.',
   'setup.permanent':
-    'Deze keuze ligt vast zodra de kamer bestaat. Hij kan later niet meer ' +
-    'naar een ander apparaat verschuiven — dat is met opzet zo.',
+    'Dit apparaat leidt normaal de hele avond. Valt het uit, dan kan een ' +
+    'aanwezige speler de rol bewust overnemen door `referee` te bevestigen.',
   'setup.create': 'Maak de kamer aan',
   'setup.createOnThisDevice':
     'Je maakt de kamer aan op DIT apparaat. Zit je zelf mee te spelen? Kies ' +
@@ -199,8 +199,8 @@ const en: Dict = {
     'see all of them, including yours. Only choose this in a group that ' +
     'trusts each other.',
   'setup.permanent':
-    'This choice is fixed the moment the room exists. It cannot move to ' +
-    'another device later — that is deliberate.',
+    'This device normally leads the whole evening. If it fails, a present ' +
+    'player can consciously take over by confirming `referee`.',
   'setup.create': 'Create the room',
   'setup.createOnThisDevice':
     'You are creating the room on THIS device. Playing yourself? Choose a ' +

@@ -23,9 +23,9 @@ import { t, type Lang } from './i18n.js';
  * find out when somebody wonders aloud how the host always guesses right.
  *
  * INTERNALLY none of this is new: the choice sets `CreateRoomOptions.playing`,
- * and the room's `refereeUid` is the creating device either way. That field is
- * immutable after creation and the rules refuse to let it move, which is why
- * the screen says the choice is permanent — it genuinely is.
+ * and the room's `refereeUid` is the creating device either way. It normally
+ * stays there, while the deliberate recovery route is available only if that
+ * device fails and the group accepts that its replacement can read every card.
  */
 
 export type ControllerMode = 'table-device' | 'trusted-host';

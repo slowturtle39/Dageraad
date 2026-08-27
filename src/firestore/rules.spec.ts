@@ -11,7 +11,8 @@ import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
  *
  * The threat model is a player at the table with devtools open, not a stranger
  * on the internet. Every test below is something one of Milan's friends could
- * plausibly try, and the one that matters most is "make myself the referee".
+ * plausibly try. Emergency referee recovery is explicitly allowed only as a
+ * phrase-confirmed, trusted-group action; every other promotion remains denied.
  *
  * Run with:  npm run test:rules   (starts the emulator for you)
  */
@@ -21,6 +22,7 @@ const HOST = 'host-uid';
 const REF = 'tablet-uid';    // the neutral tablet acts as referee
 const ALICE = 'alice-uid';
 const BOB = 'bob-uid';
+const CHARLIE = 'charlie-uid';
 
 let env: RulesTestEnvironment;
 
@@ -49,12 +51,16 @@ async function seed(phase = 'night', nightWindowIndex = 0, currentRound = 1) {
       nightWindowIndex,
       currentRound,
       activeRoles: ['droomwolf', 'alphawolf', 'mystiekewolf', 'dubbelganger'],
+      seating: [ALICE, BOB],
     });
     for (const uid of [ALICE, BOB]) {
       await setDoc(doc(db, 'rooms', ROOM, 'members', uid), {
         uid, joinedAtRound: 1, leftAtRound: null,
       });
     }
+    await setDoc(doc(db, 'rooms', ROOM, 'members', CHARLIE), {
+      uid: CHARLIE, joinedAtRound: 1, leftAtRound: null,
+    });
     for (const uid of [ALICE, BOB]) {
       await setDoc(doc(db, 'rooms', ROOM, 'players', uid), {
         displayName: uid, seatIndex: uid === ALICE ? 0 : 1,
@@ -83,36 +89,56 @@ beforeEach(async () => { await seed(); });
 
 /* ==================================================================== */
 
-describe('the load-bearing rule: nobody can become the referee', () => {
-  it('a player cannot promote themselves to referee', async () => {
-    // If this ever passes, every card in the game is readable by that player.
+describe('phrase-confirmed emergency control', () => {
+  it('rejects a promotion that does not include the conscious phrase', async () => {
     await assertFails(
       updateDoc(doc(as(ALICE), 'rooms', ROOM), { refereeUid: ALICE }),
     );
   });
 
-  it('even the HOST cannot reassign the referee', async () => {
-    await assertFails(
-      updateDoc(doc(as(HOST), 'rooms', ROOM), { refereeUid: HOST }),
-    );
+  it('lets an active member consciously take both controls with the phrase', async () => {
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'rooms', ROOM), {
+      hostUid: ALICE,
+      refereeUid: ALICE,
+      recoveryPhrase: 'referee',
+    }));
+    await assertSucceeds(getDoc(doc(as(ALICE), 'rooms', ROOM, 'private', BOB)));
   });
 
-  it('the referee cannot hand the role to someone else mid-game', async () => {
-    await assertFails(
-      updateDoc(doc(as(REF), 'rooms', ROOM), { refereeUid: ALICE }),
-    );
+  it('refuses recovery when it changes game state too', async () => {
+    await assertFails(updateDoc(doc(as(ALICE), 'rooms', ROOM), {
+      hostUid: ALICE,
+      refereeUid: ALICE,
+      recoveryPhrase: 'referee',
+      phase: 'voting',
+    }));
   });
 
-  it('nobody can reassign the host either', async () => {
-    await assertFails(
-      updateDoc(doc(as(ALICE), 'rooms', ROOM), { hostUid: ALICE }),
-    );
+  it('keeps ordinary host phase changes working', async () => {
+    await assertSucceeds(updateDoc(doc(as(HOST), 'rooms', ROOM), { phase: 'voting' }));
+  });
+});
+
+describe('lobby seating', () => {
+  it('lets a joining player add their own seat', async () => {
+    await seed('lobby', 0, 0);
+    await assertSucceeds(updateDoc(doc(as(CHARLIE), 'rooms', ROOM), {
+      seating: [ALICE, BOB, CHARLIE],
+    }));
   });
 
-  it('the host can still advance the phase, which is the legitimate case', async () => {
-    await assertSucceeds(
-      updateDoc(doc(as(HOST), 'rooms', ROOM), { phase: 'voting' }),
-    );
+  it('lets a member rearrange seats to match the physical table', async () => {
+    await seed('lobby', 0, 0);
+    await assertSucceeds(updateDoc(doc(as(CHARLIE), 'rooms', ROOM), {
+      seating: [BOB, ALICE, CHARLIE],
+    }));
+  });
+
+  it('does not let a member remove or replace an existing seated player', async () => {
+    await seed('lobby', 0, 0);
+    await assertFails(updateDoc(doc(as(CHARLIE), 'rooms', ROOM), {
+      seating: [ALICE, CHARLIE],
+    }));
   });
 });
 

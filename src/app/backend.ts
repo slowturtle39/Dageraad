@@ -25,12 +25,10 @@ export interface RoomView {
   roomId: string;
   hostUid: string;
   /**
-   * The device that computes the night. Set at creation and IMMUTABLE — the
-   * security rules refuse to let it move, because whoever holds it can read
-   * every card in the game.
-   *
-   * In practice this means: CREATE THE ROOM ON THE TABLET. There is no way to
-   * hand the role over afterwards, by design.
+   * The device that computes the night. It normally stays the device that
+   * created the room, because whoever holds it can read every card. A trusted
+   * group may deliberately transfer it through `takeEmergencyControl` after a
+   * device failure.
    */
   refereeUid: string;
   phase: RoomPhase;
@@ -151,6 +149,13 @@ export interface Backend {
   createRoom(options: CreateRoomOptions): Promise<string>;
 
   /**
+   * Trusted-group recovery after the host/referee device has failed. The app
+   * asks for the deliberate phrase `referee` before calling this. It moves both
+   * control roles to this active member, who can then run the stored game.
+   */
+  takeEmergencyControl(roomId: string, phrase: string): Promise<void>;
+
+  /**
    * Join the session. Allowed AT ANY TIME, not just in the lobby.
    *
    * If a round is already running you are added as a member and seated when
@@ -175,7 +180,7 @@ export interface Backend {
    */
   leaveRoom(roomId: string): Promise<void>;
 
-  /** Host only, lobby only. Order is uids, index = seat. */
+  /** Lobby members or the table device arrange physical seats. Order is uids. */
   setSeating(roomId: string, seating: string[]): Promise<void>;
   setActiveRoles(roomId: string, roles: RoleId[], config: GameConfig): Promise<void>;
 

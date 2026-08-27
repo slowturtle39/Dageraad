@@ -64,10 +64,9 @@ export class FirestoreBackend implements Backend {
   /**
    * Create the room, and become its referee.
    *
-   * The creating device is the referee and that can never move afterwards —
-   * whoever holds it can read every card in the game, so IN PRACTICE THIS
-   * MEANS: CREATE THE ROOM ON THE TABLET. There is no handover, by design; the
-   * security rules refuse to let refereeUid change at all.
+   * The creating device is the referee. In practice this still means creating
+   * the room on the tablet; a phrase-confirmed trusted-group recovery exists
+   * only for when that device fails.
    */
   async createRoom(options: CreateRoomOptions): Promise<string> {
     const playing = options.playing !== false;
@@ -76,6 +75,7 @@ export class FirestoreBackend implements Backend {
     const room: RoomDoc = {
       hostUid: this.uid,
       refereeUid: this.uid,
+      recoveryPhrase: null,
       phase: 'lobby',
       // 0 means "nothing played yet". Somebody joining now is a round-1
       // member, which is currentRound + 1 — the same arithmetic as joining
@@ -111,6 +111,15 @@ export class FirestoreBackend implements Backend {
       await this.session(roomId).join(this.uid);
     }
     return roomId;
+  }
+
+  async takeEmergencyControl(roomId: string, phrase: string): Promise<void> {
+    if (phrase !== 'referee') throw new Error('type referee to confirm takeover');
+    await updateDoc(this.roomRef(roomId), {
+      hostUid: this.uid,
+      refereeUid: this.uid,
+      recoveryPhrase: phrase,
+    });
   }
 
   /**
@@ -172,7 +181,7 @@ export class FirestoreBackend implements Backend {
     await this.session(roomId).join(this.uid);
 
     // In the lobby they sit down immediately; mid-round they wait. Seating is
-    // the room document's, and in the lobby the host is free to rearrange it.
+    // the room document's, and in the lobby present members may rearrange it.
     if (room.phase === 'lobby') {
       await updateDoc(this.roomRef(roomId), {
         seating: [...room.seating, this.uid],
@@ -206,12 +215,20 @@ export class FirestoreBackend implements Backend {
 
   async setSeating(roomId: string, seating: string[]): Promise<void> {
     const room = await this.room(roomId);
-    if (room.hostUid !== this.uid) throw new Error('host only');
+    const member = await getDoc(doc(this.db, paths.member(roomId, this.uid)));
+    const activeMember = member.exists()
+      && (member.data() as { leftAtRound?: number | null }).leftAtRound === null;
+    if (room.hostUid !== this.uid && room.refereeUid !== this.uid && !activeMember) {
+      throw new Error('active member, host, or referee only');
+    }
     if (room.phase !== 'lobby') throw new Error('seating is frozen once the game starts');
     // Measured against who is SEATED, not who is in the room: somebody waiting
     // for the next round has no seat to arrange yet.
-    if (seating.length !== room.seating.length) {
-      throw new Error('seating must cover every player');
+    const current = new Set(room.seating);
+    if (seating.length !== room.seating.length
+      || new Set(seating).size !== seating.length
+      || seating.some((uid) => !current.has(uid))) {
+      throw new Error('seating must contain every seated player exactly once');
     }
     await updateDoc(this.roomRef(roomId), { seating: [...seating] });
   }

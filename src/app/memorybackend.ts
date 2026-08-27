@@ -67,8 +67,8 @@ export class MemoryWorld {
       view: {
         roomId,
         hostUid: uid,
-        // The creator becomes the referee, and it can never move afterwards
-        // (see backend.ts). In practice: create the room on the tablet.
+        // The creator becomes the referee. A deliberate trusted-group recovery
+        // can take over if this device fails (see Backend.takeEmergencyControl).
         refereeUid: uid,
         phase: 'lobby',
         round: 0,
@@ -179,6 +179,16 @@ class MemoryBackend implements Backend {
     return roomId;
   }
 
+  async takeEmergencyControl(roomId: string, phrase: string): Promise<void> {
+    if (phrase !== 'referee') throw new Error('type referee to confirm takeover');
+    const r = this.world.room(roomId);
+    const member = r.view.members.find((entry) => entry.uid === this.uid);
+    if (!member || member.leftAtRound !== null) throw new Error('active member only');
+    r.view.hostUid = this.uid;
+    r.view.refereeUid = this.uid;
+    this.world.notify(roomId);
+  }
+
   async joinRoom(roomId: string, displayName: string): Promise<void> {
     const r = this.world.room(roomId);
 
@@ -264,12 +274,19 @@ class MemoryBackend implements Backend {
 
   async setSeating(roomId: string, seating: string[]): Promise<void> {
     const r = this.world.room(roomId);
-    this.requireHost(r);
+    const member = r.view.members.find((entry) => entry.uid === this.uid);
+    const activeMember = member?.leftAtRound === null;
+    if (r.view.hostUid !== this.uid && r.view.refereeUid !== this.uid && !activeMember) {
+      throw new Error('active member, host, or referee only');
+    }
     if (r.view.phase !== 'lobby') throw new Error('seating is frozen once the game starts');
     // Measured against who is SEATED, not who is in the room: somebody waiting
     // for the next round has no seat to arrange yet.
-    if (seating.length !== r.view.seating.length) {
-      throw new Error('seating must cover every player');
+    const current = new Set(r.view.seating);
+    if (seating.length !== r.view.seating.length
+      || new Set(seating).size !== seating.length
+      || seating.some((uid) => !current.has(uid))) {
+      throw new Error('seating must contain every seated player exactly once');
     }
     r.view.seating = [...seating];
     seating.forEach((uid, seat) => {

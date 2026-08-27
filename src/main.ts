@@ -332,8 +332,8 @@ function renderLobbyView(app: HTMLElement): void {
  *
  * In the demo it only flips a local flag, but the wiring is the real one — the
  * chosen mode becomes `CreateRoomOptions.playing`, and the creating device
- * becomes the room's immutable `refereeUid`. Nothing here can move that
- * afterwards, which is why the screen says the choice is permanent.
+ * becomes the room's referee. A trusted group can later use the conscious
+ * recovery route if that device fails.
  */
 function renderSetupView(app: HTMLElement): void {
   app.append(

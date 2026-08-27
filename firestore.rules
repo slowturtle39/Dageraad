@@ -8,11 +8,11 @@ rules_version = '2';
 // runs in a browser at the table — the REFEREE, ideally the neutral tablet.
 // That means the referee genuinely must be able to read every player's card,
 // and no rule can change that. What these rules do is make sure NOBODY ELSE
-// can, and that a player cannot make themselves the referee.
+// can, except for the conscious trusted-group recovery route below.
 //
-// THE SINGLE MOST IMPORTANT RULE IN THIS FILE is that `refereeUid` is immutable
-// after room creation. If a player could write it, they would promote
-// themselves and read the entire deal. Everything else is defence in depth.
+// THE SINGLE MOST IMPORTANT RULE IN THIS FILE limits referee recovery to an
+// active member, the explicit phrase `referee`, and only the two control
+// fields. It is intentional social friction, not a secret against devtools.
 //
 // Design notes:
 //  - There are NO mutable stats counters. Per-game results are append-only
@@ -70,7 +70,44 @@ service cloud.firestore {
     function currentRound(roomId) {
       return roomDoc(roomId).currentRound;
     }
-
+    // Lobby members may arrange the physical table before the game starts.
+    // They may reorder existing seats, or add only their own UID as one new
+    // seat; they cannot remove, replace, or duplicate anybody already seated.
+    function memberArrangesLobbySeating(roomId) {
+      return inPhase(roomId, 'lobby')
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['seating'])
+        && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid()))
+        && request.resource.data.seating.size() <= 12
+        && request.resource.data.seating.toSet().size()
+             == request.resource.data.seating.size()
+        && request.resource.data.seating.toSet()
+             .hasAll(resource.data.seating.toSet())
+        && (
+          (request.resource.data.seating.size() == resource.data.seating.size()
+            && request.resource.data.seating.toSet().size()
+               == resource.data.seating.toSet().size())
+          || (request.resource.data.seating.size() == resource.data.seating.size() + 1
+            && request.resource.data.seating.toSet().size()
+               == resource.data.seating.toSet().size() + 1
+            && request.resource.data.seating.toSet().hasAll([uid()])
+            && !resource.data.seating.toSet().hasAny([uid()]))
+        );
+    }
+    // Emergency recovery is a deliberate, trusted-group action. Firestore
+    // cannot observe a menu click, so the phrase is checked on the write. It is
+    // intentionally not a secret; the app uses it as a conscious confirmation.
+    function memberClaimsEmergencyControl(roomId) {
+      return exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid()))
+        && get(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid()))
+             .data.leftAtRound == null
+        && request.resource.data.recoveryPhrase == 'referee'
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['hostUid', 'refereeUid', 'recoveryPhrase'])
+        && (changed('hostUid') || changed('refereeUid'))
+        && request.resource.data.hostUid == uid()
+        && request.resource.data.refereeUid == uid();
+    }
     // ---------------------------------------------------------------- rooms
     // The room document is PUBLIC to anyone with the link, by design: it holds
     // the active role list, the seating order, the phase, and the computed
@@ -82,24 +119,28 @@ service cloud.firestore {
 
       allow create: if signedIn()
         && request.resource.data.hostUid == uid()
-        // The creator may hand the referee role to the tablet, but it must be
-        // set at creation and can never move afterwards.
+        // The creator may hand the referee role to the tablet. An explicit,
+        // trusted-group recovery route is the sole way it can move later.
         && request.resource.data.refereeUid is string
         && request.resource.data.phase == 'lobby';
 
       // ***** THE LOAD-BEARING RULE *****
-      // Nobody may ever reassign the referee or the host. A player who could
-      // set refereeUid to themselves would gain read access to every card in
-      // the game. This is the difference between "private" and "not".
+      // Normal updates never reassign the referee or host. The separate
+      // recovery route is intentionally narrow and phrase-confirmed.
       allow update: if signedIn()
-        && (isHost(roomId) || isReferee(roomId))
-        && !changed('refereeUid')
-        && !changed('hostUid')
-        // currentRound only ever goes forward. It is what a joining member's
-        // `joinedAtRound` is pinned to, and therefore the sole input to their
-        // seed: rewinding it would let the referee re-admit somebody against a
-        // floor the evening has already moved past.
-        && roundNeverRewinds();
+        && (
+          ((isHost(roomId) || isReferee(roomId) || memberArrangesLobbySeating(roomId))
+            && !changed('refereeUid')
+            && !changed('hostUid')
+            // currentRound only ever goes forward. It is what a joining member's
+            // `joinedAtRound` is pinned to, and therefore the sole input to their
+            // seed: rewinding it would let the referee re-admit somebody against a
+            // floor the evening has already moved past.
+            && roundNeverRewinds())
+          // The recovery path may change ONLY who controls the room, and needs
+          // the explicit phrase required by the app's warning dialog.
+          || memberClaimsEmergencyControl(roomId)
+        );
 
       allow delete: if isHost(roomId);
 

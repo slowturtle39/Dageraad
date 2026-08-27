@@ -22,7 +22,7 @@ export interface LobbyPlayer {
 
 export interface LobbyView {
   players: LobbyPlayer[];
-  /** Only the host may rearrange; everyone else sees the same ring read-only. */
+  /** Everyone present may agree and arrange the physical order before a deal. */
   canArrange: boolean;
   /** First tap of a pending swap, if any. */
   pendingSwap: SeatIndex | null;
@@ -41,7 +41,7 @@ export function renderLobby(view: LobbyView): HTMLElement {
     ? view.pendingSwap === null
       ? 'Zet iedereen in de volgorde waarin jullie echt zitten. Tik twee spelers aan om ze te wisselen.'
       : 'Tik nu de speler aan waarmee je wilt wisselen.'
-    : 'Wacht tot de host de stoelen op volgorde heeft gezet.';
+    : 'De stoelvolgorde is vastgezet zodra het spel begint.';
   el.append(hint);
 
   const ring = document.createElement('div');

@@ -97,10 +97,8 @@ describe('the screen says the uncomfortable part out loud', () => {
       expect(body).toMatch(lang === 'nl' ? /speelt.*niet mee/ : /no seat/);
     });
 
-    it(`warns in ${lang} that the choice cannot be moved later`, () => {
-      // True at the database level: refereeUid is immutable and the rules
-      // refuse to let it change. The screen must not imply otherwise.
-      expect(t(lang, 'setup.permanent')).toMatch(lang === 'nl' ? /vast/ : /fixed/);
+    it(`explains in ${lang} that recovery is a conscious takeover`, () => {
+      expect(t(lang, 'setup.permanent')).toMatch(/referee/);
     });
   }
 

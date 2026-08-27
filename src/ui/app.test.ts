@@ -177,14 +177,18 @@ describe('the lobby arranges who is about to play', () => {
     expect(el.textContent).toContain('other');
   });
 
-  it('only lets the host arrange, and only before a round starts', () => {
+  it('lets everyone at the lobby arrange, but locks seats once a round starts', () => {
     const hosted = room({ phase: 'lobby', hostUid: ME });
     const el = renderApp(deps({ kind: 'lobby' }, { state: state({ room: hosted }) }));
     expect(el.querySelectorAll('.seat--disabled').length).toBe(0);
 
     const guest = room({ phase: 'lobby', hostUid: 'somebody-else' });
     const el2 = renderApp(deps({ kind: 'lobby' }, { state: state({ room: guest }) }));
-    expect(el2.querySelectorAll('.seat--disabled').length).toBeGreaterThan(0);
+    expect(el2.querySelectorAll('.seat--disabled').length).toBe(0);
+
+    const started = room({ phase: 'night', hostUid: ME });
+    const el3 = renderApp(deps({ kind: 'lobby' }, { state: state({ room: started }) }));
+    expect(el3.querySelectorAll('.seat--disabled').length).toBeGreaterThan(0);
   });
 
   it('will not deal a table too small to deal', () => {

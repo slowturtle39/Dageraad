@@ -48,9 +48,11 @@ rules changed.
 
 The screen states the trade-off of the second option in plain language, and
 states it **before** the create button rather than after — a consequence you
-read having already committed is not a choice you were offered. It also says
-the choice is permanent, which is true at the database level: `refereeUid` is
-immutable and the rules refuse to let it move.
+read having already committed is not a choice you were offered. The chosen
+device remains the controller in normal play. If it fails, an active member can
+consciously transfer both host and referee control by confirming `referee`; this
+is trusted-group recovery, not a way to hide the fact that the new controller
+can read every card.
 
 Softening that wording is the one genuinely dishonest thing this app could do.
 A group that picked the convenient option without being told was misled, and
@@ -270,13 +272,14 @@ them.
 ### The shape of the problem
 
 On the free plan the referee genuinely must read every player's card, and no
-rule can change that. What the rules do is ensure **nobody else can**, and that
-**a player cannot make themselves the referee**.
+rule can change that. What the rules do is ensure **nobody else can** outside
+the group-approved emergency recovery route.
 
-`refereeUid` is immutable after room creation, and that is the single
-load-bearing rule in the file. A player who could write it would promote
-themselves and read the entire deal. Five tests cover it specifically,
-including that neither the host nor the current referee can reassign it.
+Normal updates cannot move `refereeUid`. Emergency recovery requires an active
+member, the phrase `referee`, and an update that changes only `hostUid`,
+`refereeUid`, and the confirmation field. This is intentional friction for a
+trusted physical group, not a technical secret: someone who confirms it becomes
+able to read the entire deal.
 
 ### Decisions worth knowing about
 

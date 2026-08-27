@@ -28,17 +28,21 @@ import type { RoundResult } from '../app/session.js';
 export type RoomPhase = 'lobby' | 'night' | 'day' | 'voting' | 'results';
 
 export interface RoomDoc {
-  /** Created the room. Can advance phase; can NEVER reassign the referee. */
+  /** Created the room and normally manages its setup. */
   hostUid: string;
   /**
    * The device that computes resolution — ideally the neutral tablet, since it
    * necessarily holds every player's card (see README "Trust model").
    *
-   * IMMUTABLE AFTER CREATION. This is the single most security-critical field
-   * in the schema: a player who could write it would promote themselves and
-   * read the entire deal.
+   * Normally fixed for the game. A trusted group may deliberately transfer
+   * control through the phrase-guarded emergency recovery path in the rules.
    */
   refereeUid: string;
+  /**
+   * Not a secret: an explicit phrase required by the emergency recovery rule.
+   * Its purpose is to make a role takeover a conscious action in the app.
+   */
+  recoveryPhrase: string | null;
   phase: RoomPhase;
   /**
    * Which game of the evening this is, counting from 1 (0 in the lobby).
