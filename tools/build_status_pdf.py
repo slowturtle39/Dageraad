@@ -58,7 +58,7 @@ def header_footer(canvas, doc):
     canvas.drawString(20 * mm, A4[1] - 12 * mm, "DAGERAAD")
     canvas.setFont("Helvetica", 8.5)
     canvas.drawRightString(A4[0] - 20 * mm, A4[1] - 12 * mm,
-                           "Projectstatus · 26 augustus 2026")
+                           "Projectstatus · 27 augustus 2026 · live")
     canvas.setStrokeColor(RULE)
     canvas.setLineWidth(0.5)
     canvas.line(20 * mm, A4[1] - 15 * mm, A4[0] - 20 * mm, A4[1] - 15 * mm)
@@ -180,53 +180,61 @@ for _part in _cover:
 
 story.append(Spacer(1, 6 * mm))
 story.append(Paragraph(
-    "Dit document beschrijft waar het project staat, welke ontwerpkeuzes eronder "
-    "liggen en wat er nog moet gebeuren voordat er aan tafel mee gespeeld kan "
-    "worden.", LEAD))
+    "De app is af genoeg om mee te spelen en staat online. Dit document "
+    "beschrijft wat erin zit, welke ontwerpkeuzes eronder liggen, en hoe je "
+    "er vanavond mee begint.", LEAD))
 
 story.append(PageBreak())
 
 # ------------------------------------------------- status, up front
 #
-# Deliberately the first thing after the cover, and deliberately blunt about
-# the gap: the Firebase side is genuinely finished, which makes it very easy to
-# read this as "so it works now". It does not. `npm run dev` still starts the
-# demo harness.
-story.append(Paragraph("Stand van zaken — vóór het playtesten", H1))
+# The first thing after the cover. It used to warn that the app shell did not
+# exist; it does now, it is deployed, and the only thing left is playing.
+story.append(Paragraph("Stand van zaken — de app is live", H1))
 
-story.append(Paragraph("Wat klaar is", H2))
+story.append(Paragraph(
+    "De app staat online en is klaar voor een eerste potje thuis. Eén link "
+    "delen is genoeg: geen app-store, geen installatie, geen lokaal netwerk.",
+    LEAD))
+
 story.append(panel([
-    ["Firebase", "Project <b>dageraad-fdb2d</b>. Firestore draait in productiemodus in <b>europe-west4</b>, anonieme login staat aan, en de publieke webconfig staat in de repo."],
-    ["Beveiliging", "De Firestore-regels zijn <b>gepubliceerd</b> (26 aug, ±08:56). De regelsuite draait 38/38 groen in de emulator — geschreven als aanvallen, niet als gelukkige paden."],
-    ["Code", "Nachtmotor, tijdlijn, dagfase, orkestratie en alle schermen: <b>151 tests groen</b>, typecheck schoon."],
+    ["Link", "<b><font face='Courier' size='9'>https://dageraad-fdb2d.web.app</font></b> — open dit op je eigen telefoon."],
 ], [26 * mm, 130 * mm]))
 
-story.append(Paragraph("Wat er nog moet gebeuren — dit is het echte werk", H2))
+story.append(Paragraph("Oefenen of officieel — kies dit bij het aanmaken", H2))
 story.append(Paragraph(
-    "<b>De live app-schil bestaat nog niet.</b> <font face='Courier' size='8'>"
-    "npm run dev</font> start vandaag een <i>demo</i> met verzonnen spelers: er "
-    "wordt geen kamer aangemaakt, geen kaarten gedeeld en niets gesynchroniseerd "
-    "tussen telefoons. <font face='Courier' size='8'>src/firebase/config.ts</font> "
-    "staat klaar, maar wordt nog nergens geïmporteerd.", BODY))
+    "Bij het aanmaken van een kamer kies je of de avond meetelt. Die keuze "
+    "ligt vast zodra de kamer bestaat; je kunt hem later niet meer omzetten. "
+    "<b>Dat is met opzet zo</b> — anders zou een goede avond er achteraf bij "
+    "gefrommeld kunnen worden, en een slechte stilletjes verdwijnen.", BODY))
 story.append(panel([
-    ["1", "Schil bouwen", "Kamer maken en joinen, stoelvolgorde vastleggen, kaarten delen naar Firestore, de scheidsrechter op de tablet laten draaien, en elk telefoonscherm aan zijn eigen echte onthullingen hangen."],
-    ["2", "Lokaal doorspelen", "Eén nacht van begin tot eind, met meerdere browservensters als losse spelers."],
-    ["3", "Uitrollen", "<font face='Courier' size='8'>npm run build</font> en daarna <font face='Courier' size='8'>firebase deploy --only hosting</font> — dat geeft de deelbare link die iedereen op zijn eigen telefoon opent."],
-], [8 * mm, 30 * mm, 116 * mm]))
+    ["Oefenen", "Alles werkt precies als normaal: kaarten, nacht, stemmen, uitslag. De resultaten tellen alleen <b>nooit</b> mee voor de eeuwige stand. Test hier zo veel je wilt — je kunt de echte geschiedenis er niet mee vervuilen."],
+    ["Officieel", "Kies dit pas als de groep wil dat de avond meetelt in de blijvende gezamenlijke geschiedenis."],
+], [26 * mm, 130 * mm]))
+story.append(Paragraph(
+    "Begin dus met <b>Oefenen</b>. De eerste échte avond maak je aan als "
+    "<b>Officieel</b>; dat is meteen het begin van de eeuwige stand.", SMALL))
 
-story.append(Paragraph("Commando’s die nu al werken", H2))
+story.append(Paragraph("Wat er nu in zit", H2))
 story.append(panel([
-    ["npm install", "Eenmalig."],
-    ["npm test", "151 tests — motor, timing, dagfase, UI-regels."],
-    ["npm run test:rules", "38 beveiligingstests in de emulator. Vereist Java 11+; op Milans machine moet de Java-bin tijdelijk aan PATH worden toegevoegd."],
-    ["npm run dev", "De demo. Nadrukkelijk <b>geen</b> echt spel — geen kamers, geen synchronisatie."],
+    ["Eigen rol", "Iedereen ziet zijn eigen kaart en zijn eigen nachtvragen op zijn eigen telefoon. Niemand anders ziet ze."],
+    ["Nacht", "Vensters met een vaste lengte, onthullingen die pas vrijkomen wanneer ze aan de beurt zijn."],
+    ["Dag", "Stemmen en de knop om af te zien van stemmen, en daarna de uitslag met alle kaarten open."],
+    ["Standen", "De stand van de avond zelf, én een eeuwige stand over alle officiële avonden heen."],
+    ["Wie leidt", "Een los tafelapparaat, of de telefoon van een speler in een groep die elkaar vertrouwt."],
+], [26 * mm, 130 * mm]))
+
+story.append(Paragraph("Twee dingen om aan tafel te weten", H2))
+story.append(panel([
+    ["Laat het tabblad open", "Het apparaat dat het spel leidt rekent de nacht uit. <b>Laat dat tabblad de hele avond openstaan en ververs het niet halverwege een nacht.</b> Vergrendel het scherm niet en zet het apparaat aan de lader."],
+    ["Kies je eigen naam", "Kies bij het meedoen je eigen naam uit de lijst. Dan blijft je geschiedenis van jou, ook als je later op een andere telefoon speelt."],
 ], [34 * mm, 122 * mm]))
 
 story.append(Paragraph(
     "<b>Over de plaatjes:</b> de app gebruikt nu eigen, zelfgetekende symbolen. "
     "Die kunnen later vervangen worden door echte spelillustraties als we goede "
-    "foto’s van de kaarten hebben — <i>optioneel, en het houdt het playtesten "
-    "niet tegen.</i>", SMALL))
+    "bronbeelden hebben — <i>optioneel, en het houdt het playtesten niet "
+    "tegen.</i>", SMALL))
 
 story.append(PageBreak())
 
@@ -367,15 +375,16 @@ story.append(panel([
     ["Tijdlijn + zelfkalibrerende venstertijden", "Af · getest"],
     ["Scheidsrechter-lus, host-pauze, bots", "Af · getest"],
     ["Testmodus (bots spelen, geen stats, geen kalibratie)", "Af · getest"],
-    ["Firestore-schema + beveiligingsregels", "Af · 38/38 in de emulator"],
+    ["Firestore-schema + beveiligingsregels", "Af · uitgerold en live"],
     ["UI: tafel, statistieken, verdenkingen, stemmen, lobby, tablet", "Af"],
     ["Scherm: wie leidt het spel (tafelapparaat of eigen telefoon)", "Af · getest"],
     ["Avond als reeks potjes: aanschuiven en weggaan tussendoor", "Af · getest"],
     ["Firestore-laag (kamer, leden, potjes, de verdeling)", "Af · getest"],
     ["Rolplaatjes", "Tijdelijke eigen tekeningen"],
     ["Firebase-project", "Af · dageraad-fdb2d, europe-west4"],
-    ["Regels van de nieuwe collecties opnieuw uitrollen", "<b>Nog niet</b>"],
-    ["Schermen aan echte gegevens hangen", "<b>Nog niet</b>"],
+    ["Schermen aan echte gegevens", "Af · een heel potje speelt door"],
+    ["Oefenen / Officieel + eeuwige stand", "Af · getest"],
+    ["Online zetten", "Af · live"],
     ["Curator + voorwerpen", "Niet gebouwd — regels nog niet vastgelegd"],
 ], [104 * mm, 50 * mm], header=True))
 
@@ -423,24 +432,24 @@ story.append(figure("/tmp/pdf-stats.png", 66,
 story.append(PageBreak())
 
 # ---------------------------------------------------------------- todo
-story.append(Paragraph("Wat er nog moet gebeuren", H1))
+story.append(Paragraph("Wat er nu gebeurt", H1))
 story.append(Paragraph(
-    "De Firebase-kant is af. Wat overblijft is de app-schil en het uitrollen.", LEAD))
+    "De app is uitgerold. Wat overblijft is spelen — en dat is geen "
+    "programmeerwerk meer.", LEAD))
 
 story.append(panel([
     ["✓", "Firebase-project aanmaken",
-     "<i>Gedaan.</i> dageraad-fdb2d, europe-west4, anonieme login aan, config in de repo."],
+     "<i>Gedaan.</i> dageraad-fdb2d, europe-west4, anonieme login aan."],
     ["✓", "Beveiligingsregels uitrollen",
-     "<i>Gedaan.</i> Gepubliceerd op 26 augustus, 38/38 groen in de emulator."],
-    ["✓", "De Firestore-laag bouwen",
-     "<i>Gedaan.</i> <font face='Courier' size='8'>FirestoreBackend</font> draait op dezelfde interface als de geheugenversie waar alle tests op staan. Een avond is nu een reeks potjes: mensen kunnen tussendoor aanschuiven en naar huis, zonder dat de avond stopt."],
-    ["!", "Beveiligingsregels opnieuw uitrollen",
-     "<b>Nodig vóór het eerste echte potje.</b> De regels die live staan kennen de nieuwe collecties nog niet, dus een kamer aanmaken zou nu geweigerd worden. Eerst <font face='Courier' size='8'>npm run test:rules</font> draaien, dan pas uitrollen."],
-    ["1", "De schermen aan echte gegevens hangen",
-     "De schermen bestaan en zijn getest; ze hangen nog aan verzonnen gegevens. Dit is wat er nog tussen de code en een speelbaar potje staat."],
-    ["2", "Hosting uitrollen",
-     "<font face='Courier' size='8'>npm run build</font>, dan <font face='Courier' size='8'>firebase deploy --only hosting</font>. Daarna is er een link."],
-    ["3", "Spelen", "Modus 1 tegen modus 2 — en de open regels beslissen."],
+     "<i>Gedaan.</i> Geschreven als aanvallen en in de emulator gedraaid vóór ze live gingen."],
+    ["✓", "De schermen aan echte gegevens hangen",
+     "<i>Gedaan.</i> Een heel potje speelt door: kaarten delen, nachtvragen op je eigen telefoon, stemmen, uitslag, en de stand."],
+    ["✓", "Online zetten",
+     "<i>Gedaan.</i> <font face='Courier' size='9'>https://dageraad-fdb2d.web.app</font>"],
+    ["1", "Een oefenavond",
+     "Maak een kamer aan als <b>Oefenen</b> en speel er een paar potjes mee. Alles werkt, niets telt mee. Dit is waar we ontdekken wat er aan tafel niet klopt."],
+    ["2", "De eerste echte avond",
+     "Maak hem aan als <b>Officieel</b>. Vanaf dat moment loopt de eeuwige stand."],
 ], [8 * mm, 44 * mm, 102 * mm]))
 
 story.append(Paragraph("Nog open", H2))
