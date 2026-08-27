@@ -124,6 +124,28 @@ const nl: Dict = {
     'De potjes die je gespeeld hebt tellen gewoon mee. Kom je terug, dan pak ' +
     'je je eigen stand weer op.',
   'departed.rejoin': 'Toch weer meedoen',
+
+  'menu.title': 'Menu',
+  'menu.close': 'Sluiten',
+  'menu.share': 'Deel de link',
+  'menu.copied': 'Gekopieerd',
+  'menu.leave': 'Weggaan',
+  'menu.recover': 'Spelleiding overnemen',
+
+  // The wording does not soften this. The group agreed to a trusted takeover;
+  // that only stays a real agreement if the screen says what it costs.
+  'recover.title': 'Spelleiding overnemen',
+  'recover.why':
+    'Doe dit alleen als het apparaat dat het spel leidde ermee gestopt is — ' +
+    'leeg, vast, of naar huis. Daarna leidt dit apparaat de avond verder.',
+  'recover.cost':
+    'Let op: het apparaat dat het spel leidt kan alle kaarten inzien, ook die ' +
+    'van jou. Door over te nemen krijgt dít apparaat dat. Iedereen aan tafel ' +
+    'hoort dit te weten voor je het doet.',
+  'recover.typeToConfirm': 'Typ {word} om te bevestigen',
+  'recover.confirm': 'Neem de spelleiding over',
+  'recover.cancel': 'Laat maar',
+  'recover.failed': 'Overnemen lukte niet. Klopt het woord?',
 };
 
 const en: Dict = {
@@ -230,6 +252,26 @@ const en: Dict = {
     'The games you played still count. Come back and you pick your own score ' +
     'up where it was.',
   'departed.rejoin': 'Join again',
+
+  'menu.title': 'Menu',
+  'menu.close': 'Close',
+  'menu.share': 'Share the link',
+  'menu.copied': 'Copied',
+  'menu.leave': 'Leave',
+  'menu.recover': 'Take over running the game',
+
+  'recover.title': 'Take over running the game',
+  'recover.why':
+    'Only do this if the device that was running the game has stopped — flat, ' +
+    'frozen, or gone home. This device will run the rest of the evening.',
+  'recover.cost':
+    'Note: the device running the game can see every card, including yours. ' +
+    'Taking over gives THIS device that. Everyone at the table should know ' +
+    'before you do it.',
+  'recover.typeToConfirm': 'Type {word} to confirm',
+  'recover.confirm': 'Take over',
+  'recover.cancel': 'Never mind',
+  'recover.failed': 'Takeover did not work. Is the word right?',
 };
 
 const DICTS: Record<Lang, Dict> = { nl, en };

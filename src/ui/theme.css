@@ -1055,3 +1055,94 @@ body {
   font-size: 0.85rem;
   line-height: 1.45;
 }
+
+/* ------------------------------------------------------------------ */
+/* Menu, and taking over the game                                      */
+/* ------------------------------------------------------------------ */
+
+.menu {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.menu__item {
+  width: 100%;
+  text-align: left;
+}
+
+/* Reachable in two taps, never one, and never sitting flush against the
+   things somebody reaches for casually. */
+.menu__item--danger {
+  margin-top: 12px;
+  border-color: var(--blood);
+  color: var(--bone);
+}
+
+.recover {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+/* The consequence, not decoration. It reads before the input, and it is the
+   one block on this screen that is allowed to shout. */
+.recover__cost {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--blood);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.recover__label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ink-dim);
+  font-size: 0.85rem;
+}
+
+.recover__input {
+  padding: 12px;
+  background: var(--bg-sunken);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
+}
+
+.recover__input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.btn--danger {
+  border-color: var(--blood);
+  color: var(--bone);
+}
+
+.btn--danger:disabled {
+  opacity: 0.45;
+  border-color: var(--line);
+  color: var(--ink-faint);
+}

@@ -1,5 +1,6 @@
 import type { AppState } from '../app/controller.js';
 import { canDeal, nextRoundRoster, type Screen } from '../app/shell.js';
+import { mayArrangeSeats } from '../app/seating.js';
 import type { PlayerView, RoomView } from '../app/backend.js';
 import type { RoleId, SeatIndex } from '../engine/types.js';
 import { assertSpoilerFree, renderTablet, type TabletSeat, type TabletView } from './tablet.js';
@@ -138,8 +139,11 @@ function renderLobbyScreen(deps: AppDeps): HTMLElement {
 
   return renderLobby({
     players,
-    // Everyone present can agree the physical order before the first deal.
-    canArrange: room.phase === 'lobby',
+    // Everyone PRESENT can agree the physical order before the first deal —
+    // at a real table the person who moved the chairs is the one who knows.
+    // Not merely anyone rendering this screen: a departed member is not there
+    // to move a chair, and the rules refuse their write anyway.
+    canArrange: mayArrangeSeats(room, deps.state.uid),
     pendingSwap: deps.selected ?? null,
     canStart: canDeal(room, deps.state.uid) && players.length >= 3,
     onSeatTap: deps.actions.onSeatTap,

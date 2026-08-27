@@ -1,413 +1,454 @@
-import { ROLES } from './engine/roles.js';
+import { connect } from './firestore/client.js';
+import { firebaseConfig } from './firebase/config.js';
+import { FirestoreBackend } from './firestore/backend.js';
+import { MemoryWorld } from './app/memorybackend.js';
+import { AppController } from './app/controller.js';
+import { roomCodeFromUrl, roomUrl } from './app/roomlink.js';
+import { renderApp, type AppActions } from './ui/app.js';
+import { renderRecovery } from './ui/recovery.js';
+import { renderRoomSetup, controllerModeIsPlaying, type ControllerMode } from './ui/setup.js';
+import { detectLang, setLang, t, type Lang } from './ui/i18n.js';
 import { DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG } from './engine/presets.js';
-import { buildTimeline } from './engine/timeline.js';
-import type { RoleId, SeatIndex } from './engine/types.js';
-import { renderTable, type SeatView } from './ui/table.js';
-import { renderSheet } from './ui/sheet.js';
-import { aggregate, renderStats, type ResultRow } from './ui/stats.js';
-import { renderTablet } from './ui/tablet.js';
-import { renderLobby, swapSeats, seatingIsValid, type LobbyPlayer } from './ui/lobby.js';
-import { renderRoomSetup, type ControllerMode } from './ui/setup.js';
-import { detectLang, t, type Lang } from './ui/i18n.js';
-import { renderSuspicionPicker, type SuspicionMap } from './ui/suspicionpicker.js';
-import { TEST_MODE_BANNER } from './orchestration/sandbox.js';
+import { mayArrangeSeats, reorderForSwap } from './app/seating.js';
+import type { Backend } from './app/backend.js';
+import type { SeatIndex } from './engine/types.js';
 
 /**
- * Demo harness.
+ * The app.
  *
- * Not the real app — there is no Firebase yet, so nothing here is synced and
- * the data is invented. It exists so the three surfaces can be looked at and
- * argued about before any of them are wired to a live room.
+ * This was a demo harness with invented data until now — three surfaces you
+ * could look at and argue about, wired to nothing. Everything it rendered is
+ * still here; what changed is that the data underneath it is a real room that
+ * other people are also in.
  *
- * What to check when looking at it:
- *   1. Switch phone night -> phone day. The screen's brightness must not
- *      change. That is the §13.1 constraint, and it is a privacy rule rather
- *      than a taste one.
- *   2. A decision prompt is drawn OVER the table, never instead of it, so from
- *      across the room deciding and idly browsing look the same.
- *   3. Tapping anyone opens their history, in any phase. That is the cover.
- *   4. The tablet never names a role except the open window's and a card that
- *      was genuinely flipped face-up.
+ * The shape is deliberately dull: one controller owning the subscriptions
+ * (controller.ts), one pure function deciding which screen this device is on
+ * (shell.ts), one that decides what it may draw (seats.ts), and one that turns
+ * that into elements (ui/app.ts). This file owns only what is genuinely local
+ * to one device and one browser tab: which language, what is typed into a
+ * field, whether a sheet is open. None of that belongs in a database.
  */
 
-const NAMES = ['Milan', 'Sanne', 'Joris', 'Fleur', 'Daan', 'Noor', 'Bram', 'Eva'];
+/* ----------------------------- local state ------------------------------ */
 
-type View = 'phone' | 'tablet' | 'lobby' | 'setup';
-type Phase = 'night' | 'day';
+interface Local {
+  lang: Lang;
+  mode: ControllerMode;
+  code: string;
+  displayName: string;
+  error: string | null;
+  busy: boolean;
+  menuOpen: boolean;
+  recovering: boolean;
+  recoveryTyped: string;
+  shareCopied: boolean;
+  /** First tap of a pending seat swap, in the lobby. */
+  pendingSwap: SeatIndex | null;
+}
 
-const state = {
-  view: 'phone' as View,
-  phase: 'night' as Phase,
-  lang: detectLang() as Lang,
-  selected: null as SeatIndex | null,
-  openStats: null as SeatIndex | null,
-  prompting: true,
-  paused: false,
-  pendingSwap: null as SeatIndex | null,
-  testMode: false,
-  openPicker: null as SeatIndex | null,
-  /**
-   * Which device the group has said should run the game. The table device is
-   * the default because it is the one where nobody at the table is holding
-   * everybody's cards; the alternative is legitimate but has to be chosen
-   * knowingly. See ui/setup.ts.
-   */
-  controllerMode: 'table-device' as ControllerMode,
-  suspicions: new Map() as SuspicionMap,
-  players: NAMES.map((displayName, i) => ({
-    uid: `u${i}`,
-    displayName,
-    seatIndex: i,
-  })) as LobbyPlayer[],
+const local: Local = {
+  lang: detectLang(),
+  mode: 'table-device',
+  code: roomCodeFromUrl(location.href) ?? '',
+  displayName: rememberedName(),
+  error: null,
+  busy: false,
+  menuOpen: false,
+  recovering: false,
+  recoveryTyped: '',
+  shareCopied: false,
+  pendingSwap: null,
 };
 
-/** Deterministic filler so the demo looks the same on every reload. */
-function fakeResults(seed: number): ResultRow[] {
-  const roles: RoleId[] = [
-    'dorpeling', 'weerwolf', 'ziener', 'heks', 'medium',
-    'dorpsgek', 'looier', 'bodyguard', 'mystiekewolf', 'dubbelganger',
-  ];
-  const outcomes = [
-    'correct', 'incorrect', 'inconsequential', 'correct', 'not-scored',
-    'correct', 'incorrect', 'caused-village-loss',
-  ] as const;
-  const rows: ResultRow[] = [];
-  const n = 14 + ((seed * 7) % 11);
-  for (let i = 0; i < n; i++) {
-    rows.push({
-      finalRole: roles[(seed * 13 + i * 5) % roles.length]!,
-      won: (seed + i) % 3 !== 0,
-      voteOutcome: outcomes[(seed * 3 + i) % outcomes.length]!,
-      suspicionAccuracy: i % 4 === 0 ? null : ((seed + i) % 10) / 10,
-    });
-  }
-  return rows;
-}
+const NAME_KEY = 'dageraad.name';
 
-const ordered = () => [...state.players].sort((a, b) => a.seatIndex - b.seatIndex);
-
-function seats(): SeatView[] {
-  return ordered().map((p, i) => ({
-    seat: p.seatIndex,
-    name: p.displayName,
-    isSelf: i === 0,
-    selected: state.selected === p.seatIndex,
-    // Only a genuinely public flip shows a face — the Medium's (§12).
-    revealedRole: state.phase === 'day' && i === 4 ? ('ziener' as RoleId) : undefined,
-    shielded: i === 6,
-    suspectedRole: state.suspicions.get(p.seatIndex)?.role,
-    suspicionVisible: state.suspicions.get(p.seatIndex)?.visible,
-  }));
-}
-
-function render(): void {
-  const app = document.getElementById('app')!;
-  app.replaceChildren();
-
-  // Unmistakable on purpose. Everywhere else identical appearance is the safety
-  // rule; here the failure to guard against is playing a real evening on a test
-  // game and wondering why no stats appeared.
-  if (state.testMode) {
-    const banner = document.createElement('div');
-    banner.className = 'testbanner';
-    banner.textContent = TEST_MODE_BANNER[state.lang];
-    app.append(banner);
-  }
-
-  if (state.view === 'tablet') return renderTabletView(app);
-  if (state.view === 'lobby') return renderLobbyView(app);
-  if (state.view === 'setup') return renderSetupView(app);
-  return renderPhoneView(app);
-}
-
-/* ------------------------------------------------------------------ */
-
-function renderPhoneView(app: HTMLElement): void {
-  const timeline = buildTimeline(DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG);
-
-  const top = document.createElement('div');
-  top.className = 'topbar';
-  const phase = document.createElement('span');
-  phase.className = 'topbar__phase';
-  phase.textContent =
-    state.phase === 'night'
-      ? `${t(state.lang, 'phase.night')} — ${t(state.lang, 'phase.round', { n: 1 })}`
-      : `${t(state.lang, 'phase.day')} — ${t(state.lang, 'phase.discussion')}`;
-  const timer = document.createElement('span');
-  timer.className = state.paused ? 'topbar__timer topbar__timer--paused' : 'topbar__timer';
-  timer.textContent = state.paused
-    ? t(state.lang, 'phase.paused')
-    : state.phase === 'night'
-      ? `0:0${Math.round(timeline.phases[0]!.endMs / 1000)}`
-      : '14:22';
-  top.append(phase, timer);
-  app.append(top);
-
-  const wrap = document.createElement('div');
-  wrap.className = 'tablewrap';
-  const sheetOpen =
-    state.openStats !== null ||
-    state.openPicker !== null ||
-    (state.prompting && state.phase === 'night');
-  if (sheetOpen) wrap.classList.add('tablewrap--sheet');
-  wrap.append(
-    renderTable({
-      seats: seats(),
-      centerCount: 3,
-      hasAlphaWolfCard: true,
-      // The CARD is the suspicion gesture — except during a night prompt,
-      // where picking your target has to win.
-      onCardTap: (seat: SeatIndex) => {
-        if (state.prompting && state.phase === 'night') {
-          state.selected = seat;
-        } else {
-          const suspicion = state.suspicions.get(seat);
-          if (!suspicion) {
-            // No guess yet: open the picker on its own, without the history
-            // underneath it — you asked a question about this player, not for
-            // their record.
-            state.openPicker = seat;
-          } else {
-            // Tap a guess to flip it face-down; tap again to bring it back.
-            // The choice is remembered either way.
-            state.suspicions.set(seat, { ...suspicion, visible: !suspicion.visible });
-          }
-        }
-        render();
-      },
-      // The NAME always opens history. Separate target, so the two gestures
-      // stop competing (Milan, 2026-08-26).
-      onNameTap: (seat: SeatIndex) => {
-        state.openStats = seat;
-        render();
-      },
-    }),
-  );
-  app.append(wrap);
-  app.append(bottomBar());
-
-  if (state.openStats !== null) {
-    const seat = state.openStats;
-    const name = ordered().find((p) => p.seatIndex === seat)!.displayName;
-    app.append(
-      renderSheet({
-        title: name,
-        body: renderStats(aggregate(name, fakeResults(seat + 1))),
-        note: t(state.lang, 'stats.historicalOnly'),
-        onDismiss: () => {
-          state.openStats = null;
-          render();
-        },
-      }),
-    );
-    return;
-  }
-
-  if (state.openPicker !== null) {
-    const seat = state.openPicker;
-    const name = ordered().find((p) => p.seatIndex === seat)!.displayName;
-    const current = state.suspicions.get(seat);
-    app.append(
-      renderSheet({
-        title: name,
-        body: renderSuspicionPicker({
-          lang: state.lang,
-          about: seat,
-          aboutName: name,
-          rolesInGame: DEFAULT_ACTIVE_ROLES,
-          current: current?.role ?? null,
-          visible: current?.visible ?? true,
-          onPick: (role) => {
-            if (role === null) state.suspicions.delete(seat);
-            else state.suspicions.set(seat, { role, visible: true });
-            state.openPicker = null;
-            render();
-          },
-          onToggleVisible: (visible) => {
-            const existing = state.suspicions.get(seat);
-            if (existing) state.suspicions.set(seat, { ...existing, visible });
-            state.openPicker = null;
-            render();
-          },
-        }),
-        onDismiss: () => {
-          state.openPicker = null;
-          render();
-        },
-      }),
-    );
-    return;
-  }
-
-  if (state.prompting && state.phase === 'night') {
-    const chosen =
-      state.selected === null
-        ? null
-        : ordered().find((p) => p.seatIndex === state.selected)!.displayName;
-    app.append(
-      renderSheet({
-        title: ROLES.alphawolf.nl,
-        subtitle:
-          'Kies een speler. Je legt de wolvenkaart uit het midden voor die ' +
-          'speler neer — zonder te kijken wat je wegneemt.',
-        actions: [
-          {
-            label: chosen ? `${t(state.lang, 'action.confirm')}: ${chosen}` : t(state.lang, 'action.pickPlayerFirst'),
-            primary: chosen !== null,
-            onSelect: () => {
-              if (chosen === null) return;
-              state.prompting = false;
-              render();
-            },
-          },
-          {
-            label: t(state.lang, 'action.skip'),
-            onSelect: () => {
-              state.prompting = false;
-              render();
-            },
-          },
-        ],
-        note:
-          'Je komt er niet achter welke kaart je weghaalt. Dat hoort bij de rol ' +
-          'en is geen bug.',
-        dismissable: false,
-      }),
-    );
+/** Your name, so a reload does not ask again. Losing it costs nothing (§14). */
+function rememberedName(): string {
+  try {
+    return localStorage.getItem(NAME_KEY) ?? '';
+  } catch {
+    return '';
   }
 }
 
-function renderTabletView(app: HTMLElement): void {
-  app.append(
-    renderTablet({
-      lang: state.lang,
-      phase: state.phase,
-      activeRole: state.phase === 'night' ? 'dubbelganger' : null,
-      roundLabel: state.phase === 'night' ? t(state.lang, 'phase.round', { n: 2 }) : null,
-      timer: state.paused ? '—' : state.phase === 'night' ? '0:12' : '14:22',
-      paused: state.paused,
-      seats: ordered().map((p, i) => ({
-        seat: p.seatIndex,
-        displayName: p.displayName,
-        shielded: i === 6,
-        revealedRole: state.phase === 'day' && i === 4 ? ('ziener' as RoleId) : undefined,
-      })),
-      centerCount: 3,
-      hasAlphaWolfCard: true,
-    }),
-  );
-  app.append(bottomBar());
+function rememberName(name: string): void {
+  try {
+    localStorage.setItem(NAME_KEY, name);
+  } catch {
+    // Private browsing. The field just starts empty next time.
+  }
 }
 
-function renderLobbyView(app: HTMLElement): void {
-  const wrap = document.createElement('div');
-  wrap.className = 'lobbywrap';
-  wrap.append(
-    renderLobby({
-      players: state.players,
-      canArrange: true,
-      pendingSwap: state.pendingSwap,
-      canStart: seatingIsValid(state.players) && state.players.length >= 3,
-      onSeatTap: (seat) => {
-        if (state.pendingSwap === null) state.pendingSwap = seat;
-        else if (state.pendingSwap === seat) state.pendingSwap = null;
-        else {
-          state.players = swapSeats(state.players, state.pendingSwap, seat);
-          state.pendingSwap = null;
-        }
-        render();
-      },
-      onStart: () => {
-        state.view = 'phone';
-        render();
-      },
-    }),
-  );
-  app.append(wrap);
-  app.append(bottomBar());
-}
+/* ------------------------------- start-up ------------------------------- */
+
+let controller: AppController;
+let backend: Backend;
 
 /**
- * The first screen a group ever sees: whose browser runs the game.
+ * Which backend.
  *
- * In the demo it only flips a local flag, but the wiring is the real one — the
- * chosen mode becomes `CreateRoomOptions.playing`, and the creating device
- * becomes the room's referee. A trusted group can later use the conscious
- * recovery route if that device fails.
+ * `?demo` runs the whole app against the in-memory world, in one tab, with no
+ * Firebase project — the same implementation every test uses. It exists so the
+ * screens can be walked through offline, and so a broken Firebase config is
+ * never the reason nobody can look at the app.
  */
-function renderSetupView(app: HTMLElement): void {
-  app.append(
-    renderRoomSetup({
-      lang: state.lang,
-      mode: state.controllerMode,
-      onModeChange: (mode) => {
-        state.controllerMode = mode;
-        render();
-      },
-      onCreate: (mode) => {
-        state.controllerMode = mode;
-        // The real app calls backend.createRoom({ ..., playing:
-        // controllerModeIsPlaying(mode) }) here and goes to the lobby.
-        state.view = 'lobby';
-        render();
-      },
-    }),
-  );
-  app.append(bottomBar());
+async function makeBackend(): Promise<Backend> {
+  if (new URLSearchParams(location.search).has('demo')) {
+    return new MemoryWorld(Math.random).device(`demo:${Math.floor(Math.random() * 1e6)}`);
+  }
+  const connection = await connect(firebaseConfig);
+  return new FirestoreBackend(connection.db, connection.uid);
 }
 
-function bottomBar(): HTMLElement {
+async function start(): Promise<void> {
+  const app = document.getElementById('app')!;
+  try {
+    backend = await makeBackend();
+  } catch (err) {
+    // Anonymous auth disabled in the console is the overwhelmingly likely
+    // cause, and it looks like a broken app rather than a missing setting
+    // unless somebody says so (SETUP.md §10.3).
+    app.replaceChildren(fatal(String(err)));
+    return;
+  }
+
+  controller = new AppController(backend);
+  controller.onChange(() => render());
+
+  // Arriving on a shared link goes straight to joining that room, with the
+  // code already filled in. One link in a group chat is the whole
+  // distribution story.
+  if (local.code) controller.setJoining(true);
+
+  render();
+}
+
+function fatal(message: string): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'join';
+  const p = document.createElement('p');
+  p.className = 'join__error';
+  p.setAttribute('role', 'alert');
+  p.textContent = message;
+  el.append(p);
+  return el;
+}
+
+/* -------------------------------- actions ------------------------------- */
+
+/** Run a backend call, showing failures rather than swallowing them. */
+async function attempt(fn: () => Promise<void>, onFail?: string): Promise<boolean> {
+  local.busy = true;
+  local.error = null;
+  render();
+  try {
+    await fn();
+    return true;
+  } catch (err) {
+    local.error = onFail ?? String(err);
+    return false;
+  } finally {
+    local.busy = false;
+    render();
+  }
+}
+
+const actions: AppActions = {
+  onModeChange(mode) {
+    local.mode = mode;
+    render();
+  },
+
+  async onCreate(mode) {
+    local.mode = mode;
+    const name = local.displayName.trim() || defaultName(mode);
+    await attempt(async () => {
+      const roomId = await backend.createRoom({
+        displayName: name,
+        activeRoles: DEFAULT_ACTIVE_ROLES,
+        config: TWO_ROUND_CONFIG,
+        // The single point where the player-facing choice becomes technical:
+        // a table device must not be dealt a card, because it can read them
+        // all (see ui/setup.ts).
+        playing: controllerModeIsPlaying(mode),
+      });
+      local.code = roomId;
+      history.replaceState(null, '', roomUrl(location.href, roomId));
+      controller.watch(roomId);
+    });
+  },
+
+  onCodeChange(code) {
+    local.code = code;
+    local.error = null;
+    render();
+  },
+
+  onNameChange(name) {
+    local.displayName = name;
+    render();
+  },
+
+  async onJoin(code, displayName) {
+    rememberName(displayName);
+    local.displayName = displayName;
+    const ok = await attempt(
+      () => backend.joinRoom(code, displayName),
+      t(local.lang, 'join.noSuchRoom'),
+    );
+    if (!ok) return;
+    history.replaceState(null, '', roomUrl(location.href, code));
+    controller.watch(code);
+  },
+
+  onBack() {
+    controller.reset();
+    controller.setJoining(false);
+    local.error = null;
+    render();
+  },
+
+  async onLeave() {
+    const roomId = controller.current().roomId;
+    if (!roomId) return;
+    await attempt(() => backend.leaveRoom(roomId));
+  },
+
+  async onRejoin() {
+    const roomId = controller.current().roomId;
+    if (!roomId) return;
+    await attempt(() => backend.joinRoom(roomId, local.displayName || 'Speler'));
+  },
+
+  async onDeal() {
+    const roomId = controller.current().roomId;
+    if (!roomId) return;
+    // A fresh seed per round, so two rounds of one evening are not the same
+    // deal. The engine's shuffle is seeded so a round stays replayable.
+    await attempt(() => backend.startGame(roomId, Math.floor(Math.random() * 1e9)));
+  },
+
+  /**
+   * Lobby seat swapping: tap one seat, then another.
+   *
+   * ALL present players may rearrange before a round starts (Milan,
+   * 2026-08-26) — at a real table the person who moved chairs is the one who
+   * knows, and it is not worth routing that through whoever happens to be
+   * host. The order locks the moment play begins, because the Dorpsgek's shift
+   * depends on a stable adjacency (§13), and the rules enforce that lock.
+   */
+  onSeatTap(seat) {
+    const state = controller.current();
+    const room = state.room;
+    // Guarded here as well as in the rules: every present member may arrange,
+    // and nobody may once play has begun.
+    if (!room || !mayArrangeSeats(room, state.uid)) return;
+
+    if (local.pendingSwap === null) {
+      local.pendingSwap = seat;
+      render();
+      return;
+    }
+    const first = local.pendingSwap;
+    local.pendingSwap = null;
+    if (first === seat) {
+      render();
+      return;
+    }
+
+    const order = reorderForSwap(room, state.players, first, seat);
+
+    const roomId = state.roomId;
+    if (!roomId) return;
+    void attempt(() => backend.setSeating(roomId, order));
+  },
+
+  onCardTap() { /* night targeting arrives with the decision prompts */ },
+  onNameTap() { /* stats-on-tap arrives with the profile sheet */ },
+};
+
+function defaultName(mode: ControllerMode): string {
+  return mode === 'table-device' ? 'Tafel' : 'Speler';
+}
+
+/* -------------------------------- render -------------------------------- */
+
+function render(): void {
+  const app = document.getElementById('app');
+  if (!app) return;
+  app.replaceChildren();
+
+  const state = controller.current();
+  const screen = controller.screen();
+
+  // Creating a room is the one screen that needs a name before it exists, so
+  // it gets its own path rather than being squeezed into renderApp's setup.
+  if (screen.kind === 'setup') {
+    app.append(nameField(), renderRoomSetup({
+      lang: local.lang,
+      mode: local.mode,
+      canCreate: !local.busy,
+      onModeChange: actions.onModeChange,
+      onCreate: actions.onCreate,
+    }));
+    app.append(bottomBar(false));
+    if (local.error) app.append(fatal(local.error));
+    return;
+  }
+
+  app.append(renderApp({
+    lang: local.lang,
+    state,
+    screen,
+    mode: local.mode,
+    code: local.code,
+    displayName: local.displayName,
+    error: local.error,
+    busy: local.busy,
+    selected: local.pendingSwap,
+    actions,
+  }));
+
+  if (state.roomId) app.append(bottomBar(true));
+  if (local.menuOpen) app.append(menu());
+  if (local.recovering) app.append(recoverySheet());
+}
+
+function nameField(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'join';
+  const field = document.createElement('input');
+  field.className = 'join__name';
+  field.type = 'text';
+  field.maxLength = 24;
+  field.value = local.displayName;
+  field.placeholder = t(local.lang, 'join.namePlaceholder');
+  field.setAttribute('aria-label', t(local.lang, 'join.name'));
+  field.addEventListener('input', () => {
+    local.displayName = field.value;
+    rememberName(field.value);
+  });
+  wrap.append(field);
+  return wrap;
+}
+
+function bottomBar(inRoom: boolean): HTMLElement {
   const bar = document.createElement('div');
   bar.className = 'bottombar';
-  bar.append(
-    button(
-      state.view === 'phone' ? 'Telefoon'
-        : state.view === 'tablet' ? 'Tablet'
-        : state.view === 'lobby' ? 'Stoelen'
-        : 'Opzet',
-      () => {
-        state.view =
-          state.view === 'phone' ? 'tablet'
-            : state.view === 'tablet' ? 'lobby'
-            : state.view === 'lobby' ? 'setup'
-            : 'phone';
-        state.openStats = null;
-        state.openPicker = null;
-        render();
-      },
-    ),
-    button(state.phase === 'night' ? 'Toon dag' : 'Toon nacht', () => {
-      state.phase = state.phase === 'night' ? 'day' : 'night';
-      state.prompting = state.phase === 'night';
-      state.openStats = null;
+
+  if (inRoom) {
+    bar.append(button(t(local.lang, 'menu.title'), () => {
+      local.menuOpen = true;
       render();
-    }),
-    button(state.testMode ? 'Test aan' : 'Test uit', () => {
-      state.testMode = !state.testMode;
-      render();
-    }),
-    button(state.lang === 'nl' ? 'EN' : 'NL', () => {
-      state.lang = state.lang === 'nl' ? 'en' : 'nl';
-      render();
-    }),
-    button(
-      state.paused ? t(state.lang, 'action.resume') : t(state.lang, 'action.pause'),
-      () => {
-        state.paused = !state.paused;
-        render();
-      },
-    ),
-  );
+    }));
+  }
+  bar.append(button(local.lang === 'nl' ? 'EN' : 'NL', () => {
+    local.lang = local.lang === 'nl' ? 'en' : 'nl';
+    setLang(local.lang);
+    render();
+  }));
   return bar;
 }
 
-function button(label: string, onClick: () => void): HTMLElement {
+/**
+ * The menu.
+ *
+ * Sharing the link and leaving are ordinary. Taking over the game is not, and
+ * it sits at the bottom, styled as the exception it is — reachable in two
+ * taps, never in one, and never adjacent to anything somebody reaches for
+ * casually.
+ */
+function menu(): HTMLElement {
+  const sheet = document.createElement('div');
+  sheet.className = 'menu';
+
+  const title = document.createElement('h2');
+  title.className = 'setup__title';
+  title.textContent = t(local.lang, 'menu.title');
+  sheet.append(title);
+
+  const code = controller.current().roomId;
+  if (code) {
+    const share = button(
+      local.shareCopied ? t(local.lang, 'menu.copied') : `${t(local.lang, 'menu.share')} — ${code}`,
+      () => {
+        void navigator.clipboard?.writeText(roomUrl(location.href, code)).then(() => {
+          local.shareCopied = true;
+          render();
+        }).catch(() => { /* no clipboard permission; the code is on screen */ });
+      },
+    );
+    share.classList.add('menu__item');
+    sheet.append(share);
+  }
+
+  const leave = button(t(local.lang, 'menu.leave'), () => {
+    local.menuOpen = false;
+    void actions.onLeave();
+  });
+  leave.classList.add('menu__item');
+  sheet.append(leave);
+
+  const recover = button(t(local.lang, 'menu.recover'), () => {
+    local.menuOpen = false;
+    local.recovering = true;
+    local.recoveryTyped = '';
+    local.error = null;
+    render();
+  });
+  recover.classList.add('menu__item', 'menu__item--danger');
+  sheet.append(recover);
+
+  const close = button(t(local.lang, 'menu.close'), () => {
+    local.menuOpen = false;
+    local.shareCopied = false;
+    render();
+  });
+  close.classList.add('menu__item');
+  sheet.append(close);
+
+  return sheet;
+}
+
+function recoverySheet(): HTMLElement {
+  return renderRecovery({
+    lang: local.lang,
+    typed: local.recoveryTyped,
+    error: local.error,
+    busy: local.busy,
+    onTyped: (value) => {
+      local.recoveryTyped = value;
+      render();
+    },
+    onCancel: () => {
+      local.recovering = false;
+      local.recoveryTyped = '';
+      local.error = null;
+      render();
+    },
+    onConfirm: () => {
+      const roomId = controller.current().roomId;
+      if (!roomId) return;
+      void attempt(
+        () => backend.takeEmergencyControl(roomId, local.recoveryTyped.trim()),
+        t(local.lang, 'recover.failed'),
+      ).then((ok) => {
+        if (!ok) return;
+        local.recovering = false;
+        local.recoveryTyped = '';
+        render();
+      });
+    },
+  });
+}
+
+function button(label: string, onClick: () => void): HTMLButtonElement {
   const b = document.createElement('button');
   b.type = 'button';
-  b.className = 'btn btn--ghost';
+  b.className = 'btn';
   b.textContent = label;
   b.addEventListener('click', onClick);
   return b;
 }
 
-render();
+void start();
