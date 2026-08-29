@@ -150,6 +150,12 @@ body {
   max-height: 100%;
 }
 
+@media (min-width: 720px) {
+  .tablewrap .table {
+    width: min(68vw, 70vh, 620px);
+  }
+}
+
 .table__ring {
   position: absolute;
   inset: 14%;
@@ -480,6 +486,42 @@ body {
   margin: 0 auto;
   max-height: 58%;
   overflow-y: auto;
+}
+
+/* Voting is a control panel, not the game board. */
+.sheet--vote {
+  max-height: 34%;
+  padding-top: 12px;
+}
+
+.sheet--vote .sheet__grip {
+  display: none;
+}
+
+.sheet--vote .btn {
+  display: inline-flex;
+  width: auto;
+  padding: 8px 11px;
+  margin: 7px 6px 0 0;
+  font-size: 13px;
+}
+
+.sheet--vote .sheet__note {
+  margin-top: 7px;
+  font-size: 11px;
+}
+
+@media (min-width: 720px) {
+  .sheet--vote {
+    left: auto;
+    right: 20px;
+    bottom: 20px;
+    width: min(360px, calc(100vw - 40px));
+    max-width: none;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  }
 }
 
 .sheet__grip {

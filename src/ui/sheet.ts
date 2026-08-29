@@ -19,6 +19,8 @@ export interface SheetOptions {
   onDismiss?: () => void;
   /** A prompt with a deadline can't be dismissed by tapping away. */
   dismissable?: boolean;
+  /** A lightweight control panel that should not eclipse the table. */
+  variant?: 'vote';
 }
 
 export function renderSheet(opts: SheetOptions): HTMLElement {
@@ -31,7 +33,7 @@ export function renderSheet(opts: SheetOptions): HTMLElement {
   }
 
   const sheet = document.createElement('div');
-  sheet.className = 'sheet';
+  sheet.className = opts.variant ? `sheet sheet--${opts.variant}` : 'sheet';
 
   const grip = document.createElement('div');
   grip.className = 'sheet__grip';

@@ -106,7 +106,9 @@ export function renderApp(deps: AppDeps): HTMLElement {
 
 function renderTableScreen(deps: AppDeps): HTMLElement {
   const room = deps.state.room!;
-  return renderTable({
+  const wrap = document.createElement('div');
+  wrap.className = 'tablewrap';
+  wrap.append(renderTable({
     lang: deps.lang,
     seats: seatViews({
       room,
@@ -122,7 +124,8 @@ function renderTableScreen(deps: AppDeps): HTMLElement {
     hasAlphaWolfCard: room.activeRoles.includes('alphawolf'),
     onCardTap: deps.actions.onCardTap,
     onNameTap: deps.actions.onNameTap,
-  });
+  }));
+  return wrap;
 }
 
 /* ------------------------------- the lobby ------------------------------- */

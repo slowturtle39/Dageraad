@@ -15,7 +15,7 @@ import {
 } from './app/friend.js';
 import { renderRoomSetup, controllerModeIsPlaying, type ControllerMode } from './ui/setup.js';
 import { renderPrompt, seatSelectable } from './ui/prompt.js';
-import { renderSheet } from './ui/sheet.js';
+import { describeReveal, renderSheet } from './ui/sheet.js';
 import { renderVoting } from './ui/voting.js';
 import { runGame } from './app/refereeRunner.js';
 import { detectLang, roleName, setLang, t, type Lang } from './ui/i18n.js';
@@ -24,7 +24,7 @@ import {
 } from './engine/presets.js';
 import { mayArrangeSeats, reorderForSwap } from './app/seating.js';
 import type { Backend, RoomMode } from './app/backend.js';
-import type { Choice, SeatIndex } from './engine/types.js';
+import type { Choice, RoleId, SeatIndex } from './engine/types.js';
 
 /**
  * The app.
@@ -65,6 +65,9 @@ interface Local {
   abstaining: boolean;
   /** "Let us vote now." A decision about the clock, not the outcome. */
   readyToVote: boolean;
+  /** Private result messages acknowledged in the current round. */
+  acknowledgedPrivateInfo: number;
+  privateInfoRound: number | null;
   /** True once this device has run the round it is refereeing. */
   refereeRunning: boolean;
   /** Which human this device is, across evenings. Null until picked. */
@@ -94,6 +97,8 @@ const local: Local = {
   voteTarget: null,
   abstaining: false,
   readyToVote: false,
+  acknowledgedPrivateInfo: 0,
+  privateInfoRound: null,
   refereeRunning: false,
   friend: null,
   friends: [],
@@ -797,6 +802,9 @@ function tableOverlay(): HTMLElement | null {
   const request = state.own.pending[0];
   if (request) return promptSheet(request, ownSeat as SeatIndex);
 
+  const privateReceipt = nextPrivateReceipt();
+  if (privateReceipt) return privateReceipt;
+
   if (room.phase === 'day' || room.phase === 'voting') {
     return voteSheet(ownSeat as SeatIndex);
   }
@@ -804,6 +812,39 @@ function tableOverlay(): HTMLElement | null {
     return resultSheet(ownSeat as SeatIndex);
   }
   return null;
+}
+
+/** A private reveal must stay readable after its choice sheet closes. */
+function nextPrivateReceipt(): HTMLElement | null {
+  const state = controller.current();
+  const round = state.room?.round ?? null;
+  if (local.privateInfoRound !== round) {
+    local.privateInfoRound = round;
+    local.acknowledgedPrivateInfo = 0;
+  }
+  const info = state.own.privateInfo[local.acknowledgedPrivateInfo];
+  if (!info) return null;
+
+  const message = document.createElement('p');
+  message.className = 'sheet__sub';
+  message.textContent = describeReveal(
+    info,
+    (seat) => seatNames()[seat as SeatIndex] ?? String(seat + 1),
+    (role) => roleName(local.lang, role as RoleId),
+  );
+  return renderSheet({
+    title: local.lang === 'nl' ? 'Wat je zag' : 'What you saw',
+    body: message,
+    actions: [{
+      label: local.lang === 'nl' ? 'Verder' : 'Continue',
+      primary: true,
+      onSelect: () => {
+        local.acknowledgedPrivateInfo += 1;
+        render();
+      },
+    }],
+    dismissable: false,
+  });
 }
 
 function seatNames(): Record<SeatIndex, string> {
@@ -915,6 +956,7 @@ function voteSheet(ownSeat: SeatIndex): HTMLElement {
         render();
       },
     }),
+    variant: 'vote',
   });
 }
 
