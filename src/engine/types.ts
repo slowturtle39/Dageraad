@@ -51,9 +51,9 @@ export type HeksVariant = 'flat' | 'conditional';
  * 'dependency' (mode 1): everyone chooses immediately; reveals are released as
  *   each seat's prerequisites clear. Reveal-then-decide roles act live.
  * 'tworound'   (mode 2): everyone submits up front; only roles that genuinely
- *   need a live follow-up get a second round. The Heks and the Medium's Looier
- *   swap are answered from a pre-committed rule instead, which is the only
- *   reason the night stays at two rounds rather than three.
+ *   need a live follow-up get a second round. The Heks selects her exchange
+ *   partner before her centre card; that deliberate tradeoff keeps the night
+ *   at two rounds rather than three.
  */
 export type ResolutionMode = 'dependency' | 'tworound';
 
@@ -64,9 +64,9 @@ export interface GameConfig {
   /** Base rules let the Heks swap with her own card. */
   heksMaySwapSelf: boolean;
   /**
-   * Roles whose reveal-then-decide step is answered from a stored rule rather
-   * than by prompting the player. Empty in 'dependency' mode. In 'tworound'
-   * mode this is what holds the night to two rounds.
+   * Roles whose action is configured for the two-round flow rather than a
+   * live reveal-dependent follow-up. Empty in 'dependency' mode. For the Heks
+   * this means selecting her exchange partner before seeing the centre card.
    */
   precommitRoles: RoleId[];
 }

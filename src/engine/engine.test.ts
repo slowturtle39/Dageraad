@@ -67,8 +67,8 @@ describe('three centre cards + one separate wolf card', () => {
 
     const res = run(state, ['alphawolf', 'heks'], answers({
       '0:alpha-target': seat(2),      // seat 2's dorpeling goes to the 4th slot
+      '1:heks-precommit-target': seat(2),
       '1:heks-center': center(0),
-      '1:heks-target': seat(2),
     }));
 
     // The displaced card sits in the 4th slot and never becomes selectable.
@@ -85,8 +85,8 @@ describe('Heks', () => {
   it('gets a real receipt for the card she looked at, having pre-committed blind', () => {
     const state = deal(['heks', 'dorpeling'], ['looier', 'jager', 'bodyguard']);
     const res = run(state, ['heks'], answers({
+      '0:heks-precommit-target': seat(1),
       '0:heks-center': center(0),
-      '0:heks-target': seat(1),
     }));
 
     expect(res.privateInfo[0]!).toContainEqual(
@@ -96,12 +96,23 @@ describe('Heks', () => {
     expect(roleAt(res.state, 1)).toBe('looier');
   });
 
-  it('her target decision is flagged reveal-dependent, which is why she pre-commits', () => {
+  it('chooses her exchange partner before the centre card in two-round mode', () => {
+    const state = deal(['heks', 'dorpeling'], ['jager', 'jager', 'jager']);
+    const res = run(state, ['heks'], answers({
+      '0:heks-precommit-target': seat(1),
+      '0:heks-center': center(0),
+    }));
+    const target = res.decisions.find((d) => d.key === 'heks-precommit-target')!;
+    expect(target.dependsOnReveal).toBe(false);
+    expect(res.decisions.some((d) => d.key === 'heks-target')).toBe(false);
+  });
+
+  it('keeps the reveal-dependent exchange choice in dependency mode', () => {
     const state = deal(['heks', 'dorpeling'], ['jager', 'jager', 'jager']);
     const res = run(state, ['heks'], answers({
       '0:heks-center': center(0),
       '0:heks-target': seat(1),
-    }));
+    }), DEPENDENCY_CONFIG);
     const target = res.decisions.find((d) => d.key === 'heks-target')!;
     expect(target.dependsOnReveal).toBe(true);
     expect(target.seen).toMatchObject({ kind: 'saw-center' });

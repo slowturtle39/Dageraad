@@ -185,12 +185,10 @@ export function tabletViewFor(deps: AppDeps): TabletView {
       displayName: nameByUid.get(uid) ?? uid,
       shielded: room.shieldedSeats.includes(seat),
     };
-    // Only a card genuinely turned face up in play. Note this reads the public
-    // room document, not finalRoles — at the end of the game the table sees
-    // the result on the results screen, not smuggled onto the tablet.
-    // Dawn is public too. On the shared device the table must be able to read
-    // the result before the referee starts the next round.
-    const revealed = room.finalRoles?.[seat] ?? room.revealedSlots[seat];
+    // Only a card genuinely turned face up in play. The results screen is the
+    // deliberate place that final roles become visible; painting them onto the
+    // neutral board would make a private-looking screen suddenly spoil them.
+    const revealed = room.revealedSlots[seat];
     if (revealed) view.revealedRole = revealed;
     return view;
   });

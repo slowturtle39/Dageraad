@@ -1121,9 +1121,22 @@ body {
   flex-direction: column;
   gap: 8px;
   padding: 16px;
-  background: var(--bg-raised);
+  max-height: 56vh;
+  overflow-y: auto;
+  background: rgba(28, 31, 38, 0.94);
   border-top: 1px solid var(--line);
   box-shadow: var(--shadow);
+}
+
+@media (min-width: 720px) {
+  .menu {
+    left: auto;
+    right: 20px;
+    bottom: 72px;
+    width: min(360px, calc(100vw - 40px));
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+  }
 }
 
 .menu__item {
@@ -1318,6 +1331,19 @@ body {
   font-family: var(--font-ui);
   font-size: 0.75rem;
   letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* The public rhythm of play. It must not report individual submissions. */
+.gameprogress {
+  padding: 5px 12px;
+  color: var(--ink-dim);
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--line-soft);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
   text-align: center;
   text-transform: uppercase;
 }

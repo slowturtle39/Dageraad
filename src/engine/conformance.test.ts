@@ -102,8 +102,8 @@ describe('written house-rule conformance', () => {
     expect(() => centerSlot(initial, 3)).toThrow('center index out of range');
 
     const result = night(initial, ['heks'], answers({
+      '1:heks-precommit-target': seat(2),
       '1:heks-center': center(0),
-      '1:heks-target': seat(2),
     }));
     expect(result.privateInfo[1]).toContainEqual(
       expect.objectContaining({ kind: 'saw-center', centerIndex: 0, role: 'looier' }),

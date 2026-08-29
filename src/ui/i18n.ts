@@ -171,6 +171,8 @@ const nl: Dict = {
   'prompt.pickSeat': 'Tik iemand aan de tafel aan.',
   'prompt.pickTwoSeats': 'Tik twee spelers aan; hun kaarten wisselen.',
   'prompt.pickCenter': 'Kies {n} van de middenkaarten.',
+  'prompt.heksPrecommit':
+    'Kies nu alvast met wie je de kaart ruilt. Daarna kies je een middenkaart; pas na de nacht zie je wat erop lag.',
   'prompt.confirm': 'Bevestig je actie.',
   // Only the Dorpsgek ever sees a direction. Niemand anders hoort welke kant
   // de kaarten op gingen, dus dit is het enige scherm dat er een noemt.
@@ -213,6 +215,7 @@ const nl: Dict = {
   'friend.newName': 'Voeg jezelf eenmalig toe',
   'friend.create': 'Voeg mijn naam toe',
   'friend.continueAs': 'Ga door als {name}',
+  'friend.profiles': 'Profielen',
 
   'alltime.title': 'Eeuwige stand',
   'alltime.empty': 'Nog geen enkele avond die meetelt.',
@@ -372,6 +375,8 @@ const en: Dict = {
   'prompt.pickSeat': 'Tap somebody at the table.',
   'prompt.pickTwoSeats': 'Tap two players; their cards swap.',
   'prompt.pickCenter': 'Choose {n} of the centre cards.',
+  'prompt.heksPrecommit':
+    'Choose who will receive the card first. Then choose a centre card; you will see what it was after the night.',
   'prompt.confirm': 'Confirm your action.',
   'prompt.dorpsgek': 'Which way do the cards shift? Only you know this.',
   'prompt.shiftLeft': 'To the left',
@@ -408,6 +413,7 @@ const en: Dict = {
   'friend.newName': 'Add yourself once',
   'friend.create': 'Add my name',
   'friend.continueAs': 'Continue as {name}',
+  'friend.profiles': 'Profiles',
 
   'alltime.title': 'All-time',
   'alltime.empty': 'No evening has counted yet.',

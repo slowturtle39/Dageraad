@@ -89,6 +89,16 @@ describe('declining', () => {
   });
 });
 
+describe('the two-round Heks prompt', () => {
+  it('explains that the exchange partner is chosen before the centre card', () => {
+    const el = renderPrompt(view(
+      { kind: 'seat', exclude: [], optional: false },
+      { request: request({ kind: 'seat', exclude: [], optional: false }, { key: 'heks-precommit-target' }) },
+    ));
+    expect(el.textContent).toContain('Kies nu alvast met wie je de kaart ruilt');
+  });
+});
+
 describe('the Dorpsgek picks a direction and nobody else learns it', () => {
   const p: Prompt = { kind: 'dorpsgek', variant: 'standard' };
 

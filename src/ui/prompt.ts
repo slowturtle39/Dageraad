@@ -132,6 +132,9 @@ export function renderPrompt(view: PromptView): HTMLElement {
 
 function promptText(view: PromptView): string {
   const { lang, request } = view;
+  if (request.key === 'heks-precommit-target') {
+    return t(lang, 'prompt.heksPrecommit');
+  }
   switch (request.prompt.kind) {
     case 'seat':
       return t(lang, 'prompt.pickSeat');

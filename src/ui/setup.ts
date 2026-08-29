@@ -67,11 +67,11 @@ export function renderResolutionPicker(view: ResolutionPickerView): HTMLElement 
 
   const options: Array<{ mode: ResolutionMode; name: string; body: string }> = view.lang === 'nl'
     ? [
-        { mode: 'tworound', name: '2 rondes - aanbevolen', body: 'De gewone, snellere variant. Iedereen kiest eerst; alleen echte vervolgkeuzes openen daarna.' },
+        { mode: 'tworound', name: '2 rondes - aanbevolen', body: 'De gewone, snellere variant. De Heks kiest eerst met wie ze ruilt en daarna een middenkaart; wat erop lag ziet ze later.' },
         { mode: 'dependency', name: 'Live vervolg', body: 'Langere variant: elke keuze die afhangt van een onthulling wordt live gemaakt.' },
       ]
     : [
-        { mode: 'tworound', name: '2 rounds - recommended', body: 'The normal, faster variant. Everyone chooses first; only genuine follow-ups open afterwards.' },
+        { mode: 'tworound', name: '2 rounds - recommended', body: 'The normal, faster variant. The Witch first chooses who to trade with, then a centre card; she sees its role later.' },
         { mode: 'dependency', name: 'Live follow-ups', body: 'Longer variant: every choice that depends on a reveal is made live.' },
       ];
 

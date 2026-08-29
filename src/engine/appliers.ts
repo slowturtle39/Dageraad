@@ -226,6 +226,13 @@ const rechter: Applier = function* (ctx) {
  * does look at the card — the pre-commit is our constraint, not her weakness.
  */
 const heks: Applier = function* (ctx) {
+  const exclude = ctx.config.heksMaySwapSelf ? [] : [ctx.actor];
+  // The two-round mode stays at two windows by committing the exchange partner
+  // before the centre card is known. Dependency mode leaves this undefined and
+  // asks the normal live follow-up after the reveal instead.
+  const precommittedTarget = ctx.config.precommitRoles.includes('heks')
+    ? yield ask(ctx, 'heks-precommit-target', { kind: 'seat', exclude, optional: false })
+    : null;
   const pick = yield ask(ctx, 'heks-center', { kind: 'center', count: 1 });
   const [centerIndex] = centersOf(pick);
   if (centerIndex === undefined) {
@@ -239,9 +246,9 @@ const heks: Applier = function* (ctx) {
   };
   ctx.info(ctx.actor, seen);
 
-  const exclude = ctx.config.heksMaySwapSelf ? [] : [ctx.actor];
-  const target = yield ask(ctx, 'heks-target', { kind: 'seat', exclude, optional: false },
-    { dependsOnReveal: true, seen });
+  const target = precommittedTarget ?? (yield ask(
+    ctx, 'heks-target', { kind: 'seat', exclude, optional: false }, { dependsOnReveal: true, seen },
+  ));
 
   const seat = seatOf(target);
   if (seat === null) return;

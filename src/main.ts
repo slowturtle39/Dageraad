@@ -82,6 +82,10 @@ interface Local {
   resolutionMode: ResolutionMode;
   history: HistoryRecord[];
   showAllTime: boolean;
+  showProfiles: boolean;
+  /** Answers submitted locally in the currently open night window. */
+  submittedDecisionKeys: string[];
+  decisionWindow: string | null;
 }
 
 const local: Local = {
@@ -113,6 +117,9 @@ const local: Local = {
   resolutionMode: 'tworound',
   history: [],
   showAllTime: false,
+  showProfiles: false,
+  submittedDecisionKeys: [],
+  decisionWindow: null,
 };
 
 const NAME_KEY = 'dageraad.name';
@@ -505,7 +512,8 @@ function returnHome(): void {
   controller.reset();
   local.code = '';
   local.menuOpen = false;
-  local.showAllTime = false;
+    local.showAllTime = false;
+    local.showProfiles = false;
   local.recovering = false;
   local.error = null;
   history.replaceState(null, '', homeUrl(location.href));
@@ -540,7 +548,7 @@ function render(): void {
 
   const state = controller.current();
   const screen = controller.screen();
-  const pendingPrompt = state.own.pending[0];
+  const pendingPrompt = firstPending();
 
   // Creating a room is the one screen that needs a name before it exists, so
   // it gets its own path rather than being squeezed into renderApp's setup.
@@ -606,10 +614,12 @@ function render(): void {
   // afterwards. Above everything, so it is not something you scroll to.
   if (state.room) {
     app.prepend(renderRoomStatusBadge(local.lang, state.room.mode, state.room.config.mode));
+    app.prepend(gameProgress());
   }
 
   if (state.roomId) app.append(bottomBar(true));
   if (local.showAllTime) app.append(allTimeSheet());
+  if (local.showProfiles) app.append(profileSheet());
 
   // Drawn OVER the table, never instead of it (§13.1): from across the room,
   // deciding and idly browsing have to look the same.
@@ -654,6 +664,30 @@ function bottomBar(inRoom: boolean): HTMLElement {
     render();
   }));
   return bar;
+}
+
+/**
+ * A public heartbeat for every device. It deliberately says only which shared
+ * stage is open and how many public night windows exist, never who is acting
+ * or whether somebody has already answered.
+ */
+function gameProgress(): HTMLElement {
+  const room = controller.current().room!;
+  const el = document.createElement('div');
+  el.className = 'gameprogress';
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
+
+  if (room.phase === 'night') {
+    const total = room.timeline?.phases.length ?? 1;
+    el.textContent = local.lang === 'nl'
+      ? `Nacht bezig · stap ${Math.min(room.nightWindowIndex + 1, total)} van ${total}`
+      : `Night in progress · step ${Math.min(room.nightWindowIndex + 1, total)} of ${total}`;
+    return el;
+  }
+
+  el.textContent = t(local.lang, `phase.${room.phase}`);
+  return el;
 }
 
 function joinExistingButton(): HTMLElement {
@@ -702,6 +736,14 @@ function menu(): HTMLElement {
   });
   table.classList.add('menu__item');
   sheet.append(table);
+
+  const profiles = button(t(local.lang, 'friend.profiles'), () => {
+    local.menuOpen = false;
+    local.showProfiles = true;
+    render();
+  });
+  profiles.classList.add('menu__item');
+  sheet.append(profiles);
 
   const home = button(t(local.lang, 'menu.home'), returnHome);
   home.classList.add('menu__item');
@@ -795,7 +837,7 @@ function tableOverlay(): HTMLElement | null {
   const ownSeat = room.seating.indexOf(state.uid);
   if (ownSeat < 0) return null;                 // not in this round
 
-  const request = state.own.pending[0];
+  const request = firstPending();
   if (request) return promptSheet(request, ownSeat as SeatIndex);
 
   const privateReceipt = nextPrivateReceipt();
@@ -858,16 +900,19 @@ function promptSheet(
   ownSeat: SeatIndex,
 ): HTMLElement {
   const state = controller.current();
-  const send = (choice: Choice) => {
+  const send = async (choice: Choice) => {
     const roomId = state.roomId;
     if (!roomId || !state.room) return;
-    local.picked = [];
-    local.pickedCenters = [];
-    void attempt(() => backend.submit(
+    const saved = await attempt(() => backend.submit(
       roomId,
       state.room!.nightWindowIndex,
       { [request.key]: choice },
     ));
+    if (!saved) return;
+    local.submittedDecisionKeys.push(request.key);
+    local.picked = [];
+    local.pickedCenters = [];
+    render();
   };
 
   return renderSheet({
@@ -900,7 +945,14 @@ function promptSheet(
 
 /** Narrowing helper so promptSheet can name the type without importing it. */
 function firstPending() {
-  return controller.current().own.pending[0];
+  const state = controller.current();
+  const room = state.room;
+  const marker = room ? `${room.round}:${room.nightWindowIndex}` : null;
+  if (local.decisionWindow !== marker) {
+    local.decisionWindow = marker;
+    local.submittedDecisionKeys = [];
+  }
+  return state.own.pending.find((request) => !local.submittedDecisionKeys.includes(request.key));
 }
 
 function voteSheet(ownSeat: SeatIndex): HTMLElement {
@@ -1005,7 +1057,7 @@ function resultSheet(ownSeat: SeatIndex): HTMLElement {
 
 /* --------------------------- who you are, all-time ----------------------- */
 
-function friendPicker(): HTMLElement {
+function friendPicker(onPicked?: () => void): HTMLElement {
   return renderFriendPicker({
     lang: local.lang,
     profiles: local.friends,
@@ -1022,6 +1074,7 @@ function friendPicker(): HTMLElement {
       // profile — which is the whole difference from keying off the uid.
       rememberFriendId(profile.id);
       if (!local.displayName) local.displayName = profile.displayName;
+      onPicked?.();
       render();
     },
     onCreate: (displayName) => {
@@ -1031,6 +1084,7 @@ function friendPicker(): HTMLElement {
         local.friendTyped = '';
         rememberFriendId(profile.id);
         if (!local.displayName) local.displayName = profile.displayName;
+        onPicked?.();
       });
     },
   });
@@ -1056,6 +1110,18 @@ function allTimeSheet(): HTMLElement {
     body,
     onDismiss: () => {
       local.showAllTime = false;
+      render();
+    },
+  });
+}
+
+/** The shared address book remains reachable after entering a room. */
+function profileSheet(): HTMLElement {
+  return renderSheet({
+    title: t(local.lang, 'friend.profiles'),
+    body: friendPicker(() => { local.showProfiles = false; }),
+    onDismiss: () => {
+      local.showProfiles = false;
       render();
     },
   });
