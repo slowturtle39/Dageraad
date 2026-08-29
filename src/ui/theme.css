@@ -1217,6 +1217,15 @@ body {
   flex-wrap: wrap;
 }
 
+.prompt__reveal {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--gold-dim);
+  background: color-mix(in srgb, var(--gold-dim) 10%, transparent);
+  color: var(--ink);
+  line-height: 1.45;
+}
+
 .prompt__actions .btn {
   flex: 1 1 auto;
 }

@@ -114,6 +114,8 @@ export function describeReveal(
       return `Je bent nu zelf de ${roleName(info.role as string)}.`;
     case 'judged':
       return 'De Rechter heeft jou gekozen. Je eerste uitspraak vandaag moet waar zijn.';
+    case 'card-locked':
+      return 'Jouw kaart kan deze nacht niet worden verplaatst.';
     case 'own-final-card':
       return `Je eindigt de nacht als de ${roleName(info.role as string)}.`;
     case 'action-confirmed':

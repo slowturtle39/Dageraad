@@ -1,5 +1,6 @@
 import { roleName, t, type Lang } from './i18n.js';
-import type { Choice, DecisionRequest, SeatIndex } from '../engine/types.js';
+import { describeReveal } from './sheet.js';
+import type { Choice, DecisionRequest, RoleId, SeatIndex } from '../engine/types.js';
 
 /**
  * The question one seat is being asked, and the answer coming back.
@@ -69,6 +70,20 @@ export function renderPrompt(view: PromptView): HTMLElement {
   title.className = 'prompt__title';
   title.textContent = t(lang, 'prompt.youAre', { role: roleName(lang, request.actingAs) });
   el.append(title);
+
+  // Heks has to see the centre card before selecting who receives it. This is
+  // released with the follow-up request rather than waiting for the window to
+  // close, so render it here where the decision is actually made.
+  if (request.seen) {
+    const seen = document.createElement('p');
+    seen.className = 'prompt__reveal';
+    seen.textContent = describeReveal(
+      request.seen,
+      (seat) => view.names[seat as SeatIndex] ?? String(seat + 1),
+      (role) => roleName(lang, role as RoleId),
+    );
+    el.append(seen);
+  }
 
   const ask = document.createElement('p');
   ask.className = 'sheet__sub';
