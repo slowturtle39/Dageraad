@@ -7,13 +7,15 @@ import { homeUrl, roomCodeFromUrl, roomUrl } from './app/roomlink.js';
 import { renderApp, type AppActions } from './ui/app.js';
 import { renderRecovery } from './ui/recovery.js';
 import {
-  renderAllTime, renderFriendPicker, renderModePicker, renderPracticeBadge,
+  renderAllTime, renderFriendPicker, renderModePicker, renderRoomStatusBadge,
 } from './ui/alltime.js';
 import { allTimeStandings, type HistoryRecord } from './stats/alltime.js';
 import {
   rememberFriendId, rememberedFriendId, type FriendProfile,
 } from './app/friend.js';
-import { renderRoomSetup, controllerModeIsPlaying, type ControllerMode } from './ui/setup.js';
+import {
+  renderRoomSetup, renderResolutionPicker, controllerModeIsPlaying, type ControllerMode,
+} from './ui/setup.js';
 import { renderPrompt, seatSelectable } from './ui/prompt.js';
 import { describeReveal, renderSheet } from './ui/sheet.js';
 import { renderVoting } from './ui/voting.js';
@@ -24,7 +26,7 @@ import {
 } from './engine/presets.js';
 import { mayArrangeSeats, reorderForSwap } from './app/seating.js';
 import type { Backend, RoomMode } from './app/backend.js';
-import type { Choice, RoleId, SeatIndex } from './engine/types.js';
+import type { Choice, ResolutionMode, RoleId, SeatIndex } from './engine/types.js';
 
 /**
  * The app.
@@ -76,6 +78,7 @@ interface Local {
   friendTyped: string;
   /** Whether the room this device is about to create will count. */
   roomMode: RoomMode;
+  resolutionMode: ResolutionMode;
   history: HistoryRecord[];
   showAllTime: boolean;
 }
@@ -106,6 +109,7 @@ const local: Local = {
   // Practice unless somebody deliberately says otherwise. A test evening in
   // append-only history cannot be taken back out.
   roomMode: 'practice',
+  resolutionMode: 'tworound',
   history: [],
   showAllTime: false,
 };
@@ -157,10 +161,8 @@ function isFast(): boolean {
  * URL flag rather than a setup screen for now — the host picking this is a
  * real feature and this is the walkthrough hook for it.
  */
-function configFromUrl() {
-  return new URLSearchParams(location.search).get('mode') === 'dependency'
-    ? DEPENDENCY_CONFIG
-    : TWO_ROUND_CONFIG;
+function configFromSetup() {
+  return local.resolutionMode === 'dependency' ? DEPENDENCY_CONFIG : TWO_ROUND_CONFIG;
 }
 
 /**
@@ -290,7 +292,7 @@ const actions: AppActions = {
       const roomId = await backend.createRoom({
         displayName: name,
         activeRoles: DEFAULT_ACTIVE_ROLES,
-        config: configFromUrl(),
+        config: configFromSetup(),
         // The single point where the player-facing choice becomes technical:
         // a table device must not be dealt a card, because it can read them
         // all (see ui/setup.ts).
@@ -524,14 +526,6 @@ function returnHome(): void {
  * friends are in the room. Nothing about this path is a special mode — it is
  * the ordinary room, opened with the two choices already made.
  */
-async function startPractice(): Promise<void> {
-  local.roomMode = 'practice';
-  // Playing, not a neutral board: the point of a playtest is to sit at the
-  // table and be asked the questions, and a table device is never dealt a card.
-  local.mode = 'trusted-host';
-  await actions.onCreate('trusted-host');
-}
-
 function defaultName(mode: ControllerMode): string {
   return mode === 'table-device' ? 'Tafel' : 'Speler';
 }
@@ -554,7 +548,6 @@ function render(): void {
     if (!local.friend && !demo) {
       app.append(friendPicker());
       app.append(joinExistingButton());
-      app.append(practiceButton());
       app.append(bottomBar(false));
       if (local.error) app.append(fatal(local.error));
       return;
@@ -568,6 +561,14 @@ function render(): void {
         render();
       },
     }));
+    app.append(renderResolutionPicker({
+      lang: local.lang,
+      mode: local.resolutionMode,
+      onModeChange: (mode) => {
+        local.resolutionMode = mode;
+        render();
+      },
+    }));
     app.append(nameField(), renderRoomSetup({
       lang: local.lang,
       mode: local.mode,
@@ -576,7 +577,6 @@ function render(): void {
       onCreate: actions.onCreate,
     }));
     app.append(joinExistingButton());
-    if (!demo) app.append(practiceButton());
     app.append(bottomBar(false));
     if (local.error) app.append(fatal(local.error));
     return;
@@ -597,8 +597,8 @@ function render(): void {
 
   // A practice evening says so the whole time it is being played, not
   // afterwards. Above everything, so it is not something you scroll to.
-  if (state.room?.mode === 'practice') {
-    app.prepend(renderPracticeBadge(local.lang));
+  if (state.room) {
+    app.prepend(renderRoomStatusBadge(local.lang, state.room.mode, state.room.config.mode));
   }
 
   if (state.roomId) app.append(bottomBar(true));
@@ -647,17 +647,6 @@ function bottomBar(inRoom: boolean): HTMLElement {
     render();
   }));
   return bar;
-}
-
-function practiceButton(): HTMLElement {
-  const wrap = document.createElement('div');
-  wrap.className = 'join';
-  const start = button(t(local.lang, 'demo.start'), () => { void startPractice(); });
-  const note = document.createElement('p');
-  note.className = 'sheet__note';
-  note.textContent = t(local.lang, 'demo.explain');
-  wrap.append(start, note);
-  return wrap;
 }
 
 function joinExistingButton(): HTMLElement {

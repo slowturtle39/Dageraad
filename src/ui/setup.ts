@@ -1,4 +1,5 @@
 import { t, type Lang } from './i18n.js';
+import type { ResolutionMode } from '../engine/types.js';
 
 /**
  * Choosing which device runs the game (§ trust model).
@@ -46,6 +47,47 @@ export function controllerModeIsPlaying(mode: ControllerMode): boolean {
 /** The inverse, for showing an existing room's mode back to the table. */
 export function controllerModeFromPlaying(playing: boolean): ControllerMode {
   return playing ? 'trusted-host' : 'table-device';
+}
+
+export interface ResolutionPickerView {
+  lang: Lang;
+  mode: ResolutionMode;
+  onModeChange?: (mode: ResolutionMode) => void;
+}
+
+/** The night-flow choice. It is independent of whether an evening counts. */
+export function renderResolutionPicker(view: ResolutionPickerView): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'setup__modes';
+
+  const title = document.createElement('h2');
+  title.className = 'setup__title';
+  title.textContent = view.lang === 'nl' ? 'Nachtverloop' : 'Night flow';
+  el.append(title);
+
+  const options: Array<{ mode: ResolutionMode; name: string; body: string }> = view.lang === 'nl'
+    ? [
+        { mode: 'tworound', name: '2 rondes - aanbevolen', body: 'De gewone, snellere variant. Iedereen kiest eerst; alleen echte vervolgkeuzes openen daarna.' },
+        { mode: 'dependency', name: 'Live vervolg', body: 'Langere variant: elke keuze die afhangt van een onthulling wordt live gemaakt.' },
+      ]
+    : [
+        { mode: 'tworound', name: '2 rounds - recommended', body: 'The normal, faster variant. Everyone chooses first; only genuine follow-ups open afterwards.' },
+        { mode: 'dependency', name: 'Live follow-ups', body: 'Longer variant: every choice that depends on a reveal is made live.' },
+      ];
+
+  for (const option of options) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'setup__mode';
+    if (option.mode === view.mode) card.classList.add('setup__mode--selected');
+    card.setAttribute('role', 'radio');
+    card.setAttribute('aria-checked', String(option.mode === view.mode));
+    card.append(Object.assign(document.createElement('span'), { className: 'setup__mode-name', textContent: option.name }));
+    card.append(Object.assign(document.createElement('span'), { className: 'setup__mode-body', textContent: option.body }));
+    card.addEventListener('click', () => view.onModeChange?.(option.mode));
+    el.append(card);
+  }
+  return el;
 }
 
 export interface RoomSetupView {

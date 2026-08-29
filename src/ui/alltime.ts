@@ -2,6 +2,7 @@ import { t, type Lang } from './i18n.js';
 import { sortedProfiles, type FriendProfile } from '../app/friend.js';
 import type { AllTimeStanding } from '../stats/alltime.js';
 import type { RoomMode } from '../app/backend.js';
+import type { ResolutionMode } from '../engine/types.js';
 
 /**
  * Who you are, whether tonight counts, and how the year has gone.
@@ -147,6 +148,22 @@ export function renderPracticeBadge(lang: Lang): HTMLElement {
   el.className = 'practicebadge';
   el.setAttribute('role', 'status');
   el.textContent = t(lang, 'mode.practice.badge');
+  return el;
+}
+
+/** Always-visible room status: history choice and night-flow choice. */
+export function renderRoomStatusBadge(
+  lang: Lang, mode: RoomMode, resolution: ResolutionMode,
+): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'practicebadge';
+  el.setAttribute('role', 'status');
+  const official = mode === 'official';
+  if (lang === 'nl') {
+    el.textContent = `${official ? 'OFFICIEEL - telt mee' : 'OEFENEN - telt niet mee'} · ${resolution === 'tworound' ? '2 rondes' : 'Live vervolg'}`;
+  } else {
+    el.textContent = `${official ? 'OFFICIAL - counts' : 'PRACTICE - does not count'} · ${resolution === 'tworound' ? '2 rounds' : 'Live follow-ups'}`;
+  }
   return el;
 }
 
