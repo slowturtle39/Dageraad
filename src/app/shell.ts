@@ -67,7 +67,13 @@ export function screenFor(input: ShellInput): Screen {
   // is a trusted host playing normally and falls through to the player
   // screens; if it did not, it is the table device and gets the neutral
   // display, in every phase, including the lobby and the results.
-  if (room.refereeUid === uid && seat < 0) return { kind: 'tablet' };
+  if (room.refereeUid === uid && seat < 0) {
+    // The neutral table device still needs the public lobby controls. They do
+    // not reveal a card, and without them the device that must deal the round
+    // cannot add a practice bot or start the game at all.
+    if (room.phase === 'lobby') return { kind: 'lobby' };
+    return { kind: 'tablet' };
+  }
 
   const member = room.members.find((m) => m.uid === uid);
 

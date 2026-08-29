@@ -25,7 +25,7 @@ import type { HistoryRecord } from '../stats/alltime.js';
 import {
   engineStateFromDoc, engineStateToDoc, paths,
   type FriendDoc, type HistoryDoc,
-  type EngineStateDoc, type PlayerDoc, type PrivateDoc, type RoomDoc,
+  type EngineStateDoc, type PlayerDoc, type PrivateDoc, type RoomDoc, type VoteDoc,
 } from './schema.js';
 
 /**
@@ -305,6 +305,8 @@ export class FirestoreBackend implements Backend {
       revealedSlots: {},
       votesCast: 0,
       abstainCount: 0,
+      earlyVoteCount: 0,
+      pausedAt: null,
       discussionExtendedByMs: 0,
       finalRoles: null,
       outcome: null,
@@ -478,6 +480,8 @@ export class FirestoreBackend implements Backend {
         uid: d.id,
         joinedAtRound: typeof data.joinedAtRound === 'number' ? data.joinedAtRound : 1,
         leftAtRound: typeof data.leftAtRound === 'number' ? data.leftAtRound : null,
+        ...(typeof data.friendId === 'string' ? { friendId: data.friendId } : {}),
+        ...(typeof data.friendName === 'string' ? { friendName: data.friendName } : {}),
       };
     });
   }
@@ -502,11 +506,14 @@ export class FirestoreBackend implements Backend {
 
     const ref = doc(this.db, paths.submission(roomId, this.uid));
     const existing = (await getDoc(ref)).data() as
-      { windowIndex?: number; choices?: Record<string, Choice> } | undefined;
+      { round?: number; windowIndex?: number; choices?: Record<string, Choice> } | undefined;
     // Merge only within the SAME window. A document left over from an earlier
     // window must not have its choices carried forward into this one.
-    const carried = existing?.windowIndex === windowIndex ? existing.choices ?? {} : {};
+    const carried = existing?.round === room.currentRound && existing.windowIndex === windowIndex
+      ? existing.choices ?? {}
+      : {};
     await setDoc(ref, {
+      round: room.currentRound,
       windowIndex,
       choices: { ...carried, ...choices },
       submittedAt: Date.now(),
@@ -526,8 +533,16 @@ export class FirestoreBackend implements Backend {
     const room = await this.room(roomId);
     const ok = room.phase === 'voting' || (room.phase === 'day' && target === null);
     if (!ok) throw new Error(`cannot vote in phase ${room.phase}`);
-    await setDoc(doc(this.db, paths.vote(roomId, this.uid)), {
-      target, abstain, castAt: Date.now(),
+    const ref = doc(this.db, paths.vote(roomId, this.uid));
+    const existing = (await getDoc(ref)).data() as Partial<VoteDoc> | undefined;
+    await setDoc(ref, {
+      round: room.currentRound,
+      target,
+      abstain,
+      // A player can ask to open the ballot, then choose a target when it opens.
+      // Preserve that request only from this round; last round's document is stale.
+      readyToVote: existing?.round === room.currentRound && existing.readyToVote === true,
+      castAt: Date.now(),
     });
   }
 
@@ -543,11 +558,16 @@ export class FirestoreBackend implements Backend {
     if (room.phase !== 'day' && room.phase !== 'voting') {
       throw new Error(`cannot ask to vote in phase ${room.phase}`);
     }
-    await setDoc(
-      doc(this.db, paths.vote(roomId, this.uid)),
-      { readyToVote: requested, castAt: Date.now() },
-      { merge: true },
-    );
+    const ref = doc(this.db, paths.vote(roomId, this.uid));
+    const existing = (await getDoc(ref)).data() as Partial<VoteDoc> | undefined;
+    const current = existing?.round === room.currentRound ? existing : undefined;
+    await setDoc(ref, {
+      round: room.currentRound,
+      target: current?.target ?? null,
+      abstain: current?.abstain === true,
+      readyToVote: requested,
+      castAt: Date.now(),
+    });
   }
 
   /* --------------------------------- bots -------------------------------- */
@@ -636,7 +656,7 @@ export class FirestoreBackend implements Backend {
     if (!(player.data() as PlayerDoc | undefined)?.isBot) throw new Error('not a bot');
 
     await setDoc(doc(this.db, paths.vote(roomId, botUid)), {
-      target, abstain, castAt: Date.now(),
+      round: room.currentRound, target, abstain, castAt: Date.now(),
     });
   }
 
@@ -660,9 +680,9 @@ export class FirestoreBackend implements Backend {
    *
    * `persist` separates two things that look alike. The room's own result is
    * shown to the table either way — you still want to see who won a test game.
-   * The per-player result documents are what profile stats aggregate from, and
-   * a test game must never write one: they are append-only with no delete path
-   * by design, so a bot game would inflate somebody's record permanently (§16).
+   * The finished round itself is recorded separately. Keeping this write on the
+   * room document means a second round cannot collide with a first round's
+   * create-only per-player result document.
    */
   async publishResults(
     roomId: string,
@@ -672,23 +692,10 @@ export class FirestoreBackend implements Backend {
     const room = await this.room(roomId);
     if (room.refereeUid !== this.uid) throw new Error('referee only');
 
-    const batch = writeBatch(this.db);
-    batch.update(this.roomRef(roomId), {
+    await updateDoc(this.roomRef(roomId), {
       finalRoles: results.finalRoles,
       outcome: results.outcome,
     });
-
-    if (persist) {
-      for (const [seatKey, seatResult] of Object.entries(results.seats)) {
-        const uid = room.seating[Number(seatKey)];
-        if (!uid) continue;
-        batch.set(doc(this.db, paths.result(roomId, uid)), {
-          ...seatResult,
-          recordedAt: Date.now(),
-        });
-      }
-    }
-    await batch.commit();
   }
 
   /**

@@ -326,18 +326,20 @@ describe('the abstain toggle during the discussion (§7, revised 2026-08-26)', (
   });
 });
 
-describe('results are append-only, so history is tamper-evident', () => {
+describe('obsolete per-player result documents are denied', () => {
   beforeEach(async () => { await seed('results'); });
 
-  it('the referee can record a result once', async () => {
-    await assertSucceeds(
+  it('refuses the old result path, even to the referee', async () => {
+    // The append-only round record is now the single source of truth. Per-player
+    // documents were keyed only by uid, so a second round could not be published.
+    await assertFails(
       setDoc(doc(as(REF), 'rooms', ROOM, 'results', ALICE), {
         finalRole: 'alphawolf', won: false,
       }),
     );
   });
 
-  it('a player cannot record their own result', async () => {
+  it('also refuses a player writing their own result', async () => {
     await assertFails(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'results', ALICE), {
         finalRole: 'dorpeling', won: true,
@@ -345,7 +347,7 @@ describe('results are append-only, so history is tamper-evident', () => {
     );
   });
 
-  it('nobody can edit a recorded result — not even the referee', async () => {
+  it('refuses updates and deletes to a legacy result document', async () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'results', ALICE), {
         finalRole: 'alphawolf', won: false,

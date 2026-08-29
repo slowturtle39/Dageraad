@@ -51,10 +51,12 @@ function room(over: Partial<RoomView> = {}): RoomView {
 }
 
 describe('the table device never lands on a player screen', () => {
-  it('routes a seatless referee to the tablet, in every phase', () => {
+  it('routes a seatless referee to the public lobby before dealing, then the tablet', () => {
     // It has every card in memory. The tablet view is spoiler-free by
     // construction; the player views are not, because they show you your card.
-    for (const phase of ['lobby', 'night', 'day', 'voting', 'results'] as const) {
+    expect(screenFor({ uid: TABLET, room: room({ phase: 'lobby' }), players: [] }))
+      .toEqual({ kind: 'lobby' });
+    for (const phase of ['night', 'day', 'voting', 'results'] as const) {
       expect(screenFor({ uid: TABLET, room: room({ phase }), players: [] }))
         .toEqual({ kind: 'tablet' });
     }

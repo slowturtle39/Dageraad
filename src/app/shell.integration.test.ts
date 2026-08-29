@@ -76,11 +76,11 @@ async function endRound(tablet: Backend, roomId: string): Promise<void> {
 }
 
 describe('a real room routes every device correctly', () => {
-  it('sends the tablet to the neutral display and the phones to the lobby', async () => {
+  it('sends every device to the public lobby before the deal', async () => {
     const { tablet, roomId, phones } = await table();
     const room = await readRoomOnce(phones[0]!, roomId);
 
-    expect(kindFor(room, tablet.uid)).toBe('tablet');
+    expect(kindFor(room, tablet.uid)).toBe('lobby');
     for (const phone of phones) expect(kindFor(room, phone.uid)).toBe('lobby');
   });
 

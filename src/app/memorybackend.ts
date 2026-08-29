@@ -366,7 +366,9 @@ class MemoryBackend implements Backend {
     r.view.shieldedSeats = [];
     r.view.revealedSlots = {};
     r.view.abstainCount = 0;
+    r.view.earlyVoteCount = 0;
     r.view.votesCast = 0;
+    r.view.pausedAt = null;
     r.view.discussionExtendedByMs = 0;
     r.view.finalRoles = null;
     r.view.outcome = null;
@@ -757,10 +759,12 @@ class MemoryRefereeStore implements RoomStore, DayStore {
         voter: seat,
         target: targetSeat === undefined || targetSeat === null || targetSeat < 0 ? null : targetSeat,
         abstain: v.abstain,
+        readyToVote: v.readyToVote === true,
       });
     }
     // Publish the counts the table is allowed to see: how many, never who.
     r.view.abstainCount = [...out.values()].filter((v) => v.abstain).length;
+    r.view.earlyVoteCount = [...out.values()].filter((v) => v.readyToVote === true).length;
     r.view.votesCast = [...out.values()].filter((v) => v.target !== null || v.abstain).length;
     this.world.notify(this.roomId);
     return out;

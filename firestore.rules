@@ -254,6 +254,12 @@ service cloud.firestore {
         allow create, update: if signedIn()
           && playerUid == uid()
           && inPhase(roomId, 'night')
+          && (!('round' in request.resource.data)
+              || request.resource.data.keys().hasOnly(
+                   ['round', 'windowIndex', 'choices', 'submittedAt']
+                 ))
+          && (!('round' in request.resource.data)
+              || request.resource.data.round == currentRound(roomId))
           && request.resource.data.windowIndex == roomDoc(roomId).nightWindowIndex;
 
         allow delete: if false;
@@ -290,8 +296,13 @@ service cloud.firestore {
         allow create, update: if signedIn()
           && playerUid == uid()
           && request.resource.data.keys().hasOnly(
-               ['target', 'abstain', 'readyToVote', 'castAt']
-             )
+                ['round', 'target', 'abstain', 'readyToVote', 'castAt']
+              )
+           // Clients written before round scoping may still submit a document,
+           // but the referee ignores unscoped documents. New clients bind every
+           // effective vote to the current round.
+           && (!('round' in request.resource.data)
+               || request.resource.data.round == currentRound(roomId))
           // §7: never allowed to vote for yourself. Enforced here as well as
           // in the UI, so a hand-crafted write cannot do it either.
           && request.resource.data.target != uid()
@@ -313,8 +324,10 @@ service cloud.firestore {
           && isPractice(roomId)
           && isBotPlayer(roomId, playerUid)
           && request.resource.data.keys().hasOnly(
-               ['target', 'abstain', 'readyToVote', 'castAt']
-             )
+                ['round', 'target', 'abstain', 'readyToVote', 'castAt']
+              )
+           && (!('round' in request.resource.data)
+               || request.resource.data.round == currentRound(roomId))
           && request.resource.data.target != playerUid
           && (
                inPhase(roomId, 'voting')
@@ -322,17 +335,6 @@ service cloud.firestore {
              );
 
         allow delete: if false;
-      }
-
-      // ------------------------------------------------------------- results
-      // Per-game outcome per player, written once by the referee when the game
-      // ends. APPEND-ONLY: never updatable, never deletable. Profile stats are
-      // aggregated from these client-side, which is why there are no mutable
-      // win counters anywhere in this schema.
-      match /results/{playerUid} {
-        allow read: if signedIn();
-        allow create: if isReferee(roomId) && inPhase(roomId, 'results');
-        allow update, delete: if false;
       }
 
       // ------------------------------------------------------------ members

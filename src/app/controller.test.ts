@@ -65,10 +65,10 @@ describe('watching a room', () => {
     seat.watch(roomId);
     expect(seat.screen().kind).toBe('lobby');
 
-    // The table device gets the neutral display from the same state.
+    // It gets the public lobby first, so it can deal without becoming a player.
     const table = new AppController(tablet);
     table.watch(roomId);
-    expect(table.screen().kind).toBe('tablet');
+    expect(table.screen().kind).toBe('lobby');
   });
 
   it('starts on the setup screen with no room at all', () => {

@@ -21,13 +21,15 @@ export interface SheetOptions {
   dismissable?: boolean;
   /** A lightweight control panel that should not eclipse the table. */
   variant?: 'vote';
+  /** Let a live table selection reach the card under this sheet. */
+  passiveScrim?: boolean;
 }
 
 export function renderSheet(opts: SheetOptions): HTMLElement {
   const wrap = document.createElement('div');
 
   const scrim = document.createElement('div');
-  scrim.className = 'scrim';
+  scrim.className = opts.passiveScrim ? 'scrim scrim--passive' : 'scrim';
   if (opts.dismissable !== false) {
     scrim.addEventListener('click', () => opts.onDismiss?.());
   }

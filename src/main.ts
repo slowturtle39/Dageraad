@@ -25,6 +25,7 @@ import {
   DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG, TWO_ROUND_CONFIG,
 } from './engine/presets.js';
 import { mayArrangeSeats, reorderForSwap } from './app/seating.js';
+import { canDeal } from './app/shell.js';
 import type { Backend, RoomMode } from './app/backend.js';
 import type { Choice, ResolutionMode, RoleId, SeatIndex } from './engine/types.js';
 
@@ -417,7 +418,7 @@ const actions: AppActions = {
     const room = state.room;
     // Guarded here as well as in the rules: every present member may arrange,
     // and nobody may once play has begun.
-    if (!room || !mayArrangeSeats(room, state.uid)) return;
+    if (!room || (!mayArrangeSeats(room, state.uid) && room.refereeUid !== state.uid)) return;
 
     if (local.pendingSwap === null) {
       local.pendingSwap = seat;
@@ -539,6 +540,7 @@ function render(): void {
 
   const state = controller.current();
   const screen = controller.screen();
+  const pendingPrompt = state.own.pending[0];
 
   // Creating a room is the one screen that needs a name before it exists, so
   // it gets its own path rather than being squeezed into renderApp's setup.
@@ -591,7 +593,12 @@ function render(): void {
     displayName: local.displayName,
     error: local.error,
     busy: local.busy,
-    selected: local.pendingSwap,
+    // The table stays interactive underneath a decision sheet. Reflect the
+    // first live card pick there, otherwise a successful tap looks ignored.
+    selected: pendingPrompt && local.picked.length === 1
+      ? local.picked[0]
+      : local.pendingSwap,
+    prompting: pendingPrompt !== undefined,
     actions,
   }));
 
@@ -887,6 +894,7 @@ function promptSheet(
       onDecline: () => send({ kind: 'none' }),
     }),
     note: t(local.lang, 'reveal.staleWarning'),
+    passiveScrim: true,
   });
 }
 
@@ -946,6 +954,7 @@ function voteSheet(ownSeat: SeatIndex): HTMLElement {
       },
     }),
     variant: 'vote',
+    passiveScrim: true,
   });
 }
 
@@ -984,7 +993,14 @@ function resultSheet(ownSeat: SeatIndex): HTMLElement {
   }
   body.append(list);
 
-  return renderSheet({ title: t(local.lang, 'results.title'), body });
+  const state = controller.current();
+  return renderSheet({
+    title: t(local.lang, 'results.title'),
+    body,
+    ...(state.room && canDeal(state.room, state.uid)
+      ? { actions: [{ label: t(local.lang, 'results.nextRound'), primary: true, onSelect: actions.onDeal }] }
+      : {}),
+  });
 }
 
 /* --------------------------- who you are, all-time ----------------------- */

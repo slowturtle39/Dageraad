@@ -56,16 +56,18 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
     const snap = await getDocs(
       collection(this.db, `rooms/${this.roomId}/submissions`),
     );
+    const room = (await getDoc(this.room())).data() as { currentRound?: number } | undefined;
     const seats = await this.seatByUid();
     const out = new Map<SeatIndex, Record<string, Choice>>();
     for (const d of snap.docs) {
       const data = d.data() as {
+        round?: number;
         windowIndex?: number;
         choices?: Record<string, Choice>;
       };
       // Belt and braces: the rules already reject a mismatched windowIndex, but
       // a document left over from an earlier window must not be replayed here.
-      if (data.windowIndex !== windowIndex) continue;
+      if (data.round !== room?.currentRound || data.windowIndex !== windowIndex) continue;
       // The seat comes from the document's OWNER, not from a field inside it.
       // A `seat` field would be both redundant (the doc is keyed by uid) and
       // forgeable — nothing in the rules could stop a player writing somebody
@@ -162,14 +164,16 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
 
   async readVotes(): Promise<Map<SeatIndex, Vote>> {
     const snap = await getDocs(collection(this.db, `rooms/${this.roomId}/votes`));
+    const room = (await getDoc(this.room())).data() as { currentRound?: number } | undefined;
     const seats = await this.seatByUid();
     const out = new Map<SeatIndex, Vote>();
     for (const d of snap.docs) {
       const seat = seats.get(d.id);
       if (seat === undefined) continue;
       const data = d.data() as {
-        target?: string | null; abstain?: boolean; readyToVote?: boolean;
+        round?: number; target?: string | null; abstain?: boolean; readyToVote?: boolean;
       };
+      if (data.round !== room?.currentRound) continue;
       const targetSeat =
         data.target == null ? null : (seats.get(data.target) ?? null);
       out.set(seat, {

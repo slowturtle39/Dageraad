@@ -44,7 +44,12 @@ export interface TabletView {
   hasAlphaWolfCard: boolean;
 }
 
-export function renderTablet(view: TabletView): HTMLElement {
+export interface TabletControls {
+  /** Safe in the public result view: it only starts the next public round. */
+  onNextRound: () => void;
+}
+
+export function renderTablet(view: TabletView, controls?: TabletControls): HTMLElement {
   const el = document.createElement('div');
   el.className = 'tablet';
 
@@ -135,6 +140,15 @@ export function renderTablet(view: TabletView): HTMLElement {
   });
 
   el.append(ring);
+
+  if (controls && view.phase === 'results') {
+    const next = document.createElement('button');
+    next.type = 'button';
+    next.className = 'btn btn--primary tablet__next';
+    next.textContent = t(view.lang, 'results.nextRound');
+    next.addEventListener('click', controls.onNextRound);
+    el.append(next);
+  }
   return el;
 }
 

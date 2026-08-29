@@ -713,6 +713,11 @@ body {
   z-index: 15;
 }
 
+/* A decision sheet must not turn the visible seats into untappable scenery. */
+.scrim--passive {
+  pointer-events: none;
+}
+
 /* ------------------------------------------------------------------ */
 /* Tablet — the neutral shared display (§12)                           */
 /* ------------------------------------------------------------------ */

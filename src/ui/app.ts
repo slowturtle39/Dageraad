@@ -91,7 +91,9 @@ export function renderApp(deps: AppDeps): HTMLElement {
       return renderDeparted({ lang: deps.lang, onRejoin: deps.actions.onRejoin });
 
     case 'tablet':
-      return renderTablet(tabletViewFor(deps));
+      return renderTablet(tabletViewFor(deps), canDeal(deps.state.room!, deps.state.uid)
+        ? { onNextRound: deps.actions.onDeal }
+        : undefined);
 
     case 'lobby':
       return renderLobbyScreen(deps);
@@ -151,7 +153,7 @@ function renderLobbyScreen(deps: AppDeps): HTMLElement {
     // at a real table the person who moved the chairs is the one who knows.
     // Not merely anyone rendering this screen: a departed member is not there
     // to move a chair, and the rules refuse their write anyway.
-    canArrange: mayArrangeSeats(room, deps.state.uid),
+    canArrange: mayArrangeSeats(room, deps.state.uid) || room.refereeUid === deps.state.uid,
     pendingSwap: deps.selected ?? null,
     canStart: canDeal(room, deps.state.uid) && players.length >= 3,
     onSeatTap: deps.actions.onSeatTap,
@@ -186,7 +188,9 @@ export function tabletViewFor(deps: AppDeps): TabletView {
     // Only a card genuinely turned face up in play. Note this reads the public
     // room document, not finalRoles — at the end of the game the table sees
     // the result on the results screen, not smuggled onto the tablet.
-    const revealed = room.revealedSlots[seat];
+    // Dawn is public too. On the shared device the table must be able to read
+    // the result before the referee starts the next round.
+    const revealed = room.finalRoles?.[seat] ?? room.revealedSlots[seat];
     if (revealed) view.revealedRole = revealed;
     return view;
   });

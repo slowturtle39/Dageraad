@@ -20,7 +20,6 @@ import type { RoundResult } from '../app/session.js';
  *   /rooms/{roomId}/engine/state       SECRET: the entire deal (referee only)
  *   /rooms/{roomId}/submissions/{uid}  night choices (owner writes, referee reads)
  *   /rooms/{roomId}/votes/{uid}        day votes (hidden until results)
- *   /rooms/{roomId}/results/{uid}      append-only per-game outcome
  *   /profiles/{uid}                    persistent identity (NO stats — see below)
  *   /calibration/{sampleId}            append-only timing samples
  */
@@ -246,6 +245,8 @@ export function engineStateFromDoc(doc: EngineStateDoc): NightState {
 }
 
 export interface SubmissionDoc {
+  /** The round this choice belongs to. Old unscoped documents are ignored. */
+  round: number;
   /** Must equal the room's current nightWindowIndex or the write is rejected. */
   windowIndex: number;
   /** Keyed by DecisionRequest.key, so one doc can hold a whole window. */
@@ -254,6 +255,8 @@ export interface SubmissionDoc {
 }
 
 export interface VoteDoc {
+  /** The round this vote belongs to. Old unscoped documents are ignored. */
+  round: number;
   /** null = abstained without naming anyone. Never equal to your own uid (§7). */
   target: string | null;
   abstain: boolean;
@@ -426,8 +429,6 @@ export const paths = {
   engineState: (roomId: string) => `rooms/${roomId}/engine/state`,
   submission: (roomId: string, uid: string) => `rooms/${roomId}/submissions/${uid}`,
   vote: (roomId: string, uid: string) => `rooms/${roomId}/votes/${uid}`,
-  results: (roomId: string) => `rooms/${roomId}/results`,
-  result: (roomId: string, uid: string) => `rooms/${roomId}/results/${uid}`,
   members: (roomId: string) => `rooms/${roomId}/members`,
   member: (roomId: string, uid: string) => `rooms/${roomId}/members/${uid}`,
   rounds: (roomId: string) => `rooms/${roomId}/rounds`,
