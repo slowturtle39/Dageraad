@@ -34,6 +34,8 @@ export interface AppDeps {
   suspicions?: SuspicionMap;
   selected?: SeatIndex | null;
   prompting?: boolean;
+  /** Legal targets for this device's current private prompt. */
+  legalTargetSeats?: SeatIndex[];
   timer?: string | null;
   actions: AppActions;
 }
@@ -120,6 +122,7 @@ function renderTableScreen(deps: AppDeps): HTMLElement {
       suspicions: deps.suspicions,
       selected: deps.selected,
       prompting: deps.prompting,
+      legalTargetSeats: deps.legalTargetSeats,
     }),
     centerCount: 3,
     // Public information: the host picked the roles and everyone saw them.

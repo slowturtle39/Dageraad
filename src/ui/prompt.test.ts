@@ -56,6 +56,15 @@ describe('an incomplete answer is never sent', () => {
     expect(choiceFor(view(p, { pickedCenters: [0, 2] })))
       .toEqual({ kind: 'center', centerIndices: [0, 2] });
   });
+
+  it('lets the Ziener choose either one player or two centre cards', () => {
+    const p: Prompt = { kind: 'seat-or-center', exclude: [0], centerCount: 2 };
+    expect(choiceFor(view(p, { picked: [1 as SeatIndex] })))
+      .toEqual({ kind: 'seat', seat: 1 });
+    expect(choiceFor(view(p, { pickedCenters: [0, 2] })))
+      .toEqual({ kind: 'center', centerIndices: [0, 2] });
+    expect(renderPrompt(view(p)).querySelectorAll('.prompt__center')).toHaveLength(3);
+  });
 });
 
 describe('a seat the engine excluded is not offered', () => {
@@ -71,6 +80,12 @@ describe('a seat the engine excluded is not offered', () => {
   it('offers nothing for a prompt that is not about seats', () => {
     const r = request({ kind: 'center', count: 1 });
     expect(seatSelectable(r, 1 as SeatIndex)).toBe(false);
+  });
+
+  it('offers legal player targets alongside centre cards to the Ziener', () => {
+    const r = request({ kind: 'seat-or-center', exclude: [0 as SeatIndex], centerCount: 2 });
+    expect(seatSelectable(r, 0 as SeatIndex)).toBe(false);
+    expect(seatSelectable(r, 1 as SeatIndex)).toBe(true);
   });
 });
 

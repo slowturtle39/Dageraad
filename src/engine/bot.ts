@@ -50,6 +50,21 @@ export function randomBot(seed: number): Bot {
           const seat = pick(allowed);
           return seat === undefined ? { kind: 'none' } : { kind: 'seat', seat };
         }
+        case 'seat-or-center': {
+          if (next() < 0.5) {
+            const excluded = new Set(request.prompt.exclude);
+            const seat = pick(seats.filter((s) => !excluded.has(s) && s !== request.seat));
+            return seat === undefined ? { kind: 'none' } : { kind: 'seat', seat };
+          }
+          const all = Array.from({ length: state.centerCount }, (_, i) => i);
+          const chosen: number[] = [];
+          while (chosen.length < request.prompt.centerCount && chosen.length < all.length) {
+            const center = pick(all.filter((i) => !chosen.includes(i)));
+            if (center === undefined) break;
+            chosen.push(center);
+          }
+          return { kind: 'center', centerIndices: chosen };
+        }
         case 'two-seats': {
           const excluded = new Set(request.prompt.exclude);
           const allowed = seats.filter((s) => !excluded.has(s) && s !== request.seat);

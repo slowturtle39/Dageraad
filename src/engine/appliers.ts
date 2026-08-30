@@ -83,7 +83,7 @@ const schildwacht: Applier = function* (ctx) {
   ctx.state.shieldedSlots.add(seat);
   ctx.event({ kind: 'shield-placed', step: ctx.step, slot: seat });
   ctx.info(ctx.actor, {
-    kind: 'action-confirmed', step: ctx.step, detail: `shielded seat ${seat}`,
+    kind: 'action-confirmed', step: ctx.step, action: { kind: 'shielded', seat },
   });
 };
 
@@ -131,7 +131,7 @@ const alphawolf: Applier = function* (ctx) {
   }
   const ok = swapSlots(ctx.state, seat, ctx.state.alphaWolfSlot);
   ctx.info(ctx.actor, ok
-    ? { kind: 'action-confirmed', step: ctx.step, detail: `placed the wolf card on seat ${seat}` }
+    ? { kind: 'action-confirmed', step: ctx.step, action: { kind: 'alpha-placed', seat } }
     : { kind: 'action-blocked', step: ctx.step, reason: 'shielded' });
 };
 
@@ -164,7 +164,9 @@ const vrijmetselaar: Applier = function* (ctx) {
 
 /** Views one player's card, or two of the three center cards. */
 const ziener: Applier = function* (ctx) {
-  const choice = yield ask(ctx, 'seer', { kind: 'seat', exclude: [ctx.actor], optional: true });
+  const choice = yield ask(ctx, 'seer', {
+    kind: 'seat-or-center', exclude: [ctx.actor], centerCount: 2,
+  });
   if (choice.kind === 'seat') {
     const role = viewSlot(ctx, choice.seat);
     if (role) ctx.info(ctx.actor, { kind: 'saw-card', step: ctx.step, slot: choice.seat, role });
@@ -208,7 +210,9 @@ const rechter: Applier = function* (ctx) {
     return;
   }
   ctx.info(seat, { kind: 'judged', step: ctx.step });
-  ctx.info(ctx.actor, { kind: 'action-confirmed', step: ctx.step, detail: `judged seat ${seat}` });
+  ctx.info(ctx.actor, {
+    kind: 'action-confirmed', step: ctx.step, action: { kind: 'judged', seat },
+  });
 };
 
 /**
@@ -216,11 +220,9 @@ const rechter: Applier = function* (ctx) {
  * player's card.
  *
  * Both decisions are ordinary pauses. In 'dependency' mode a live player
- * answers them: she sees the card, then picks a target. In 'tworound' mode the
- * pre-commit resolver answers the second one from her stored rule — either a
- * flat target, or a per-team rule ("Wolf -> A, Looier -> B, village -> C").
- * The Looier branch matters: it is a third team, so a two-way wolf/not-wolf
- * rule would silently arm a Looier while she thought she was helping.
+ * sees the card and then picks a target. In 'tworound' mode she picks the
+ * exchange partner first, then the centre card, keeping the night at two
+ * public windows without hiding the card she actually saw.
  *
  * She always receives a real 'saw-center' receipt, because the physical Heks
  * does look at the card — the pre-commit is our constraint, not her weakness.
@@ -254,7 +256,10 @@ const heks: Applier = function* (ctx) {
   if (seat === null) return;
   const ok = swapSlots(ctx.state, slot, seat);
   ctx.info(ctx.actor, ok
-    ? { kind: 'action-confirmed', step: ctx.step, detail: `swapped center ${centerIndex} with seat ${seat}` }
+    ? {
+        kind: 'action-confirmed', step: ctx.step,
+        action: { kind: 'heks-swapped', centerIndex, seat },
+      }
     : { kind: 'action-blocked', step: ctx.step, reason: 'shielded' });
 };
 
@@ -268,7 +273,7 @@ const onrustoker: Applier = function* (ctx) {
   const [a, b] = choice.seats as [SeatIndex, SeatIndex];
   const ok = swapSlots(ctx.state, a, b);
   ctx.info(ctx.actor, ok
-    ? { kind: 'action-confirmed', step: ctx.step, detail: `swapped seats ${a} and ${b}` }
+    ? { kind: 'action-confirmed', step: ctx.step, action: { kind: 'players-swapped', seats: [a, b] } }
     : { kind: 'action-blocked', step: ctx.step, reason: 'shielded' });
 };
 
@@ -282,7 +287,7 @@ const dronkaard: Applier = function* (ctx) {
   }
   const ok = swapSlots(ctx.state, ctx.actor, centerSlot(ctx.state, centerIndex));
   ctx.info(ctx.actor, ok
-    ? { kind: 'action-confirmed', step: ctx.step, detail: `swapped your card with center ${centerIndex}` }
+    ? { kind: 'action-confirmed', step: ctx.step, action: { kind: 'drank', centerIndex } }
     : { kind: 'action-blocked', step: ctx.step, reason: 'shielded' });
 };
 
@@ -322,7 +327,7 @@ const dorpsgek: Applier = function* (ctx) {
   const moved = rotateSeats(ctx.state, exempt, choice.direction);
   ctx.info(ctx.actor, {
     kind: 'action-confirmed', step: ctx.step,
-    detail: `shifted ${moved.length} cards ${choice.direction}`,
+    action: { kind: 'shifted', count: moved.length, direction: choice.direction },
   });
 };
 
@@ -376,7 +381,7 @@ const medium: Applier = function* (ctx) {
   swapSlots(ctx.state, ctx.actor, seat);
   ctx.info(ctx.actor, {
     kind: 'action-confirmed', step: ctx.step,
-    detail: 'looier-taken',
+    action: { kind: 'took-looier', seat },
   });
 };
 
@@ -397,13 +402,16 @@ const medium: Applier = function* (ctx) {
  */
 const onderzoeker: Applier = function* (ctx) {
   const seen: SeatIndex[] = [];
+  let previousReveal: PrivateInfo | undefined;
 
   for (const step of ['pi-first', 'pi-second'] as const) {
     const choice = yield ask(
       ctx,
       step,
       { kind: 'seat', exclude: [ctx.actor, ...seen], optional: true },
-      step === 'pi-second' ? { dependsOnReveal: true } : {},
+      step === 'pi-second'
+        ? { dependsOnReveal: true, ...(previousReveal ? { seen: previousReveal } : {}) }
+        : {},
     );
     const target = seatOf(choice);
     if (target === null) {
@@ -414,7 +422,8 @@ const onderzoeker: Applier = function* (ctx) {
     const role = viewSlot(ctx, target);
     if (!role) return;
     seen.push(target);
-    ctx.info(ctx.actor, { kind: 'saw-card', step: ctx.step, slot: target, role });
+    previousReveal = { kind: 'saw-card', step: ctx.step, slot: target, role };
+    ctx.info(ctx.actor, previousReveal);
 
     if (isWolfRole(role) || role === 'looier') {
       ctx.state.assumedRole[ctx.actor] = role;

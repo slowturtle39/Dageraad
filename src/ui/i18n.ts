@@ -30,6 +30,7 @@ const nl: Dict = {
   'action.resume': 'Hervat',
   'action.myRole': 'Mijn rol',
   'action.pickPlayerFirst': 'Kies eerst een speler',
+  'action.pickChoiceFirst': 'Maak eerst een keuze',
   'action.vote': 'Stem',
   'action.abstain': 'Stem om niet te stemmen',
 
@@ -51,6 +52,9 @@ const nl: Dict = {
   'reveal.sawCenter': 'Bij jouw beurt lag de {role} op middenkaart {n}.',
   'reveal.sawWolves': 'Bij jouw beurt waren de andere wolven: {who}.',
   'reveal.noWolves': 'Je zag geen andere wolven.',
+  'reveal.sawMasons': 'Je medevrijmetselaars zijn: {who}.',
+  'reveal.noMasons': 'Je bent de enige Vrijmetselaar.',
+  'reveal.copiedRole': 'Je kopieerde {who}: de {role}.',
   'reveal.becameRole': 'Je bent nu zelf de {role}.',
   'reveal.judged':
     'De Rechter heeft jou gekozen. Je eerste uitspraak vandaag moet waar zijn.',
@@ -63,6 +67,17 @@ const nl: Dict = {
   'reveal.ownFinal': 'Je eindigt de nacht als de {role}.',
   'reveal.shielded':
     'Die kaart was beschermd door de Schildwacht. Er is niets gebeurd.',
+  'reveal.noLegalTarget': 'Er was geen geldig doelwit.',
+  'reveal.completed': 'Je actie is uitgevoerd.',
+  'reveal.action.shielded': 'Je hebt de kaart van {who} beschermd.',
+  'reveal.action.alphaPlaced': 'Je hebt de extra wolfkaart bij {who} gelegd.',
+  'reveal.action.judged': 'Je hebt {who} gekozen. Die speler is privé ingelicht.',
+  'reveal.action.heksSwapped': 'Middenkaart {n} is geruild met de kaart van {who}.',
+  'reveal.action.playersSwapped': 'De kaarten van {first} en {second} zijn geruild.',
+  'reveal.action.drank': 'Je kaart is blind geruild met middenkaart {n}.',
+  'reveal.action.shiftedLeft': '{n} kaarten zijn naar links geschoven.',
+  'reveal.action.shiftedRight': '{n} kaarten zijn naar rechts geschoven.',
+  'reveal.action.tookLooier': 'Je zag de Looier bij {who} en hebt die kaart verplicht overgenomen.',
   'reveal.nothing': 'Je hebt deze nacht niets gedaan.',
   'reveal.staleWarning':
     'Let op: dit was zo bij jouw beurt. Kaarten kunnen daarna verschoven zijn.',
@@ -169,6 +184,7 @@ const nl: Dict = {
 
   'prompt.youAre': 'Je bent de {role}',
   'prompt.pickSeat': 'Tik iemand aan de tafel aan.',
+  'prompt.pickSeatOrCenter': 'Tik één speler aan, of kies {n} middenkaarten.',
   'prompt.pickTwoSeats': 'Tik twee spelers aan; hun kaarten wisselen.',
   'prompt.pickCenter': 'Kies {n} van de middenkaarten.',
   'prompt.heksPrecommit':
@@ -243,6 +259,7 @@ const en: Dict = {
   'action.resume': 'Resume',
   'action.myRole': 'My role',
   'action.pickPlayerFirst': 'Pick a player first',
+  'action.pickChoiceFirst': 'Make a choice first',
   'action.vote': 'Vote',
   'action.abstain': 'Vote not to vote',
 
@@ -264,6 +281,9 @@ const en: Dict = {
   'reveal.sawCenter': 'At your turn, centre card {n} was the {role}.',
   'reveal.sawWolves': 'At your turn the other wolves were: {who}.',
   'reveal.noWolves': 'You saw no other wolves.',
+  'reveal.sawMasons': 'Your fellow Masons were: {who}.',
+  'reveal.noMasons': 'You are the only Mason.',
+  'reveal.copiedRole': 'You copied {who}: the {role}.',
   'reveal.becameRole': 'You are now the {role} yourself.',
   'reveal.judged':
     'The Judge picked you. Your first statement today must be true.',
@@ -272,6 +292,17 @@ const en: Dict = {
     'who did it, and not which way the cards went.',
   'reveal.ownFinal': 'You end the night as the {role}.',
   'reveal.shielded': 'That card was shielded by the Sentinel. Nothing happened.',
+  'reveal.noLegalTarget': 'There was no legal target.',
+  'reveal.completed': 'Your action was completed.',
+  'reveal.action.shielded': 'You protected {who}\u2019s card.',
+  'reveal.action.alphaPlaced': 'You placed the extra wolf card with {who}.',
+  'reveal.action.judged': 'You picked {who}. That player was notified privately.',
+  'reveal.action.heksSwapped': 'Centre card {n} was exchanged with {who}\u2019s card.',
+  'reveal.action.playersSwapped': '{first}\u2019s and {second}\u2019s cards were exchanged.',
+  'reveal.action.drank': 'You blindly exchanged your card with centre card {n}.',
+  'reveal.action.shiftedLeft': '{n} cards shifted to the left.',
+  'reveal.action.shiftedRight': '{n} cards shifted to the right.',
+  'reveal.action.tookLooier': 'You saw the Tanner with {who} and were forced to take that card.',
   'reveal.nothing': 'You did nothing this night.',
   'reveal.staleWarning':
     'Note: this was true at your turn. Cards may have moved since.',
@@ -373,6 +404,7 @@ const en: Dict = {
 
   'prompt.youAre': 'You are the {role}',
   'prompt.pickSeat': 'Tap somebody at the table.',
+  'prompt.pickSeatOrCenter': 'Tap one player, or choose {n} centre cards.',
   'prompt.pickTwoSeats': 'Tap two players; their cards swap.',
   'prompt.pickCenter': 'Choose {n} of the centre cards.',
   'prompt.heksPrecommit':

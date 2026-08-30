@@ -455,9 +455,10 @@ const actions: AppActions = {
    */
   onCardTap(seat) {
     const state = controller.current();
-    const request = state.own.pending[0];
+    const request = firstPending();
 
     if (request && seatSelectable(request, seat)) {
+      if (request.prompt.kind === 'seat-or-center') local.pickedCenters = [];
       const already = local.picked.indexOf(seat);
       if (already >= 0) local.picked.splice(already, 1);
       else if (request.prompt.kind === 'two-seats') {
@@ -607,6 +608,11 @@ function render(): void {
       ? local.picked[0]
       : local.pendingSwap,
     prompting: pendingPrompt !== undefined,
+    legalTargetSeats: pendingPrompt
+      ? state.room?.seating
+        .map((_, seat) => seat as SeatIndex)
+        .filter((seat) => seatSelectable(pendingPrompt, seat))
+      : undefined,
     actions,
   }));
 
@@ -866,12 +872,14 @@ function nextPrivateReceipt(): HTMLElement | null {
   const message = document.createElement('p');
   message.className = 'sheet__sub';
   message.textContent = describeReveal(
+    local.lang,
     info,
     (seat) => seatNames()[seat as SeatIndex] ?? String(seat + 1),
     (role) => roleName(local.lang, role as RoleId),
   );
   return renderSheet({
     title: local.lang === 'nl' ? 'Wat je zag' : 'What you saw',
+    variant: 'receipt',
     body: message,
     actions: [{
       label: local.lang === 'nl' ? 'Verder' : 'Continue',
@@ -882,6 +890,7 @@ function nextPrivateReceipt(): HTMLElement | null {
       },
     }],
     dismissable: false,
+    passiveScrim: true,
   });
 }
 
@@ -917,6 +926,7 @@ function promptSheet(
 
   return renderSheet({
     title: t(local.lang, 'phase.night'),
+    variant: 'night',
     body: renderPrompt({
       lang: local.lang,
       request,
@@ -927,6 +937,7 @@ function promptSheet(
       centerCount: 3,
       onPickSeat: (seat) => actions.onCardTap(seat),
       onPickCenter: (index) => {
+        if (request.prompt.kind === 'seat-or-center') local.picked = [];
         const at = local.pickedCenters.indexOf(index);
         if (at >= 0) local.pickedCenters.splice(at, 1);
         else local.pickedCenters = [...local.pickedCenters, index];
@@ -1048,10 +1059,12 @@ function resultSheet(ownSeat: SeatIndex): HTMLElement {
   const state = controller.current();
   return renderSheet({
     title: t(local.lang, 'results.title'),
+    variant: 'result',
     body,
     ...(state.room && canDeal(state.room, state.uid)
       ? { actions: [{ label: t(local.lang, 'results.nextRound'), primary: true, onSelect: actions.onDeal }] }
       : {}),
+    passiveScrim: true,
   });
 }
 

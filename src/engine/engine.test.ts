@@ -119,6 +119,19 @@ describe('Heks', () => {
   });
 });
 
+describe('Onderzoeker live follow-up', () => {
+  it('carries the first card reveal into the second-choice prompt', () => {
+    const state = deal(['onderzoeker', 'dorpeling', 'ziener'], ['jager', 'jager', 'jager']);
+    const res = run(state, ['onderzoeker'], answers({
+      '0:pi-first': seat(1),
+      '0:pi-second': seat(2),
+    }), DEPENDENCY_CONFIG);
+    const second = res.decisions.find((d) => d.key === 'pi-second')!;
+    expect(second.dependsOnReveal).toBe(true);
+    expect(second.seen).toMatchObject({ kind: 'saw-card', slot: 1, role: 'dorpeling' });
+  });
+});
+
 describe('Alpha Wolf stays blind', () => {
   it('never learns the card she displaced', () => {
     const state = deal(['alphawolf', 'ziener'], ['jager', 'jager', 'jager'], 'weerwolf');

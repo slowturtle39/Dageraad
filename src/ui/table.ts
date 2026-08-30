@@ -34,6 +34,8 @@ export interface SeatView {
   isSelf?: boolean;
   selected?: boolean;
   disabled?: boolean;
+  /** Set only on the viewer's device while a private target prompt is open. */
+  targetable?: boolean;
 }
 
 export interface TableView {
@@ -104,12 +106,15 @@ export function renderTable(view: TableView): HTMLElement {
     if (s.isSelf) btn.classList.add('seat--self');
     if (s.selected) btn.classList.add('seat--selected');
     if (s.disabled) btn.classList.add('seat--disabled');
+    if (s.targetable === true) btn.classList.add('seat--targetable');
+    if (s.targetable === false) btn.classList.add('seat--untargetable');
     btn.style.left = `${x}%`;
     btn.style.top = `${y}%`;
 
     const card = document.createElement('button');
     card.type = 'button';
     card.className = 'seat__card';
+    card.disabled = s.targetable === false;
     if (s.revealedRole) {
       card.classList.add('seat__card--revealed');
       const art = roleArt(s.revealedRole);

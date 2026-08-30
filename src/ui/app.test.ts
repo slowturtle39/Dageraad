@@ -212,6 +212,16 @@ describe('the table', () => {
     expect(roles.filter((r) => r && r.trim().length > 0).length).toBeLessThanOrEqual(1);
   });
 
+  it('highlights only legal targets during this player\'s private turn', () => {
+    const el = renderApp(deps({ kind: 'table', seat: 0 }, {
+      prompting: true,
+      legalTargetSeats: [1],
+    }));
+    expect(el.querySelectorAll('.seat--targetable')).toHaveLength(1);
+    expect(el.querySelectorAll('.seat--untargetable')).toHaveLength(1);
+    expect(el.querySelector('.seat--targetable .seat__name')?.textContent).toBe('other');
+  });
+
   it('declares the Alpha Wolf card from the public role list', () => {
     // Public: the host picked the roles and everybody saw them.
     const el = renderApp(deps({ kind: 'table', seat: 0 }));

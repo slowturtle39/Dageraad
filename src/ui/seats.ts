@@ -35,6 +35,8 @@ export interface SeatsInput {
   selected?: SeatIndex | null;
   /** True while a night prompt is open, which disables the suspicion gesture. */
   prompting?: boolean;
+  /** Present only while a private seat-selection prompt is open. */
+  legalTargetSeats?: SeatIndex[];
 }
 
 export function seatViews(input: SeatsInput): SeatView[] {
@@ -54,6 +56,9 @@ export function seatViews(input: SeatsInput): SeatView[] {
       shielded: room.shieldedSeats.includes(seat),
       selected: input.selected === seat,
     };
+    if (input.legalTargetSeats) {
+      view.targetable = input.legalTargetSeats.includes(seat);
+    }
 
     const revealed = revealedRoleFor(room, seat, isSelf, input.ownRole);
     if (revealed) view.revealedRole = revealed;

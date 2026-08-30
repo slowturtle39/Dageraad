@@ -428,6 +428,19 @@ body {
   pointer-events: none;
 }
 
+/* A private prompt highlights only this device's legal targets. The glow is
+   deliberately an outline rather than a brighter card face, so the table's
+   overall luminance remains stable across roles. */
+.seat--targetable .seat__card {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 28%, transparent), var(--shadow);
+}
+
+.seat--untargetable .seat__card {
+  opacity: 0.34;
+  cursor: default;
+}
+
 .seat__badge {
   position: absolute;
   top: -5px;
@@ -521,6 +534,34 @@ body {
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* On a laptop the action belongs beside the board, not on top of it. Phones
+   keep the bottom sheet because a side rail would leave no usable table. */
+@media (min-width: 960px) {
+  .sheet--night,
+  .sheet--receipt,
+  .sheet--result {
+    left: auto;
+    right: 20px;
+    bottom: 72px;
+    width: min(360px, calc(100vw - 40px));
+    max-width: none;
+    max-height: calc(100vh - 150px);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.38);
+  }
+
+  .sheet--night .sheet__grip,
+  .sheet--receipt .sheet__grip,
+  .sheet--result .sheet__grip {
+    display: none;
+  }
+
+  #app:has(.sheet--night, .sheet--receipt, .sheet--result) .tablewrap {
+    padding-right: 390px;
   }
 }
 
@@ -715,6 +756,7 @@ body {
 
 /* A decision sheet must not turn the visible seats into untappable scenery. */
 .scrim--passive {
+  background: rgba(8, 9, 12, 0.12);
   pointer-events: none;
 }
 

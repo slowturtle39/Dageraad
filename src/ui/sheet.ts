@@ -1,3 +1,6 @@
+import { t, type Lang } from './i18n.js';
+import type { ConfirmedAction } from '../engine/types.js';
+
 /**
  * The sheet — everything that isn't the table.
  *
@@ -20,7 +23,7 @@ export interface SheetOptions {
   /** A prompt with a deadline can't be dismissed by tapping away. */
   dismissable?: boolean;
   /** A lightweight control panel that should not eclipse the table. */
-  variant?: 'vote';
+  variant?: 'vote' | 'night' | 'receipt' | 'result';
   /** Let a live table selection reach the card under this sheet. */
   passiveScrim?: boolean;
 }
@@ -84,51 +87,84 @@ export function renderSheet(opts: SheetOptions): HTMLElement {
  * mislead in exactly the games where somebody did something interesting.
  */
 export function describeReveal(
+  lang: Lang,
   info: { kind: string; [k: string]: unknown },
   seatName: (seat: number) => string,
   roleName: (role: string) => string,
 ): string {
   switch (info.kind) {
     case 'saw-card':
-      return `Bij jouw beurt had ${seatName(info.slot as number)} de ${roleName(
-        info.role as string,
-      )}.`;
+      return t(lang, 'reveal.sawCard', {
+        who: seatName(info.slot as number), role: roleName(info.role as string),
+      });
     case 'saw-center':
-      return `Bij jouw beurt lag de ${roleName(info.role as string)} op middenkaart ${
-        (info.centerIndex as number) + 1
-      }.`;
+      return t(lang, 'reveal.sawCenter', {
+        role: roleName(info.role as string), n: (info.centerIndex as number) + 1,
+      });
     case 'saw-wolves': {
       const seats = info.seats as number[];
-      if (seats.length === 0) return 'Je zag geen andere wolven.';
-      return `Bij jouw beurt waren de andere wolven: ${seats.map(seatName).join(', ')}.`;
+      if (seats.length === 0) return t(lang, 'reveal.noWolves');
+      return t(lang, 'reveal.sawWolves', { who: seats.map(seatName).join(', ') });
     }
     case 'saw-masons': {
       const seats = info.seats as number[];
       return seats.length === 0
-        ? 'Je bent de enige Vrijmetselaar.'
-        : `Je medevrijmetselaars: ${seats.map(seatName).join(', ')}.`;
+        ? t(lang, 'reveal.noMasons')
+        : t(lang, 'reveal.sawMasons', { who: seats.map(seatName).join(', ') });
     }
     case 'copied-role':
-      return `Je kopieerde ${seatName(info.fromSeat as number)}: de ${roleName(
-        info.role as string,
-      )}.`;
+      return t(lang, 'reveal.copiedRole', {
+        who: seatName(info.fromSeat as number), role: roleName(info.role as string),
+      });
     case 'became-role':
-      return `Je bent nu zelf de ${roleName(info.role as string)}.`;
+      return t(lang, 'reveal.becameRole', { role: roleName(info.role as string) });
     case 'judged':
-      return 'De Rechter heeft jou gekozen. Je eerste uitspraak vandaag moet waar zijn.';
+      return t(lang, 'reveal.judged');
     case 'card-locked':
-      return 'Jouw kaart kan deze nacht niet worden verplaatst.';
+      return t(lang, 'reveal.cardLocked');
     case 'own-final-card':
-      return `Je eindigt de nacht als de ${roleName(info.role as string)}.`;
+      return t(lang, 'reveal.ownFinal', { role: roleName(info.role as string) });
     case 'action-confirmed':
-      return `Uitgevoerd: ${info.detail as string}.`;
+      return describeConfirmedAction(lang, info.action as ConfirmedAction | undefined, seatName);
     case 'action-blocked':
       return info.reason === 'shielded'
-        ? 'Die kaart was beschermd door de Schildwacht. Er is niets gebeurd.'
-        : 'Er was geen geldig doelwit.';
+        ? t(lang, 'reveal.shielded')
+        : t(lang, 'reveal.noLegalTarget');
     case 'no-action':
-      return 'Je hebt deze nacht niets gedaan.';
+      return t(lang, 'reveal.nothing');
     default:
       return '';
+  }
+}
+
+function describeConfirmedAction(
+  lang: Lang,
+  action: ConfirmedAction | undefined,
+  seatName: (seat: number) => string,
+): string {
+  if (!action) return t(lang, 'reveal.completed');
+  switch (action.kind) {
+    case 'shielded':
+      return t(lang, 'reveal.action.shielded', { who: seatName(action.seat) });
+    case 'alpha-placed':
+      return t(lang, 'reveal.action.alphaPlaced', { who: seatName(action.seat) });
+    case 'judged':
+      return t(lang, 'reveal.action.judged', { who: seatName(action.seat) });
+    case 'heks-swapped':
+      return t(lang, 'reveal.action.heksSwapped', {
+        n: action.centerIndex + 1, who: seatName(action.seat),
+      });
+    case 'players-swapped':
+      return t(lang, 'reveal.action.playersSwapped', {
+        first: seatName(action.seats[0]), second: seatName(action.seats[1]),
+      });
+    case 'drank':
+      return t(lang, 'reveal.action.drank', { n: action.centerIndex + 1 });
+    case 'shifted':
+      return t(lang, action.direction === 'left'
+        ? 'reveal.action.shiftedLeft'
+        : 'reveal.action.shiftedRight', { n: action.count });
+    case 'took-looier':
+      return t(lang, 'reveal.action.tookLooier', { who: seatName(action.seat) });
   }
 }

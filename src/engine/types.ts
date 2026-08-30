@@ -147,9 +147,26 @@ export type PrivateInfo =
    * it. The Heks does NOT use this — she gets a real 'saw-center' receipt,
    * because her blindness is an artefact of our pre-commit, not her design.
    */
-  | { kind: 'action-confirmed'; step: number; detail: string }
+  | {
+      kind: 'action-confirmed';
+      step: number;
+      action?: ConfirmedAction;
+      /** Backwards compatibility for receipts written by an older live tab. */
+      detail?: string;
+    }
   | { kind: 'action-blocked'; step: number; reason: 'shielded' | 'no-legal-target' }
   | { kind: 'no-action'; step: number };
+
+/** Structured, localizable confirmation of a blind or completed action. */
+export type ConfirmedAction =
+  | { kind: 'shielded'; seat: SeatIndex }
+  | { kind: 'alpha-placed'; seat: SeatIndex }
+  | { kind: 'judged'; seat: SeatIndex }
+  | { kind: 'heks-swapped'; centerIndex: number; seat: SeatIndex }
+  | { kind: 'players-swapped'; seats: [SeatIndex, SeatIndex] }
+  | { kind: 'drank'; centerIndex: number }
+  | { kind: 'shifted'; count: number; direction: 'left' | 'right' }
+  | { kind: 'took-looier'; seat: SeatIndex };
 
 /** Public, spoiler-free events for the shared tablet display (§12). */
 export type NightEvent =
@@ -162,6 +179,7 @@ export type NightEvent =
 
 export type Prompt =
   | { kind: 'seat'; exclude: SeatIndex[]; optional: boolean }
+  | { kind: 'seat-or-center'; exclude: SeatIndex[]; centerCount: number }
   | { kind: 'two-seats'; exclude: SeatIndex[] }
   | { kind: 'center'; count: number }
   | { kind: 'dorpsgek'; variant: DorpsgekVariant }

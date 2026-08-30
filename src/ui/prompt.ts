@@ -37,6 +37,11 @@ export function choiceFor(view: PromptView): Choice | null {
       return view.picked.length === 1
         ? { kind: 'seat', seat: view.picked[0]! }
         : null;
+    case 'seat-or-center':
+      if (view.picked.length === 1) return { kind: 'seat', seat: view.picked[0]! };
+      return view.pickedCenters.length === prompt.centerCount
+        ? { kind: 'center', centerIndices: [...view.pickedCenters] }
+        : null;
     case 'two-seats':
       return view.picked.length === 2
         ? { kind: 'seats', seats: [...view.picked] }
@@ -57,7 +62,8 @@ export function choiceFor(view: PromptView): Choice | null {
 /** May this seat be picked for this prompt? */
 export function seatSelectable(request: DecisionRequest, seat: SeatIndex): boolean {
   const { prompt } = request;
-  if (prompt.kind !== 'seat' && prompt.kind !== 'two-seats') return false;
+  if (prompt.kind !== 'seat' && prompt.kind !== 'seat-or-center'
+    && prompt.kind !== 'two-seats') return false;
   return !prompt.exclude.includes(seat);
 }
 
@@ -78,6 +84,7 @@ export function renderPrompt(view: PromptView): HTMLElement {
     const seen = document.createElement('p');
     seen.className = 'prompt__reveal';
     seen.textContent = describeReveal(
+      lang,
       request.seen,
       (seat) => view.names[seat as SeatIndex] ?? String(seat + 1),
       (role) => roleName(lang, role as RoleId),
@@ -90,7 +97,7 @@ export function renderPrompt(view: PromptView): HTMLElement {
   ask.textContent = promptText(view);
   el.append(ask);
 
-  if (request.prompt.kind === 'center') {
+  if (request.prompt.kind === 'center' || request.prompt.kind === 'seat-or-center') {
     el.append(centerRow(view));
   }
   if (request.prompt.kind === 'dorpsgek') {
@@ -110,7 +117,9 @@ export function renderPrompt(view: PromptView): HTMLElement {
     confirm.dataset.confirm = '1';
     confirm.textContent = choice
       ? t(lang, 'action.confirm')
-      : t(lang, 'action.pickPlayerFirst');
+      : t(lang, request.prompt.kind === 'seat-or-center'
+        ? 'action.pickChoiceFirst'
+        : 'action.pickPlayerFirst');
     confirm.disabled = choice === null;
     confirm.addEventListener('click', () => { if (choice) view.onConfirm(choice); });
     actions.append(confirm);
@@ -138,6 +147,8 @@ function promptText(view: PromptView): string {
   switch (request.prompt.kind) {
     case 'seat':
       return t(lang, 'prompt.pickSeat');
+    case 'seat-or-center':
+      return t(lang, 'prompt.pickSeatOrCenter', { n: request.prompt.centerCount });
     case 'two-seats':
       return t(lang, 'prompt.pickTwoSeats');
     case 'center':
