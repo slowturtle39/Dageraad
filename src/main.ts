@@ -658,6 +658,8 @@ function render(): void {
   // A practice evening says so the whole time it is being played, not
   // afterwards. Above everything, so it is not something you scroll to.
   if (state.room) {
+    const practiceVote = practiceVoteShortcut();
+    if (practiceVote) app.prepend(practiceVote);
     app.prepend(renderRoomStatusBadge(local.lang, state.room.mode, state.room.config.mode));
     app.prepend(gameProgress());
   }
@@ -732,8 +734,10 @@ function gameProgress(): HTMLElement {
   }
 
   if (room.phase === 'day') {
+    el.classList.add('gameprogress--timer');
     el.dataset.discussionTimer = 'true';
     el.textContent = `${t(local.lang, 'phase.day')} · ${discussionTimerText(room) ?? '0:00'}`;
+    setTimerUrgency(el, room);
     return el;
   }
 
@@ -745,6 +749,24 @@ function gameProgress(): HTMLElement {
 
   el.textContent = t(local.lang, `phase.${room.phase}`);
   return el;
+}
+
+/** A discoverable but deliberately quiet shortcut for solo/practice testing. */
+function practiceVoteShortcut(): HTMLElement | null {
+  const state = controller.current();
+  const room = state.room;
+  if (!state.roomId || !room || room.phase !== 'day'
+    || room.mode !== 'practice' || room.refereeUid !== state.uid) return null;
+
+  const row = document.createElement('div');
+  row.className = 'practicevote';
+  const force = button(t(local.lang, 'menu.forceVote'), () => {
+    void attempt(() => backend.forcePracticeVote(state.roomId!));
+  });
+  force.classList.add('practicevote__button');
+  force.disabled = local.busy;
+  row.append(force);
+  return row;
 }
 
 function joinExistingButton(): HTMLElement {
@@ -903,6 +925,19 @@ function discussionTimerText(room: { phase: string; discussionEndsAt?: number | 
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+function setTimerUrgency(
+  element: HTMLElement,
+  room: { phase: string; discussionEndsAt?: number | null },
+): void {
+  const remaining = room.discussionEndsAt == null
+    ? Number.POSITIVE_INFINITY
+    : room.discussionEndsAt - Date.now();
+  element.classList.toggle(
+    'discussiontimer--urgent',
+    room.phase === 'day' && remaining > 0 && remaining <= 2 * 60_000,
+  );
+}
+
 function refreshDiscussionTimer(): void {
   const room = controller.current().room;
   if (!room || room.phase !== 'day') return;
@@ -911,6 +946,7 @@ function refreshDiscussionTimer(): void {
     el.textContent = el.classList.contains('gameprogress')
       ? `${t(local.lang, 'phase.day')} · ${value}`
       : value;
+    setTimerUrgency(el, room);
   });
 }
 

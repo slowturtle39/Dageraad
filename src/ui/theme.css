@@ -1463,6 +1463,55 @@ body {
   text-transform: uppercase;
 }
 
+/* The discussion clock belongs to the board, not a tiny utility strip. It is
+   calm while there is plenty of time and becomes unmistakable at two minutes,
+   without revealing anything about votes or private night actions. */
+.gameprogress--timer {
+  padding: 12px 16px 10px;
+  color: color-mix(in srgb, var(--bone) 52%, transparent);
+  background: var(--bg);
+  border-bottom-color: var(--line);
+  font-family: var(--font);
+  font-size: clamp(1.8rem, 7vw, 3rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  text-transform: none;
+  transition: color 220ms ease, background-color 220ms ease, text-shadow 220ms ease;
+}
+
+.discussiontimer--urgent {
+  color: var(--bone);
+  background: color-mix(in srgb, var(--bone) 7%, var(--bg));
+  text-shadow: 0 0 24px color-mix(in srgb, var(--bone) 36%, transparent);
+}
+
+.tablet__timer.discussiontimer--urgent {
+  color: var(--bone);
+  text-shadow: 0 0 24px color-mix(in srgb, var(--bone) 36%, transparent);
+}
+
+.practicevote {
+  display: flex;
+  justify-content: center;
+  padding: 6px 12px 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.practicevote__button {
+  min-height: 32px;
+  padding: 5px 14px;
+  border-color: var(--line);
+  color: var(--ink-dim);
+  font-size: 0.72rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gameprogress--timer { transition: none; }
+}
+
 .alltime__row {
   display: grid;
   grid-template-columns: 1fr auto;
