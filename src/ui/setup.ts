@@ -55,6 +55,42 @@ export interface ResolutionPickerView {
   onModeChange?: (mode: ResolutionMode) => void;
 }
 
+export interface DiscussionTimerView {
+  lang: Lang;
+  minutes: string;
+  onMinutesChange?: (minutes: string) => void;
+}
+
+/** Shared day timer, chosen once for the whole evening. */
+export function renderDiscussionTimer(view: DiscussionTimerView): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'setup setup__timer';
+
+  const title = document.createElement('h2');
+  title.className = 'setup__title';
+  title.textContent = t(view.lang, 'timer.setupTitle');
+
+  const body = document.createElement('p');
+  body.className = 'sheet__sub';
+  body.textContent = t(view.lang, 'timer.setupBody');
+
+  const row = document.createElement('label');
+  row.className = 'timerfield';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = '1';
+  input.max = '120';
+  input.step = '1';
+  input.required = true;
+  input.value = view.minutes;
+  input.setAttribute('aria-label', t(view.lang, 'timer.minutes'));
+  input.addEventListener('input', () => view.onMinutesChange?.(input.value));
+  row.append(input, document.createTextNode(t(view.lang, 'timer.minutes')));
+
+  el.append(title, body, row);
+  return el;
+}
+
 /** The night-flow choice. It is independent of whether an evening counts. */
 export function renderResolutionPicker(view: ResolutionPickerView): HTMLElement {
   const el = document.createElement('div');

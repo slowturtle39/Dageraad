@@ -1,4 +1,5 @@
 import { cardsForRoles, deal } from '../engine/deal.js';
+import { roleDef } from '../engine/roles.js';
 import { buildTimeline } from '../engine/timeline.js';
 import type { LatencySample } from '../engine/telemetry.js';
 import type { Vote } from '../engine/dayphase.js';
@@ -11,7 +12,8 @@ import { newFriendId, normaliseName, type FriendProfile } from './friend.js';
 import type { HistoryRecord } from '../stats/alltime.js';
 import type { PublicNightView } from '../engine/publicview.js';
 import {
-  generateRoomCode, type Backend, type CreateRoomOptions, type GameResults,
+  DEFAULT_DISCUSSION_MS, generateRoomCode, validDiscussionMs,
+  type Backend, type CreateRoomOptions, type GameResults,
   type FriendLabel, type PlayerView, type PrivateView, type RoomPhase, type RoomView,
   type SeatResult, type Unsubscribe,
 } from './backend.js';
@@ -77,6 +79,8 @@ export class MemoryWorld {
   }
 
   create(uid: string, options: CreateRoomOptions): string {
+    const discussionMs = options.discussionMs ?? DEFAULT_DISCUSSION_MS;
+    if (!validDiscussionMs(discussionMs)) throw new Error('discussion timer must be 1-120 minutes');
     let roomId = generateRoomCode(this.random);
     while (this.rooms.has(roomId)) roomId = generateRoomCode(this.random);
 
@@ -94,6 +98,9 @@ export class MemoryWorld {
         refereeUid: uid,
         phase: 'lobby',
         mode: options.mode ?? 'practice',
+        discussionMs,
+        discussionEndsAt: null,
+        practiceSkipDiscussion: false,
         round: 0,
         nightWindowIndex: 0,
         activeRoles: options.activeRoles,
@@ -334,8 +341,13 @@ class MemoryBackend implements Backend {
 
   async setActiveRoles(roomId: string, roles: RoleId[], config: GameConfig): Promise<void> {
     const r = this.world.room(roomId);
-    this.requireHost(r);
+    if (r.view.hostUid !== this.uid && r.view.refereeUid !== this.uid) throw new Error('host only');
     if (r.view.phase !== 'lobby') throw new Error('roles are frozen once the game starts');
+    for (const role of roles) roleDef(role);
+    const special = roles.filter((role) => role !== 'dorpeling');
+    if (new Set(special).size !== special.length) {
+      throw new Error('only Villagers may appear more than once');
+    }
     r.view.activeRoles = [...roles];
     r.view.config = config;
     this.world.notify(roomId);
@@ -370,6 +382,8 @@ class MemoryBackend implements Backend {
     r.view.votesCast = 0;
     r.view.pausedAt = null;
     r.view.discussionExtendedByMs = 0;
+    r.view.discussionEndsAt = null;
+    r.view.practiceSkipDiscussion = false;
     r.view.finalRoles = null;
     r.view.outcome = null;
 
@@ -542,6 +556,15 @@ class MemoryBackend implements Backend {
     }
     const existing = r.votes.get(this.uid) ?? { target: null, abstain: false };
     r.votes.set(this.uid, { ...existing, readyToVote: requested });
+    this.world.notify(roomId);
+  }
+
+  async forcePracticeVote(roomId: string): Promise<void> {
+    const r = this.world.room(roomId);
+    this.requireReferee(r);
+    if (r.view.mode !== 'practice') throw new Error('practice rooms only');
+    if (r.view.phase !== 'day') throw new Error('the discussion is not running');
+    r.view.practiceSkipDiscussion = true;
     this.world.notify(roomId);
   }
 
@@ -776,6 +799,15 @@ class MemoryRefereeStore implements RoomStore, DayStore {
     // over and here is the result", and an extension is the opposite of that.
     this.r.view.discussionExtendedByMs = extraMs;
     this.world.notify(this.roomId);
+  }
+
+  async setDiscussionDeadline(endsAt: number | null): Promise<void> {
+    this.r.view.discussionEndsAt = endsAt;
+    this.world.notify(this.roomId);
+  }
+
+  async practiceForceVoteRequested(): Promise<boolean> {
+    return this.r.view.practiceSkipDiscussion === true;
   }
 
 }

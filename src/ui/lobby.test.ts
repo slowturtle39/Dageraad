@@ -113,3 +113,30 @@ describe('the AI roster', () => {
     expect(lobby().textContent).toContain('telt nooit mee');
   });
 });
+
+describe('the lobby deck picker', () => {
+  it('says exactly how many cards a table still needs', () => {
+    const el = renderLobby({
+      lang: 'en', players, canArrange: true, pendingSwap: null, canStart: false,
+      activeRoles: ['weerwolf', 'ziener', 'jager', 'looier', 'dorpeling'],
+      canManageRoles: true,
+    });
+    expect(el.textContent).toContain('Add 1 more card');
+    expect(el.textContent).toContain('5 of 6');
+  });
+
+  it('toggles a special role but adds Villagers one at a time', () => {
+    const changes: string[][] = [];
+    const el = renderLobby({
+      lang: 'en', players, canArrange: true, pendingSwap: null, canStart: false,
+      activeRoles: ['weerwolf', 'ziener'], canManageRoles: true,
+      onRolesChange: (roles) => changes.push(roles),
+    });
+    const hunter = Array.from(el.querySelectorAll<HTMLButtonElement>('.rolepicker__role'))
+      .find((button) => button.textContent === 'Hunter')!;
+    hunter.click();
+    el.querySelector<HTMLButtonElement>('.rolepicker__villagers .btn:last-child')!.click();
+    expect(changes).toContainEqual(['weerwolf', 'ziener', 'jager']);
+    expect(changes).toContainEqual(['weerwolf', 'ziener', 'dorpeling']);
+  });
+});

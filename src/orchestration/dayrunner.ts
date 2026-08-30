@@ -55,6 +55,10 @@ export interface DayStore {
   setPhase(phase: 'day' | 'voting' | 'results'): Promise<void>;
   /** Public: everyone should see the extension land, it is not secret. */
   announceExtension(extraMs: number): Promise<void>;
+  /** Publish one shared countdown instead of letting every phone guess. */
+  setDiscussionDeadline?(endsAt: number | null): Promise<void>;
+  /** Practice-only referee shortcut, checked on the same poll as early votes. */
+  practiceForceVoteRequested?(): Promise<boolean>;
 }
 
 export interface DayRunnerHooks {
@@ -116,6 +120,9 @@ export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
   let endedByAbstain = false;
 
   await store.setPhase('day');
+  await store.setDiscussionDeadline?.(
+    config.discussionEnabled ? clock.now() + config.discussionMs : null,
+  );
 
   // ---- discussion -------------------------------------------------------
   //
@@ -141,6 +148,7 @@ export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
     if (ending === 'expired' && config.suspenseExtension && random() < 0.5) {
       extended = true;
       await store.announceExtension(config.suspenseExtensionMs);
+      await store.setDiscussionDeadline?.(clock.now() + config.suspenseExtensionMs);
       ending = await watchDiscussion(
         store, clock, config, config.suspenseExtensionMs, hooks,
       );
@@ -151,6 +159,7 @@ export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
   // ---- voting -----------------------------------------------------------
   let missingVotes: SeatIndex[] = [];
   if (!endedByAbstain) {
+    await store.setDiscussionDeadline?.(null);
     await store.setPhase('voting');
     missingVotes = await waitForEveryVote(store, clock, config, hooks);
 
@@ -212,6 +221,7 @@ async function watchDiscussion(
     hooks.onEarlyVoteProgress?.(readyToVoteCount(votes), needed);
 
     if (isMajorityAbstaining(votes, config.seatCount)) return 'abstain';
+    if (await store.practiceForceVoteRequested?.()) return 'early';
     if (isMajorityReadyToVote(votes, config.seatCount)) return 'early';
   }
   return 'expired';

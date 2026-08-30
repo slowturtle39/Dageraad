@@ -14,7 +14,8 @@ import {
   rememberFriendId, rememberedFriendId, type FriendProfile,
 } from './app/friend.js';
 import {
-  renderRoomSetup, renderResolutionPicker, controllerModeIsPlaying, type ControllerMode,
+  renderDiscussionTimer, renderRoomSetup, renderResolutionPicker,
+  controllerModeIsPlaying, type ControllerMode,
 } from './ui/setup.js';
 import { renderPrompt, seatSelectable } from './ui/prompt.js';
 import { describeReveal, renderSheet } from './ui/sheet.js';
@@ -26,7 +27,9 @@ import {
 } from './engine/presets.js';
 import { mayArrangeSeats, reorderForSwap } from './app/seating.js';
 import { canDeal } from './app/shell.js';
-import type { Backend, RoomMode } from './app/backend.js';
+import {
+  MAX_DISCUSSION_MS, MIN_DISCUSSION_MS, type Backend, type RoomMode,
+} from './app/backend.js';
 import type { Choice, ResolutionMode, RoleId, SeatIndex } from './engine/types.js';
 
 /**
@@ -80,6 +83,7 @@ interface Local {
   /** Whether the room this device is about to create will count. */
   roomMode: RoomMode;
   resolutionMode: ResolutionMode;
+  discussionMinutes: string;
   history: HistoryRecord[];
   showAllTime: boolean;
   showProfiles: boolean;
@@ -115,6 +119,7 @@ const local: Local = {
   // append-only history cannot be taken back out.
   roomMode: 'practice',
   resolutionMode: 'tworound',
+  discussionMinutes: '15',
   history: [],
   showAllTime: false,
   showProfiles: false,
@@ -233,6 +238,7 @@ async function start(): Promise<void> {
 
   controller = new AppController(backend);
   controller.onChange(() => render());
+  window.setInterval(refreshDiscussionTimer, 250);
 
   // The group, rather than one evening: both span every room, so both are
   // watched for as long as the app is open.
@@ -294,6 +300,12 @@ const actions: AppActions = {
   },
 
   async onCreate(mode) {
+    const discussionMs = discussionMsFromInput(local.discussionMinutes);
+    if (discussionMs === null) {
+      local.error = t(local.lang, 'timer.invalid');
+      render();
+      return;
+    }
     local.mode = mode;
     const name = local.displayName.trim() || defaultName(mode);
     await attempt(async () => {
@@ -306,6 +318,7 @@ const actions: AppActions = {
         // all (see ui/setup.ts).
         playing: controllerModeIsPlaying(mode),
         mode: local.roomMode,
+        discussionMs,
         ...(local.friend
           ? { friend: { friendId: local.friend.id, friendName: local.friend.displayName } }
           : {}),
@@ -506,6 +519,12 @@ const actions: AppActions = {
     if (!roomId) return;
     void attempt(() => backend.removeBot(roomId, uid));
   },
+
+  onRolesChange(roles: RoleId[]) {
+    const state = controller.current();
+    if (!state.roomId || !state.room) return;
+    void attempt(() => backend.setActiveRoles(state.roomId!, roles, state.room!.config));
+  },
 };
 
 /** Return this browser to the start screen without removing it from the room. */
@@ -580,6 +599,14 @@ function render(): void {
         render();
       },
     }));
+    app.append(renderDiscussionTimer({
+      lang: local.lang,
+      minutes: local.discussionMinutes,
+      onMinutesChange: (minutes) => {
+        local.discussionMinutes = minutes;
+        local.error = null;
+      },
+    }));
     app.append(nameField(), renderRoomSetup({
       lang: local.lang,
       mode: local.mode,
@@ -589,6 +616,15 @@ function render(): void {
     }));
     app.append(joinExistingButton());
     app.append(bottomBar(false));
+    if (local.error) app.append(fatal(local.error));
+    return;
+  }
+
+  // A shared-link visitor chooses who they are before joining. Without this,
+  // joining from the link skipped the profile picker entirely and the round
+  // could never be attributed to the friend in all-time history.
+  if (screen.kind === 'join' && !local.friend && !demo) {
+    app.append(friendPicker(), bottomBar(false));
     if (local.error) app.append(fatal(local.error));
     return;
   }
@@ -613,6 +649,7 @@ function render(): void {
         .map((_, seat) => seat as SeatIndex)
         .filter((seat) => seatSelectable(pendingPrompt, seat))
       : undefined,
+    timer: state.room ? discussionTimerText(state.room) : null,
     actions,
   }));
 
@@ -692,6 +729,18 @@ function gameProgress(): HTMLElement {
     return el;
   }
 
+  if (room.phase === 'day') {
+    el.dataset.discussionTimer = 'true';
+    el.textContent = `${t(local.lang, 'phase.day')} · ${discussionTimerText(room) ?? '0:00'}`;
+    return el;
+  }
+
+  if (room.phase === 'lobby') {
+    const minutes = Math.round((room.discussionMs ?? 15 * 60_000) / 60_000);
+    el.textContent = `${t(local.lang, 'phase.lobby')} · ${minutes} ${t(local.lang, 'timer.minutes')}`;
+    return el;
+  }
+
   el.textContent = t(local.lang, `phase.${room.phase}`);
   return el;
 }
@@ -750,6 +799,20 @@ function menu(): HTMLElement {
   });
   profiles.classList.add('menu__item');
   sheet.append(profiles);
+
+  const room = controller.current().room;
+  if (code && room?.mode === 'practice' && room.refereeUid === backend.uid && room.phase === 'day') {
+    const force = button(t(local.lang, 'menu.forceVote'), () => {
+      local.menuOpen = false;
+      void attempt(() => backend.forcePracticeVote(code));
+    });
+    force.classList.add('menu__item');
+    sheet.append(force);
+    const note = document.createElement('p');
+    note.className = 'sheet__note';
+    note.textContent = t(local.lang, 'menu.forceVoteNote');
+    sheet.append(note);
+  }
 
   const home = button(t(local.lang, 'menu.home'), returnHome);
   home.classList.add('menu__item');
@@ -822,6 +885,31 @@ function button(label: string, onClick: () => void): HTMLButtonElement {
   b.textContent = label;
   b.addEventListener('click', onClick);
   return b;
+}
+
+function discussionMsFromInput(value: string): number | null {
+  const minutes = Number(value);
+  const ms = minutes * 60_000;
+  return Number.isInteger(minutes) && ms >= MIN_DISCUSSION_MS && ms <= MAX_DISCUSSION_MS
+    ? ms
+    : null;
+}
+
+function discussionTimerText(room: { phase: string; discussionEndsAt?: number | null }): string | null {
+  if (room.phase !== 'day' || room.discussionEndsAt == null) return null;
+  const seconds = Math.max(0, Math.ceil((room.discussionEndsAt - Date.now()) / 1_000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function refreshDiscussionTimer(): void {
+  const room = controller.current().room;
+  if (!room || room.phase !== 'day') return;
+  const value = discussionTimerText(room) ?? '0:00';
+  document.querySelectorAll<HTMLElement>('[data-discussion-timer="true"]').forEach((el) => {
+    el.textContent = el.classList.contains('gameprogress')
+      ? `${t(local.lang, 'phase.day')} · ${value}`
+      : value;
+  });
 }
 
 void start();

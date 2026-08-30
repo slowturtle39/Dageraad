@@ -10,6 +10,16 @@ import type { FriendProfile } from './friend.js';
 import type { DayStore } from '../orchestration/dayrunner.js';
 import type { RoomStore } from '../orchestration/store.js';
 
+export const DEFAULT_DISCUSSION_MS = 15 * 60_000;
+export const MIN_DISCUSSION_MS = 60_000;
+export const MAX_DISCUSSION_MS = 120 * 60_000;
+
+export function validDiscussionMs(value: number): boolean {
+  return Number.isInteger(value)
+    && value >= MIN_DISCUSSION_MS
+    && value <= MAX_DISCUSSION_MS;
+}
+
 /**
  * Everything the app needs from the network, behind one interface.
  *
@@ -58,6 +68,12 @@ export interface RoomView {
   standings: SessionStanding[];
   /** Whether this evening counts toward all-time history. Immutable. */
   mode: RoomMode;
+  /** Shared discussion length chosen before the room is created. */
+  discussionMs?: number;
+  /** Public wall-clock deadline while the discussion is running. */
+  discussionEndsAt?: number | null;
+  /** Practice-only referee shortcut consumed by the day runner. */
+  practiceSkipDiscussion?: boolean;
   publicEvents: NightEvent[];
   shieldedSeats: SeatIndex[];
   /**
@@ -162,6 +178,8 @@ export interface CreateRoomOptions {
    * path by design.
    */
   mode?: RoomMode;
+  /** Discussion timer for every round in this room. Defaults to 15 minutes. */
+  discussionMs?: number;
   /** Which human is creating it, for history that spans evenings. */
   friend?: FriendLabel;
   activeRoles: RoleId[];
@@ -266,6 +284,9 @@ export interface Backend {
    * published — who asked is a fact about how confident somebody is.
    */
   requestEarlyVote(roomId: string, requested: boolean): Promise<void>;
+
+  /** Open the ballot immediately. Referee-only and practice-only. */
+  forcePracticeVote(roomId: string): Promise<void>;
 
   /**
    * Add one AI player to a PRACTICE lobby. Controlling browser only.

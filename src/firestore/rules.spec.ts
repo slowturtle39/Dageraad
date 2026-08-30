@@ -52,6 +52,10 @@ async function seed(phase = 'night', nightWindowIndex = 0, currentRound = 1,
       nightWindowIndex,
       currentRound,
       mode,
+      config: {},
+      discussionMs: 15 * 60_000,
+      discussionEndsAt: null,
+      practiceSkipDiscussion: false,
       activeRoles: ['droomwolf', 'alphawolf', 'mystiekewolf', 'dubbelganger'],
       seating: [ALICE, BOB],
     });
@@ -118,6 +122,39 @@ describe('phrase-confirmed emergency control', () => {
 
   it('keeps ordinary host phase changes working', async () => {
     await assertSucceeds(updateDoc(doc(as(HOST), 'rooms', ROOM), { phase: 'voting' }));
+  });
+});
+
+describe('the shared discussion timer and practice shortcut', () => {
+  it('does not let anybody change the room timer after creation', async () => {
+    await assertFails(updateDoc(doc(as(HOST), 'rooms', ROOM), { discussionMs: 60_000 }));
+    await assertFails(updateDoc(doc(as(REF), 'rooms', ROOM), { discussionMs: 60_000 }));
+  });
+
+  it('lets the referee open a practice vote during discussion', async () => {
+    await seed('day', 0, 1, 'practice');
+    await assertSucceeds(updateDoc(doc(as(REF), 'rooms', ROOM), { practiceSkipDiscussion: true }));
+  });
+
+  it('refuses that shortcut in an official room and from a player', async () => {
+    await seed('day', 0, 1, 'official');
+    await assertFails(updateDoc(doc(as(REF), 'rooms', ROOM), { practiceSkipDiscussion: true }));
+    await seed('day', 0, 1, 'practice');
+    await assertFails(updateDoc(doc(as(ALICE), 'rooms', ROOM), { practiceSkipDiscussion: true }));
+  });
+
+  it('keeps deck changes with the host and inside the lobby', async () => {
+    await seed('lobby', 0, 0, 'practice');
+    await assertSucceeds(updateDoc(doc(as(HOST), 'rooms', ROOM), {
+      activeRoles: ['weerwolf', 'ziener', 'jager', 'dorpeling', 'dorpeling'],
+    }));
+    await assertFails(updateDoc(doc(as(ALICE), 'rooms', ROOM), {
+      activeRoles: ['weerwolf'],
+    }));
+    await seed('night', 0, 1, 'practice');
+    await assertFails(updateDoc(doc(as(HOST), 'rooms', ROOM), {
+      activeRoles: ['weerwolf'],
+    }));
   });
 });
 
@@ -751,9 +788,27 @@ describe('whether an evening counts is decided once', () => {
         setDoc(doc(as(HOST), 'rooms', `R${mode}`), {
           hostUid: HOST, refereeUid: REF, phase: 'lobby', mode,
           currentRound: 0,
+          discussionMs: 15 * 60_000,
+          discussionEndsAt: null,
+          practiceSkipDiscussion: false,
         }),
       );
     }
+  });
+
+  it('refuses a missing or unreasonable discussion timer', async () => {
+    await env.clearFirestore();
+    const base = {
+      hostUid: HOST, refereeUid: REF, phase: 'lobby', mode: 'practice',
+      currentRound: 0, discussionEndsAt: null, practiceSkipDiscussion: false,
+    };
+    await assertFails(setDoc(doc(as(HOST), 'rooms', 'NO-TIMER'), base));
+    await assertFails(setDoc(doc(as(HOST), 'rooms', 'TOO-LONG'), {
+      ...base, discussionMs: 121 * 60_000,
+    }));
+    await assertSucceeds(setDoc(doc(as(HOST), 'rooms', 'ONE-MINUTE'), {
+      ...base, discussionMs: 60_000,
+    }));
   });
 
   it('refuses a room that does not say which it is', async () => {

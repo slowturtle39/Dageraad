@@ -202,6 +202,15 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
     await updateDoc(this.room(), { discussionExtendedByMs: extraMs });
   }
 
+  async setDiscussionDeadline(endsAt: number | null): Promise<void> {
+    await updateDoc(this.room(), { discussionEndsAt: endsAt });
+  }
+
+  async practiceForceVoteRequested(): Promise<boolean> {
+    const data = (await getDoc(this.room())).data() as { practiceSkipDiscussion?: boolean } | undefined;
+    return data?.practiceSkipDiscussion === true;
+  }
+
   /* ---------------------------- seat lookup ---------------------------- */
 
   private seatCache: Map<string, SeatIndex> | null = null;

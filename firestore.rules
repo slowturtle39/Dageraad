@@ -131,6 +131,11 @@ service cloud.firestore {
         // can afford is a real evening not counting; the one we cannot is a
         // test round in append-only history with no delete path.
         && request.resource.data.mode in ['practice', 'official']
+        && request.resource.data.discussionMs is int
+        && request.resource.data.discussionMs >= 60000
+        && request.resource.data.discussionMs <= 7200000
+        && request.resource.data.discussionEndsAt == null
+        && request.resource.data.practiceSkipDiscussion == false
         // The creator may hand the referee role to the tablet. An explicit,
         // trusted-group recovery route is the sole way it can move later.
         && request.resource.data.refereeUid is string
@@ -149,6 +154,24 @@ service cloud.firestore {
         // retconned into the record and a bad one quietly demoted — worse
         // than having no history at all, because you could not tell.
         && !changed('mode')
+        // The deck is public setup, but once cards have been dealt changing it
+        // would make the published timeline disagree with the actual deal.
+        && (!changed('activeRoles')
+            || ((isHost(roomId) || isReferee(roomId)) && inPhase(roomId, 'lobby')))
+        && (!changed('config')
+            || ((isHost(roomId) || isReferee(roomId)) && inPhase(roomId, 'lobby')))
+        // One shared timer for the evening, chosen before the room exists.
+        && !changed('discussionMs')
+        && (!changed('discussionEndsAt') || isReferee(roomId))
+        // The practice shortcut is never accepted in an official room.
+        && (!changed('practiceSkipDiscussion')
+            || (isReferee(roomId) && (
+                 (isPractice(roomId)
+                  && inPhase(roomId, 'day')
+                  && request.resource.data.practiceSkipDiscussion == true)
+                 || (request.resource.data.phase == 'night'
+                     && request.resource.data.practiceSkipDiscussion == false)
+               )))
             // currentRound only ever goes forward. It is what a joining member's
             // `joinedAtRound` is pinned to, and therefore the sole input to their
             // seed: rewinding it would let the referee re-admit somebody against a

@@ -11,6 +11,8 @@ class TestDayStore implements DayStore {
   votes = new Map<SeatIndex, Vote>();
   phases: string[] = [];
   extensions: number[] = [];
+  deadlines: Array<number | null> = [];
+  forceVote = false;
 
   async readVotes() {
     return new Map(this.votes);
@@ -21,10 +23,42 @@ class TestDayStore implements DayStore {
   async announceExtension(ms: number) {
     this.extensions.push(ms);
   }
+  async setDiscussionDeadline(endsAt: number | null) {
+    this.deadlines.push(endsAt);
+  }
+  async practiceForceVoteRequested() {
+    return this.forceVote;
+  }
   cast(seat: SeatIndex, target: SeatIndex | null, abstain = false) {
     this.votes.set(seat, { voter: seat, target, abstain });
   }
 }
+
+describe('the shared discussion timer', () => {
+  const state = table(['weerwolf', 'dorpeling', 'ziener', 'jager', 'medium']);
+
+  it('publishes one deadline and clears it when voting opens', async () => {
+    const store = new TestDayStore();
+    for (let seat = 0; seat < 5; seat++) store.cast(seat as SeatIndex, (seat + 1) % 5 as SeatIndex);
+    const clock = new FakeClock();
+    const run = runDay({ state, store, clock, config: FAST });
+    await drive(clock, 20_000);
+    await run;
+    expect(store.deadlines).toEqual([10_000, null]);
+  });
+
+  it('lets the referee shortcut only the discussion, not the actual vote', async () => {
+    const store = new TestDayStore();
+    for (let seat = 0; seat < 5; seat++) store.cast(seat as SeatIndex, (seat + 1) % 5 as SeatIndex);
+    store.forceVote = true;
+    const clock = new FakeClock();
+    const run = runDay({ state, store, clock, config: FAST });
+    await drive(clock, 2_000);
+    await run;
+    expect(store.phases).toEqual(['day', 'voting', 'results']);
+    expect(store.deadlines).toEqual([10_000, null]);
+  });
+});
 
 function table(seatRoles: RoleId[]) {
   return createNightState({

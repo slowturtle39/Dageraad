@@ -3,6 +3,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import { cardsForRoles, deal } from '../engine/deal.js';
+import { roleDef } from '../engine/roles.js';
 import { buildTimeline } from '../engine/timeline.js';
 import type {
   Choice, GameConfig, NightState, RoleId, SeatIndex,
@@ -10,7 +11,8 @@ import type {
 import type { DayStore } from '../orchestration/dayrunner.js';
 import type { RoomStore } from '../orchestration/store.js';
 import {
-  generateRoomCode, type Backend, type CreateRoomOptions, type FriendLabel,
+  DEFAULT_DISCUSSION_MS, generateRoomCode, validDiscussionMs,
+  type Backend, type CreateRoomOptions, type FriendLabel,
   type GameResults, type PlayerView, type PrivateView, type RoomView,
   type Unsubscribe,
 } from '../app/backend.js';
@@ -74,6 +76,8 @@ export class FirestoreBackend implements Backend {
    */
   async createRoom(options: CreateRoomOptions): Promise<string> {
     const playing = options.playing !== false;
+    const discussionMs = options.discussionMs ?? DEFAULT_DISCUSSION_MS;
+    if (!validDiscussionMs(discussionMs)) throw new Error('discussion timer must be 1-120 minutes');
     const roomId = await this.freeRoomCode();
 
     const room: RoomDoc = {
@@ -83,6 +87,9 @@ export class FirestoreBackend implements Backend {
       phase: 'lobby',
       // Practice unless somebody deliberately said otherwise.
       mode: options.mode ?? 'practice',
+      discussionMs,
+      discussionEndsAt: null,
+      practiceSkipDiscussion: false,
       // 0 means "nothing played yet". Somebody joining now is a round-1
       // member, which is currentRound + 1 — the same arithmetic as joining
       // mid-evening rather than a special case.
@@ -246,8 +253,9 @@ export class FirestoreBackend implements Backend {
 
   async setActiveRoles(roomId: string, roles: RoleId[], config: GameConfig): Promise<void> {
     const room = await this.room(roomId);
-    if (room.hostUid !== this.uid) throw new Error('host only');
+    if (room.hostUid !== this.uid && room.refereeUid !== this.uid) throw new Error('host only');
     if (room.phase !== 'lobby') throw new Error('roles are frozen once the game starts');
+    validateRoleSelection(roles);
     await updateDoc(this.roomRef(roomId), { activeRoles: [...roles], config });
   }
 
@@ -308,6 +316,8 @@ export class FirestoreBackend implements Backend {
       earlyVoteCount: 0,
       pausedAt: null,
       discussionExtendedByMs: 0,
+      discussionEndsAt: null,
+      practiceSkipDiscussion: false,
       finalRoles: null,
       outcome: null,
     });
@@ -374,6 +384,9 @@ export class FirestoreBackend implements Backend {
       phase: room.phase,
       round: room.currentRound,
       mode: room.mode ?? 'practice',
+      discussionMs: room.discussionMs ?? DEFAULT_DISCUSSION_MS,
+      discussionEndsAt: room.discussionEndsAt ?? null,
+      practiceSkipDiscussion: room.practiceSkipDiscussion ?? false,
       nightWindowIndex: room.nightWindowIndex ?? 0,
       activeRoles: room.activeRoles ?? [],
       config: room.config,
@@ -568,6 +581,14 @@ export class FirestoreBackend implements Backend {
       readyToVote: requested,
       castAt: Date.now(),
     });
+  }
+
+  async forcePracticeVote(roomId: string): Promise<void> {
+    const room = await this.room(roomId);
+    if (room.refereeUid !== this.uid) throw new Error('referee only');
+    if ((room.mode ?? 'practice') !== 'practice') throw new Error('practice rooms only');
+    if (room.phase !== 'day') throw new Error('the discussion is not running');
+    await updateDoc(this.roomRef(roomId), { practiceSkipDiscussion: true });
   }
 
   /* --------------------------------- bots -------------------------------- */
@@ -795,6 +816,14 @@ export class FirestoreBackend implements Backend {
     };
     await setDoc(doc(this.db, paths.friend(profile.id)), profile);
     return profile;
+  }
+}
+
+function validateRoleSelection(roles: RoleId[]): void {
+  for (const role of roles) roleDef(role);
+  const special = roles.filter((role) => role !== 'dorpeling');
+  if (new Set(special).size !== special.length) {
+    throw new Error('only Villagers may appear more than once');
   }
 }
 

@@ -61,6 +61,12 @@ export interface RoomDoc {
    * are append-only and there is no delete path by design.
    */
   mode: RoomMode;
+  /** Chosen at creation and immutable: 1-120 minutes. */
+  discussionMs: number;
+  /** Shared countdown target while phase == 'day'. */
+  discussionEndsAt: number | null;
+  /** Referee-only shortcut for practice testing. */
+  practiceSkipDiscussion: boolean;
   /**
    * Which game of the evening this is, counting from 1 (0 in the lobby).
    *

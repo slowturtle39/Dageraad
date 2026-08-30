@@ -1,5 +1,6 @@
-import type { SeatIndex } from '../engine/types.js';
-import { t, type Lang } from './i18n.js';
+import type { RoleId, SeatIndex } from '../engine/types.js';
+import { ROLES } from '../engine/roles.js';
+import { roleName, t, type Lang } from './i18n.js';
 
 /**
  * Seating arrangement (§13).
@@ -45,6 +46,9 @@ export interface LobbyView {
   canManageBots?: boolean;
   onAddBot?: () => void;
   onRemoveBot?: (uid: string) => void;
+  activeRoles?: RoleId[];
+  canManageRoles?: boolean;
+  onRolesChange?: (roles: RoleId[]) => void;
 }
 
 export function renderLobby(view: LobbyView): HTMLElement {
@@ -107,6 +111,8 @@ export function renderLobby(view: LobbyView): HTMLElement {
 
   el.append(ring);
 
+  el.append(rolePicker(view, seated.length));
+
   const start = document.createElement('button');
   start.type = 'button';
   start.className = 'btn btn--primary';
@@ -123,6 +129,73 @@ export function renderLobby(view: LobbyView): HTMLElement {
   el.append(note);
 
   return el;
+}
+
+function rolePicker(view: LobbyView, playerCount: number): HTMLElement {
+  const box = document.createElement('section');
+  box.className = 'lobby__roles';
+  box.dataset.rolePicker = 'true';
+
+  const roles = view.activeRoles ?? [];
+  const needed = playerCount + 3;
+  const selected = roles.length;
+  const title = document.createElement('h2');
+  title.className = 'setup__title';
+  title.textContent = t(view.lang, 'lobby.rolesTitle');
+
+  const status = document.createElement('p');
+  status.className = selected === needed ? 'rolecount rolecount--ready' : 'rolecount';
+  status.textContent = selected === needed
+    ? t(view.lang, 'lobby.rolesReady', { selected, players: playerCount })
+    : selected < needed
+      ? t(view.lang, 'lobby.rolesMissing', { n: needed - selected, selected, needed })
+      : t(view.lang, 'lobby.rolesExtra', { n: selected - needed, selected, needed });
+  box.append(title, status);
+
+  const grid = document.createElement('div');
+  grid.className = 'rolepicker';
+  const ordered = Object.values(ROLES).sort((a, b) => a.defaultOrder - b.defaultOrder);
+  for (const role of ordered.filter((entry) => entry.id !== 'dorpeling')) {
+    const chosen = roles.includes(role.id);
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = chosen ? 'rolepicker__role rolepicker__role--selected' : 'rolepicker__role';
+    toggle.textContent = roleName(view.lang, role.id);
+    toggle.setAttribute('aria-pressed', String(chosen));
+    toggle.disabled = view.canManageRoles !== true;
+    toggle.addEventListener('click', () => {
+      view.onRolesChange?.(chosen
+        ? roles.filter((entry) => entry !== role.id)
+        : [...roles, role.id]);
+    });
+    grid.append(toggle);
+  }
+  box.append(grid);
+
+  const villagers = roles.filter((role) => role === 'dorpeling').length;
+  const villagerRow = document.createElement('div');
+  villagerRow.className = 'rolepicker__villagers';
+  const label = document.createElement('span');
+  label.textContent = `${roleName(view.lang, 'dorpeling')} × ${villagers}`;
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'btn';
+  remove.textContent = '−';
+  remove.disabled = view.canManageRoles !== true || villagers === 0;
+  remove.addEventListener('click', () => {
+    const next = [...roles];
+    next.splice(next.lastIndexOf('dorpeling'), 1);
+    view.onRolesChange?.(next);
+  });
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'btn';
+  add.textContent = '+';
+  add.disabled = view.canManageRoles !== true;
+  add.addEventListener('click', () => view.onRolesChange?.([...roles, 'dorpeling']));
+  villagerRow.append(label, remove, add);
+  box.append(villagerRow);
+  return box;
 }
 
 /**

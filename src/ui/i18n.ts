@@ -111,6 +111,10 @@ const nl: Dict = {
     'Dit apparaat leidt normaal de hele avond. Valt het uit, dan kan een ' +
     'aanwezige speler de rol bewust overnemen door `referee` te bevestigen.',
   'setup.create': 'Maak de kamer aan',
+  'timer.setupTitle': 'Overlegtimer',
+  'timer.setupBody': 'Kies voor de hele avond hoe lang het overleg duurt. Standaard is 15 minuten.',
+  'timer.minutes': 'minuten',
+  'timer.invalid': 'Kies een overlegtijd tussen 1 en 120 minuten.',
   'setup.createOnThisDevice':
     'Je maakt de kamer aan op DIT apparaat. Zit je zelf mee te spelen? Kies ' +
     'dan Eigen telefoon.',
@@ -143,6 +147,8 @@ const nl: Dict = {
   'departed.rejoin': 'Toch weer meedoen',
 
   'menu.title': 'Menu',
+  'menu.forceVote': 'Open nu de stemming',
+  'menu.forceVoteNote': 'Alleen voor oefenpotjes. AI-spelers stemmen daarna automatisch willekeurig.',
   'menu.close': 'Sluiten',
   'menu.share': 'Deel de link',
   'menu.copied': 'Gekopieerd',
@@ -160,6 +166,10 @@ const nl: Dict = {
   'lobby.botsTitle': 'AI-spelers',
   'lobby.botsNote': 'Alleen om te oefenen. Een potje met AI-spelers telt nooit mee voor de statistieken.',
   'lobby.botTag': 'AI',
+  'lobby.rolesTitle': 'Kaarten in dit potje',
+  'lobby.rolesReady': '{selected} kaarten voor {players} spelers en 3 middenkaarten — klaar om te delen.',
+  'lobby.rolesMissing': 'Voeg nog {n} kaart(en) toe ({selected} van {needed}).',
+  'lobby.rolesExtra': 'Haal nog {n} kaart(en) weg ({selected} van {needed}).',
 
   'table.alphaWolfCard': 'Alfawolf-kaart',
   'table.shielded': 'Beschermd door de Schildwacht',
@@ -333,6 +343,10 @@ const en: Dict = {
     'This device normally leads the whole evening. If it fails, a present ' +
     'player can consciously take over by confirming `referee`.',
   'setup.create': 'Create the room',
+  'timer.setupTitle': 'Discussion timer',
+  'timer.setupBody': 'Choose the discussion length for the whole evening. The default is 15 minutes.',
+  'timer.minutes': 'minutes',
+  'timer.invalid': 'Choose a discussion time between 1 and 120 minutes.',
   'setup.createOnThisDevice':
     'You are creating the room on THIS device. Playing yourself? Choose a ' +
     'player\u2019s own phone instead.',
@@ -365,6 +379,8 @@ const en: Dict = {
   'departed.rejoin': 'Join again',
 
   'menu.title': 'Menu',
+  'menu.forceVote': 'Open voting now',
+  'menu.forceVoteNote': 'Practice rooms only. AI players then vote randomly automatically.',
   'menu.close': 'Close',
   'menu.share': 'Share the link',
   'menu.copied': 'Copied',
@@ -382,6 +398,10 @@ const en: Dict = {
   'lobby.botsTitle': 'AI players',
   'lobby.botsNote': 'For practice only. A game with AI players never counts towards the statistics.',
   'lobby.botTag': 'AI',
+  'lobby.rolesTitle': 'Cards in this game',
+  'lobby.rolesReady': '{selected} cards for {players} players and 3 centre cards — ready to deal.',
+  'lobby.rolesMissing': 'Add {n} more card(s) ({selected} of {needed}).',
+  'lobby.rolesExtra': 'Remove {n} card(s) ({selected} of {needed}).',
 
   'table.alphaWolfCard': 'Alpha Wolf card',
   'table.shielded': 'Shielded by the Bodyguard',

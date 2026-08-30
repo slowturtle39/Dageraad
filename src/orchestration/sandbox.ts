@@ -80,6 +80,12 @@ export class SandboxStore implements RoomStore, DayStore {
   async announceExtension(extraMs: number): Promise<void> {
     await this.inner.announceExtension?.(extraMs);
   }
+  async setDiscussionDeadline(endsAt: number | null): Promise<void> {
+    await this.inner.setDiscussionDeadline?.(endsAt);
+  }
+  async practiceForceVoteRequested(): Promise<boolean> {
+    return this.inner.practiceForceVoteRequested?.() ?? false;
+  }
 }
 
 /**

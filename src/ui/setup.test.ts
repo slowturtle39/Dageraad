@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   CONTROLLER_MODES, controllerModeFromPlaying, controllerModeIsPlaying,
-  renderRoomSetup, type ControllerMode,
+  renderDiscussionTimer, renderRoomSetup, type ControllerMode,
 } from './setup.js';
 import { t } from './i18n.js';
 
@@ -24,6 +24,22 @@ const cards = (el: HTMLElement) =>
   Array.from(el.querySelectorAll<HTMLElement>('.setup__mode'));
 
 beforeEach(() => { document.body.innerHTML = ''; });
+
+describe('discussion timer setup', () => {
+  it('shows the 15 minute default and reports manual changes', () => {
+    let changed = '';
+    const el = renderDiscussionTimer({
+      lang: 'en', minutes: '15', onMinutesChange: (value) => { changed = value; },
+    });
+    const input = el.querySelector<HTMLInputElement>('input')!;
+    expect(input.value).toBe('15');
+    expect(input.min).toBe('1');
+    expect(input.max).toBe('120');
+    input.value = '22';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(changed).toBe('22');
+  });
+});
 
 describe('which device runs the game', () => {
   it('offers exactly the two modes, table device first', () => {

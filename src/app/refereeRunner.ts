@@ -161,6 +161,7 @@ export async function runGame(opts: RefereeRunnerOptions): Promise<GameRunResult
       // anywhere else is how two of the first three tappers end an eight-player
       // vote.
       seatCount: room.seating.length,
+      discussionMs: room.discussionMs ?? DEFAULT_DAY_CONFIG.discussionMs,
       ...opts.dayConfig,
     },
     ...(opts.dayOptions ? { dayOptions: opts.dayOptions } : {}),
@@ -276,6 +277,8 @@ function withPhaseHook(
     recordLatency: (samples) => inner.recordLatency(samples),
     readVotes: () => inner.readVotes(),
     announceExtension: (ms) => inner.announceExtension(ms),
+    setDiscussionDeadline: (endsAt) => inner.setDiscussionDeadline?.(endsAt) ?? Promise.resolve(),
+    practiceForceVoteRequested: () => inner.practiceForceVoteRequested?.() ?? Promise.resolve(false),
     async setPhase(phase) {
       if (phase === lastPhase) return;
       lastPhase = phase;

@@ -55,6 +55,7 @@ export interface AppActions {
   onNameTap(seat: SeatIndex): void;
   onAddBot?(): void;
   onRemoveBot?(uid: string): void;
+  onRolesChange?(roles: RoleId[]): void;
 }
 
 export function renderApp(deps: AppDeps): HTMLElement {
@@ -158,12 +159,18 @@ function renderLobbyScreen(deps: AppDeps): HTMLElement {
     // to move a chair, and the rules refuse their write anyway.
     canArrange: mayArrangeSeats(room, deps.state.uid) || room.refereeUid === deps.state.uid,
     pendingSwap: deps.selected ?? null,
-    canStart: canDeal(room, deps.state.uid) && players.length >= 3,
+    canStart: canDeal(room, deps.state.uid)
+      && players.length >= 3
+      && room.activeRoles.length === players.length + 3,
     onSeatTap: deps.actions.onSeatTap,
     onStart: deps.actions.onDeal,
     canManageBots: mayManageBots(room, deps.state.uid),
     ...(deps.actions.onAddBot ? { onAddBot: deps.actions.onAddBot } : {}),
     ...(deps.actions.onRemoveBot ? { onRemoveBot: deps.actions.onRemoveBot } : {}),
+    activeRoles: room.activeRoles,
+    canManageRoles: room.phase === 'lobby'
+      && (room.hostUid === deps.state.uid || room.refereeUid === deps.state.uid),
+    ...(deps.actions.onRolesChange ? { onRolesChange: deps.actions.onRolesChange } : {}),
   });
 }
 

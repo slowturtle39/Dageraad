@@ -73,6 +73,7 @@ export function renderTablet(view: TabletView, controls?: TabletControls): HTMLE
   const timer = document.createElement('div');
   timer.className = view.paused ? 'tablet__timer tablet__timer--paused' : 'tablet__timer';
   timer.textContent = view.timer ?? '';
+  if (view.phase === 'day') timer.dataset.discussionTimer = 'true';
 
   const left = document.createElement('div');
   left.append(phase, sub);
