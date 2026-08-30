@@ -29,6 +29,29 @@ export interface PromptView {
   onDecline: () => void;
 }
 
+/**
+ * Toggle one centre card while respecting how many this prompt permits.
+ *
+ * A one-card prompt replaces its old pick immediately. Accumulating a second
+ * card would make the answer invalid and disable confirmation, which is
+ * especially destructive for a Dubbelganger copying the Heks: both of her
+ * choices share one fixed window.
+ */
+export function toggleCenterPick(
+  picked: readonly number[], index: number, count: number,
+): number[] {
+  if (picked.includes(index)) return picked.filter((entry) => entry !== index);
+  return [...picked, index].slice(-count);
+}
+
+/** A night question is never allowed to remain over the day screen. */
+export function nextPendingRequest(
+  requests: readonly DecisionRequest[], submitted: readonly string[], phase: string,
+): DecisionRequest | undefined {
+  if (phase !== 'night') return undefined;
+  return requests.find((request) => !submitted.includes(request.key));
+}
+
 /** The answer a set of picks amounts to, or null while it is incomplete. */
 export function choiceFor(view: PromptView): Choice | null {
   const { prompt } = view.request;

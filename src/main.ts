@@ -17,7 +17,9 @@ import {
   renderDiscussionTimer, renderRoomSetup, renderResolutionPicker,
   controllerModeIsPlaying, type ControllerMode,
 } from './ui/setup.js';
-import { renderPrompt, seatSelectable } from './ui/prompt.js';
+import {
+  nextPendingRequest, renderPrompt, seatSelectable, toggleCenterPick,
+} from './ui/prompt.js';
 import { describeReveal, renderSheet } from './ui/sheet.js';
 import { renderVoting } from './ui/voting.js';
 import { runGame } from './app/refereeRunner.js';
@@ -1026,9 +1028,12 @@ function promptSheet(
       onPickSeat: (seat) => actions.onCardTap(seat),
       onPickCenter: (index) => {
         if (request.prompt.kind === 'seat-or-center') local.picked = [];
-        const at = local.pickedCenters.indexOf(index);
-        if (at >= 0) local.pickedCenters.splice(at, 1);
-        else local.pickedCenters = [...local.pickedCenters, index];
+        const count = request.prompt.kind === 'center'
+          ? request.prompt.count
+          : request.prompt.kind === 'seat-or-center'
+            ? request.prompt.centerCount
+            : 1;
+        local.pickedCenters = toggleCenterPick(local.pickedCenters, index, count);
         render();
       },
       onConfirm: send,
@@ -1051,7 +1056,11 @@ function firstPending() {
     local.decisionWindow = marker;
     local.submittedDecisionKeys = [];
   }
-  return state.own.pending.find((request) => !local.submittedDecisionKeys.includes(request.key));
+  return nextPendingRequest(
+    state.own.pending,
+    local.submittedDecisionKeys,
+    room?.phase ?? 'lobby',
+  );
 }
 
 function voteSheet(ownSeat: SeatIndex): HTMLElement {

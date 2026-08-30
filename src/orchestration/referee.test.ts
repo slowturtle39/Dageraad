@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createNightState } from '../engine/state.js';
 import { DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG, TWO_ROUND_CONFIG } from '../engine/presets.js';
 import { buildTimeline } from '../engine/timeline.js';
-import type { RoleId } from '../engine/types.js';
+import type { RoleId, SeatIndex } from '../engine/types.js';
 import { FakeClock, PausableClock } from './clock.js';
 import { runNight, type WindowInfo } from './referee.js';
 import { InMemoryRoomStore } from './store.js';
@@ -171,6 +171,14 @@ describe('submissions', () => {
     await store.setWindowIndex(1);
     expect(store.submit(0, 3, { 'doppel-view': { kind: 'seat', seat: 1 } })).toBe(false);
     expect(store.submit(1, 3, { 'doppel-view': { kind: 'seat', seat: 1 } })).toBe(true);
+  });
+
+  it('clears the final question before the day begins', async () => {
+    const { store } = await play(standardDeal(), TWO_ROUND_CONFIG);
+    for (let seat = 0; seat < 8; seat++) {
+      expect(store.prompts.get(seat as SeatIndex)).toEqual([]);
+    }
+    expect(store.phase).toBe('day');
   });
 });
 

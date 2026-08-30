@@ -201,6 +201,14 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
   await store.publishPublicView(publicView(final.result.state));
 
   await store.recordLatency(samples);
+  // The last scheduled window has no next window to clear its questions.
+  // Clear every human explicitly before opening the day; otherwise a timed-out
+  // final prompt remains over the table and hides the private no-action/result
+  // receipt that explains how the night actually resolved.
+  for (const seat of everySeat(state)) {
+    if (opts.bots?.seats.has(seat)) continue;
+    await store.releaseDecisions(seat, []);
+  }
   await store.setPhase('day');
 
   return { result: final.result, timeline, samples, timedOut };

@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { choiceFor, renderPrompt, seatSelectable, type PromptView } from './prompt.js';
+import {
+  choiceFor, nextPendingRequest, renderPrompt, seatSelectable, toggleCenterPick,
+  type PromptView,
+} from './prompt.js';
 import type { Choice, DecisionRequest, Prompt, SeatIndex } from '../engine/types.js';
 
 /**
@@ -64,6 +67,35 @@ describe('an incomplete answer is never sent', () => {
     expect(choiceFor(view(p, { pickedCenters: [0, 2] })))
       .toEqual({ kind: 'center', centerIndices: [0, 2] });
     expect(renderPrompt(view(p)).querySelectorAll('.prompt__center')).toHaveLength(3);
+  });
+});
+
+describe('centre-card selection', () => {
+  it('replaces the old card when exactly one is allowed', () => {
+    expect(toggleCenterPick([0], 2, 1)).toEqual([2]);
+  });
+
+  it('keeps at most the requested number for a multi-card prompt', () => {
+    expect(toggleCenterPick([0, 1], 2, 2)).toEqual([1, 2]);
+    expect(toggleCenterPick([0, 2], 2, 2)).toEqual([0]);
+  });
+});
+
+describe('prompt lifetime', () => {
+  const pending = [request({ kind: 'center', count: 1 }, { key: 'heks-center' })];
+
+  it('shows an unanswered request only during the night', () => {
+    expect(nextPendingRequest(pending, [], 'night')?.key).toBe('heks-center');
+    expect(nextPendingRequest(pending, [], 'day')).toBeUndefined();
+  });
+
+  it('moves to the next request after the first is submitted', () => {
+    const requests = [
+      request({ kind: 'seat', exclude: [], optional: false }, { key: 'heks-precommit-target' }),
+      ...pending,
+    ];
+    expect(nextPendingRequest(requests, ['heks-precommit-target'], 'night')?.key)
+      .toBe('heks-center');
   });
 });
 
