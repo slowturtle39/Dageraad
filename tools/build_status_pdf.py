@@ -20,6 +20,11 @@ from reportlab.platypus import (
 )
 
 OUT = os.environ.get("OUT", "Dageraad-status.pdf")
+SHOTS_DIR = os.environ.get("SHOTS_DIR", "/tmp")
+
+
+def shot(name):
+    return os.path.join(SHOTS_DIR, name)
 
 INK = colors.HexColor("#1d2029")
 DIM = colors.HexColor("#5f6472")
@@ -58,7 +63,7 @@ def header_footer(canvas, doc):
     canvas.drawString(20 * mm, A4[1] - 12 * mm, "DAGERAAD")
     canvas.setFont("Helvetica", 8.5)
     canvas.drawRightString(A4[0] - 20 * mm, A4[1] - 12 * mm,
-                           "Projectstatus · 27 augustus 2026 · live")
+                           "Projectstatus · 31 augustus 2026 · live")
     canvas.setStrokeColor(RULE)
     canvas.setLineWidth(0.5)
     canvas.line(20 * mm, A4[1] - 15 * mm, A4[0] - 20 * mm, A4[1] - 15 * mm)
@@ -169,10 +174,10 @@ story.append(Paragraph(
     "met onze eigen huisregels",
     style("sub", fontSize=12.5, leading=18, textColor=DIM, spaceAfter=14)))
 
-_cover = figure_parts("/tmp/pdf-table.png", 92,
-                      "De tafel op een telefoon — dezelfde weergave in dag én "
-                      "nacht. De gestreepte kaarten zijn eigen vermoedens, "
-                      "geen feiten.",
+_cover = figure_parts(shot("pdf-table.png"), 92,
+                      "De tafel op een telefoon, met het stempaneel bewust "
+                      "opengeklapt. Het spel blijft bovenaan in beeld; stemmen "
+                      "is een aparte handeling.",
                       crop=(0.02, 0.80))
 for _part in _cover:
     _part.hAlign = "CENTER"
@@ -193,8 +198,10 @@ story.append(PageBreak())
 story.append(Paragraph("Stand van zaken — de app is live", H1))
 
 story.append(Paragraph(
-    "De app staat online en is klaar voor een eerste potje thuis. Eén link "
-    "delen is genoeg: geen app-store, geen installatie, geen lokaal netwerk.",
+    "De app staat online en is klaar voor verder playtesten. De eerste ronde "
+    "thuis heeft al verbeteringen opgeleverd voor nachtkeuzes, vertaling, "
+    "stemmen, bots en de indeling op telefoon en laptop. Eén link delen is "
+    "genoeg: geen app-store, geen installatie, geen lokaal netwerk.",
     LEAD))
 
 story.append(panel([
@@ -219,15 +226,17 @@ story.append(Paragraph("Wat er nu in zit", H2))
 story.append(panel([
     ["Eigen rol", "Iedereen ziet zijn eigen kaart en zijn eigen nachtvragen op zijn eigen telefoon. Niemand anders ziet ze."],
     ["Nacht", "Vensters met een vaste lengte, onthullingen die pas vrijkomen wanneer ze aan de beurt zijn."],
-    ["Dag", "Stemmen en de knop om af te zien van stemmen, en daarna de uitslag met alle kaarten open."],
+    ["Dag", "Een instelbare klok (standaard 15 minuten), vroeg stemmen bij meer dan de helft, een inklapbaar stemvak en daarna de uitslag met alle kaarten open."],
+    ["Stemmen", "Een stem op een speler is definitief. Het spel wacht op iedereen; bots stemmen pas zodra het stemvak opent en kiezen altijd willekeurig een andere speler."],
     ["Standen", "De stand van de avond zelf, én een eeuwige stand over alle officiële avonden heen."],
     ["Wie leidt", "Een los tafelapparaat, of de telefoon van een speler in een groep die elkaar vertrouwt."],
 ], [26 * mm, 130 * mm]))
 
-story.append(Paragraph("Twee dingen om aan tafel te weten", H2))
+story.append(Paragraph("Drie dingen om aan tafel te weten", H2))
 story.append(panel([
     ["Laat het tabblad open", "Het apparaat dat het spel leidt rekent de nacht uit. <b>Laat dat tabblad de hele avond openstaan en ververs het niet halverwege een nacht.</b> Vergrendel het scherm niet en zet het apparaat aan de lader."],
     ["Kies je eigen naam", "Kies bij het meedoen je eigen naam uit de lijst. Dan blijft je geschiedenis van jou, ook als je later op een andere telefoon speelt."],
+    ["Noodbediening", "Valt een telefoon uit tijdens het stemmen, dan kan de spelleider via <b>Menu &gt; Noodbediening &gt; Stem overnemen</b> met <font face='Courier'>takeover</font> één ontbrekende definitieve stem vastleggen. Een bestaande stem wordt nooit overschreven. Met <font face='Courier'>referee</font> kan een aanwezige speler bewust de hele spelleiding overnemen."],
 ], [34 * mm, 122 * mm]))
 
 story.append(Paragraph(
@@ -336,9 +345,9 @@ story.append(Paragraph(
     "voorkomen dat daar later iets bij komt.", BODY))
 
 story.append(Spacer(1, 3))
-story.append(figure("/tmp/pdf-tablet.png", 148,
-                    "De tablet: fase, open venster en tijd. Nooit iemands rol, "
-                    "en nooit wie er nog moet handelen.",
+story.append(figure(shot("pdf-tablet.png"), 148,
+                    "De grotere tafelweergave: het bord staat centraal en de "
+                    "stemming blijft ingeklapt tot iemand haar nodig heeft.",
                     crop=(0.0, 0.90)))
 
 story.append(PageBreak())
@@ -347,7 +356,7 @@ story.append(PageBreak())
 story.append(Paragraph("Huisregels die vastliggen", H1))
 story.append(panel([
     ["Dubbelganger", "Voert de gekopieerde actie uit op zijn eigen plek in de volgorde, wat hij ook kopieert. Geen ketting op een andere Dubbelganger."],
-    ["Dorpsgek", "<b>Hij kiest zelf welke kant op, en dat weet verder niemand</b> — het scherm noemt geen richting. Zijn eigen kaart blijft liggen; een beschermde kaart ook, de rest draait eromheen. Kopieert de Dubbelganger deze rol, dan blijft zíjn kaart liggen en schuift die van de echte Dorpsgek gewoon mee."],
+    ["Dorpsgek", "<b>Hij kiest zelf welke kant op, en dat weet verder niemand</b> - het scherm noemt geen richting. Hij is de enige rol met een bewuste niets-doenkeuze: <b>Niet draaien</b>. Zijn eigen kaart blijft liggen; een beschermde kaart ook, de rest draait eromheen. Kopieert de Dubbelganger deze rol, dan blijft zíjn kaart liggen en schuift die van de echte Dorpsgek gewoon mee."],
     ["Dorpsgek alt", "Zelfde, maar hij mag daarnaast één andere kaart vastzetten die niet meeschuift. <b>Alleen die speler krijgt bericht</b>, en enkel dát: niet van wie, en niet of het de Dorpsgek alt was of een Dubbelganger die hem kopieerde. Het vastzetten geldt alleen voor dit schuiven — niet voor andere acties, en het geldt niet meer als de echte Dorpsgek alt daarna zelf aan de beurt is."],
     ["Heks", "Kiest uit de <b>drie</b> middenkaarten, nooit de wolvenkaart. In modus 2 legt ze haar regel vooraf vast, en die splitst in drieën — Wolf, Looier, dorp — want de Looier is een derde team en zou anders ongemerkt bij “dorp” belanden. In modus 1 kiest ze gewoon live."],
     ["Alfawolf", "Blijft blind: ze weet nooit welke kaart ze weghaalt. Dat hoort bij de rol en is geen bug. Idem de Dronkaard."],
@@ -360,7 +369,7 @@ story.append(Paragraph("Winvoorwaarden", H2))
 story.append(panel([
     ["Looier gelyncht", "De Looier wint <b>alleen</b>. Dorp én wolven verliezen — ook als er in dezelfde stemming een wolf omkwam, wat de Jager kan veroorzaken."],
     ["Alle wolven in het midden", "De wolven kunnen niet winnen. Het dorp wint alleen als er niemand gelyncht wordt: lynch je een onschuldige, dan wint niemand."],
-    ["Stemmen", "Verplicht. Zodra de klok om is en er niet is afgezien, wacht het spel tot iedereen gestemd heeft — niemand wordt overgeslagen."],
+    ["Stemmen", "Verplicht en definitief. Zodra de klok om is en er niet is afgezien, wacht het spel tot iedereen een speler heeft gekozen - niemand wordt overgeslagen en een stem kan niet worden gewijzigd."],
     ["Niet stemmen", "De knop staat de hele tijd aan en telt op <b>elk moment</b>: zodra een meerderheid niet wil stemmen, stopt het overleg meteen. Het is een gelijktijdig handopsteken — wie zijn knop weer uitzet, draait het terug."],
 ], [30 * mm, 124 * mm]))
 
@@ -371,12 +380,12 @@ story.append(Paragraph("Wat er af is", H1))
 story.append(panel([
     ["Onderdeel", "Staat"],
     ["Nachtmotor (alle rollen, volgorde, resolutie)", "Af · getest"],
-    ["Dagfase (stemmen, gelijkspel, afzien, winvoorwaarden)", "Af · getest"],
+    ["Dagfase (klok, vroeg stemmen, definitieve stemmen, noodstem)", "Af · getest"],
     ["Tijdlijn + zelfkalibrerende venstertijden", "Af · getest"],
     ["Scheidsrechter-lus, host-pauze, bots", "Af · getest"],
     ["Testmodus (bots spelen, geen stats, geen kalibratie)", "Af · getest"],
     ["Firestore-schema + beveiligingsregels", "Af · uitgerold en live"],
-    ["UI: tafel, statistieken, verdenkingen, stemmen, lobby, tablet", "Af"],
+    ["UI: tafel, statistieken, stemmen, lobby, tablet", "Af · telefoon en laptop getest"],
     ["Scherm: wie leidt het spel (tafelapparaat of eigen telefoon)", "Af · getest"],
     ["Avond als reeks potjes: aanschuiven en weggaan tussendoor", "Af · getest"],
     ["Firestore-laag (kamer, leden, potjes, de verdeling)", "Af · getest"],
@@ -392,11 +401,11 @@ story.append(Paragraph("De beveiligingsregels zijn echt getest", H2))
 story.append(Paragraph(
     "De regels zijn geschreven als <i>aanvallen</i>, niet als gelukkige paden: "
     "elke test is iets wat een van ons met de ontwikkelaarsconsole open zou "
-    "kunnen proberen. De 38 die live staan slagen allemaal; er zijn er 27 bij "
-    "gekomen voor de nieuwe collecties, en die moeten nog een keer door de "
-    "emulator vóór we uitrollen. De belangrijkste is dat niemand zichzelf "
-    "tot scheidsrechter kan bombarderen — wie dat kon, kon de hele verdeling "
-    "lezen.", BODY))
+    "kunnen proberen. Op 31 augustus zijn <b>147 emulatorcontroles</b> geslaagd. "
+    "Daaronder zitten aanvallen op het wijzigen van een definitieve stem, "
+    "stemmen voor een mens via de botroute, een verkeerde noodcode en het "
+    "overschrijven van een al uitgebrachte stem. Geen van die aanvallen kwam "
+    "door.", BODY))
 story.append(Paragraph(
     "Wat op het gratis plan onvermijdelijk blijft: het apparaat dat de nacht "
     "uitrekent heeft alle kaarten in het geheugen. Dat valt niet weg te "
@@ -406,9 +415,10 @@ story.append(Paragraph(
 story.append(Paragraph("Wie leidt het spel?", H2))
 story.append(Paragraph(
     "Je kiest bij het aanmaken van de kamer welk apparaat het spel leidt. Het "
-    "heet in het scherm het <b>tafelapparaat</b>. De keuze ligt vast zodra de "
-    "kamer bestaat — hij kan later niet meer verschuiven, en dat is met opzet "
-    "zo.", BODY))
+    "heet in het scherm het <b>tafelapparaat</b>. Normaal blijft die keuze de "
+    "hele avond staan. Valt het apparaat uit, dan kan iedere aanwezige speler "
+    "via de bewuste noodroute en het woord <font face='Courier'>referee</font> "
+    "de spelleiding overnemen.", BODY))
 story.append(panel([
     ["Los tafelapparaat", "<i>Aanbevolen.</i> Een aparte tablet, laptop of oude telefoon leidt het spel en speelt zelf niet mee. Dat apparaat kan technisch gezien alle kaarten inzien — precies daarom krijgt het er zelf geen. Op het scherm staat alleen wat iedereen mag weten, dus het mag gewoon midden op tafel liggen."],
     ["Eigen telefoon", "<i>Vertrouwde groep.</i> Eén speler leidt het spel op zijn eigen telefoon en speelt gewoon mee. Geen extra apparaat nodig. Maar die telefoon kan technisch gezien alle kaarten inzien, ook die van jou."],
@@ -417,16 +427,16 @@ story.append(Paragraph(
     "Het scherm zegt dat tweede stukje er hardop bij, in het Nederlands en het "
     "Engels, en <i>vóór</i> de knop in plaats van erna. Een gevolg dat je pas "
     "leest als je al geklikt hebt, is geen keuze die je gekregen hebt.", SMALL))
-story.append(figure("/tmp/pdf-setup.png", 74,
+story.append(figure(shot("pdf-setup.png"), 74,
                     "Het scherm waarin je de kamer aanmaakt. De aanbevolen "
                     "keuze staat boven, en wat de andere kost staat er "
                     "gewoon bij.",
                     crop=(0.0, 0.83)))
 
 story.append(Spacer(1, 3))
-story.append(figure("/tmp/pdf-stats.png", 66,
-                    "Op een naam tikken toont zijn geschiedenis. Alleen eerdere "
-                    "potjes — nooit iets over vanavond.",
+story.append(figure(shot("pdf-stats.png"), 66,
+                    "De eeuwige stand staat in een los paneel. Oefenpotjes "
+                    "komen hier nooit in terecht.",
                     crop=(0.44, 1.0)))
 
 story.append(PageBreak())
@@ -434,8 +444,9 @@ story.append(PageBreak())
 # ---------------------------------------------------------------- todo
 story.append(Paragraph("Wat er nu gebeurt", H1))
 story.append(Paragraph(
-    "De app is uitgerold. Wat overblijft is spelen — en dat is geen "
-    "programmeerwerk meer.", LEAD))
+    "De app en beveiligingsregels zijn opnieuw gecontroleerd. Wat nu volgt is "
+    "verder oefenen met echte telefoons: de softwaretests zijn groen, maar een "
+    "avond aan tafel blijft de beste manier om onduidelijke bediening te vinden.", LEAD))
 
 story.append(panel([
     ["✓", "Firebase-project aanmaken",
@@ -447,7 +458,7 @@ story.append(panel([
     ["✓", "Online zetten",
      "<i>Gedaan.</i> <font face='Courier' size='9'>https://dageraad-fdb2d.web.app</font>"],
     ["1", "Een oefenavond",
-     "Maak een kamer aan als <b>Oefenen</b> en speel er een paar potjes mee. Alles werkt, niets telt mee. Dit is waar we ontdekken wat er aan tafel niet klopt."],
+     "Maak een kamer aan als <b>Oefenen</b> en speel er een paar potjes mee, eerst thuis en daarna met meerdere echte telefoons. Controleer vooral nachtresultaten, vroeg stemmen, bots en de noodbediening. Alles werkt, niets telt mee."],
     ["2", "De eerste echte avond",
      "Maak hem aan als <b>Officieel</b>. Vanaf dat moment loopt de eeuwige stand."],
 ], [8 * mm, 44 * mm, 102 * mm]))
