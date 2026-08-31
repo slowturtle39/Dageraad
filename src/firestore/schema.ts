@@ -268,6 +268,8 @@ export interface VoteDoc {
   abstain: boolean;
   /** "Let us vote now." Separate from abstain; see Backend.requestEarlyVote. */
   readyToVote?: boolean;
+  /** Conscious-friction marker for a referee casting for a failed device. */
+  takeoverPhrase?: string;
   castAt: number;
 }
 

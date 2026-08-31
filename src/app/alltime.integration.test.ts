@@ -90,8 +90,13 @@ async function evening(
 
   await play(clock, runGame({
     backend: me, roomId, clock, durations: FAST, dayConfig: FAST_DAY,
-    bots: { ...bots, seats: new Set([...bots.seats, mySeat]) },
+    bots,
     random: seeded(9),
+    onPhase: (phase) => {
+      if (phase === 'voting') {
+        void me.vote(roomId, dealt.seating[(mySeat + 1) % dealt.seating.length]!, false);
+      }
+    },
   }));
   return roomId;
 }

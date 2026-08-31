@@ -82,8 +82,13 @@ describe('the app can play a whole round', () => {
       clock,
       durations: FAST,
       dayConfig: FAST_DAY,
-      bots: { ...bots, seats: new Set([...bots.seats, mySeat]) },
+      bots,
       random: seeded(7),
+      onPhase: (phase) => {
+        if (phase === 'voting') {
+          void table.me.vote(roomId, dealt.seating[(mySeat + 1) % dealt.seating.length]!, false);
+        }
+      },
     }));
 
     expect(outcome.outcome).toBeTruthy();
@@ -105,8 +110,13 @@ describe('the app can play a whole round', () => {
 
     await play(clock, runGame({
       backend: table.me, roomId, clock, durations: FAST, dayConfig: FAST_DAY,
-      bots: { ...bots, seats: new Set([...bots.seats, mySeat]) },
+      bots,
       random: seeded(8),
+      onPhase: (phase) => {
+        if (phase === 'voting') {
+          void table.me.vote(roomId, dealt.seating[(mySeat + 1) % dealt.seating.length]!, false);
+        }
+      },
     }));
 
     const room = await readRoomOnce(table.me, roomId);
@@ -138,6 +148,13 @@ describe('a player is told what it is being asked', () => {
       // human to answer — which is the thing under test.
       bots,
       random: seeded(9),
+      onPhase: (phase) => {
+        if (phase === 'voting') {
+          void table.me.vote(
+            roomId, dealt.seating[(mySeat + 1) % dealt.seating.length]!, false,
+          );
+        }
+      },
     }));
 
     const everyRequest = seen.flatMap((v) => v.pending);
@@ -158,9 +175,17 @@ describe('a player is told what it is being asked', () => {
     table.me.watchPrivate(roomId, (own) => { lengths.push(own.pending.length) });
 
     const bots = botSeatsFor(table, dealt.seating, 6);
+    const mySeat = dealt.seating.indexOf(table.me.uid) as SeatIndex;
     await play(clock, runGame({
       backend: table.me, roomId, clock, durations: FAST, dayConfig: FAST_DAY,
       bots, random: seeded(10),
+      onPhase: (phase) => {
+        if (phase === 'voting') {
+          void table.me.vote(
+            roomId, dealt.seating[(mySeat + 1) % dealt.seating.length]!, false,
+          );
+        }
+      },
     }));
 
     expect(lengths.some((n) => n === 0)).toBe(true);
@@ -180,8 +205,13 @@ describe('the screen follows the round', () => {
     const mySeat = during.seating.indexOf(table.me.uid) as SeatIndex;
     await play(clock, runGame({
       backend: table.me, roomId, clock, durations: FAST, dayConfig: FAST_DAY,
-      bots: { ...bots, seats: new Set([...bots.seats, mySeat]) },
+      bots,
       random: seeded(13),
+      onPhase: (phase) => {
+        if (phase === 'voting') {
+          void table.me.vote(roomId, during.seating[(mySeat + 1) % during.seating.length]!, false);
+        }
+      },
     }));
 
     const ended = await readRoomOnce(table.me, roomId);

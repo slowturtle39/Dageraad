@@ -78,6 +78,23 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/rooms/$(roomId)/players/$(playerUid))
         .data.isBot == true;
     }
+    function ordinaryVoteFields() {
+      return request.resource.data.keys().hasOnly(
+        ['round', 'target', 'abstain', 'readyToVote', 'castAt']
+      );
+    }
+    function currentVoteIsFinal(roomId) {
+      return ('round' in resource.data)
+        && resource.data.round == currentRound(roomId)
+        && resource.data.target != null;
+    }
+    function isFinalNamedVote(roomId, voterUid) {
+      return request.resource.data.round == currentRound(roomId)
+        && request.resource.data.target is string
+        && request.resource.data.target != voterUid
+        && roomDoc(roomId).seating.hasAny([request.resource.data.target])
+        && request.resource.data.abstain == false;
+    }
     // Lobby members may arrange the physical table before the game starts.
     // They may reorder existing seats, or add only their own UID as one new
     // seat; they cannot remove, replace, or duplicate anybody already seated.
@@ -299,7 +316,7 @@ service cloud.firestore {
 
         // Two phases can write here, and for different reasons.
         //
-        // During 'voting': a full vote, target or abstain.
+        // During 'voting': one final named vote. It cannot be changed.
         //
         // During 'day' (the discussion): ABSTAIN ONLY. The "vote not to vote"
         // toggle is live from the first second and a majority counts at any
@@ -316,22 +333,30 @@ service cloud.firestore {
         // abstain is, and it is subject to the same refusals: still no self
         // vote, and still no named target before voting opens. Asking to vote
         // must not become a way to smuggle a target in early.
-        allow create, update: if signedIn()
+        allow create: if signedIn()
           && playerUid == uid()
-          && request.resource.data.keys().hasOnly(
-                ['round', 'target', 'abstain', 'readyToVote', 'castAt']
-              )
-           // Clients written before round scoping may still submit a document,
-           // but the referee ignores unscoped documents. New clients bind every
-           // effective vote to the current round.
-           && (!('round' in request.resource.data)
-               || request.resource.data.round == currentRound(roomId))
-          // §7: never allowed to vote for yourself. Enforced here as well as
-          // in the UI, so a hand-crafted write cannot do it either.
-          && request.resource.data.target != uid()
+          && ordinaryVoteFields()
           && (
-               inPhase(roomId, 'voting')
-               || (inPhase(roomId, 'day') && request.resource.data.target == null)
+               (inPhase(roomId, 'voting') && isFinalNamedVote(roomId, playerUid))
+               || (inPhase(roomId, 'day')
+                   && request.resource.data.round == currentRound(roomId)
+                   && request.resource.data.target == null
+                   && request.resource.data.abstain is bool)
+             );
+
+        // Discussion toggles stay reversible. Once a named ballot exists for
+        // this round, no update path may alter it — not its target, not an
+        // abstain flag, and not a ready toggle.
+        allow update: if signedIn()
+          && playerUid == uid()
+          && ordinaryVoteFields()
+          && !currentVoteIsFinal(roomId)
+          && (
+               (inPhase(roomId, 'voting') && isFinalNamedVote(roomId, playerUid))
+               || (inPhase(roomId, 'day')
+                   && request.resource.data.round == currentRound(roomId)
+                   && request.resource.data.target == null
+                   && request.resource.data.abstain is bool)
              );
 
         // An AI PLAYER'S vote, cast by the controlling browser because there
@@ -343,19 +368,44 @@ service cloud.firestore {
         //
         // Practice only, so an invented vote can never reach the all-time
         // record. Same phase rules and the same no-self-vote as a person's.
-        allow create, update: if isReferee(roomId)
+        allow create: if isReferee(roomId)
           && isPractice(roomId)
           && isBotPlayer(roomId, playerUid)
+          && ordinaryVoteFields()
+          && inPhase(roomId, 'voting')
+          && isFinalNamedVote(roomId, playerUid);
+
+        allow update: if isReferee(roomId)
+          && isPractice(roomId)
+          && isBotPlayer(roomId, playerUid)
+          && ordinaryVoteFields()
+          && !currentVoteIsFinal(roomId)
+          && inPhase(roomId, 'voting')
+          && isFinalNamedVote(roomId, playerUid);
+
+        // A dead phone must not deadlock a mandatory ballot. The referee may
+        // cast one missing player's final target only through the conscious
+        // `takeover` path. This never overwrites a ballot already cast.
+        allow create: if isReferee(roomId)
+          && inPhase(roomId, 'voting')
           && request.resource.data.keys().hasOnly(
-                ['round', 'target', 'abstain', 'readyToVote', 'castAt']
-              )
-           && (!('round' in request.resource.data)
-               || request.resource.data.round == currentRound(roomId))
-          && request.resource.data.target != playerUid
-          && (
-               inPhase(roomId, 'voting')
-               || (inPhase(roomId, 'day') && request.resource.data.target == null)
-             );
+               ['round', 'target', 'abstain', 'readyToVote', 'castAt', 'takeoverPhrase']
+             )
+          && request.resource.data.takeoverPhrase == 'takeover'
+          && roomDoc(roomId).seating.hasAny([playerUid])
+          && roomDoc(roomId).seating.hasAny([request.resource.data.target])
+          && isFinalNamedVote(roomId, playerUid);
+
+        allow update: if isReferee(roomId)
+          && inPhase(roomId, 'voting')
+          && !currentVoteIsFinal(roomId)
+          && request.resource.data.keys().hasOnly(
+               ['round', 'target', 'abstain', 'readyToVote', 'castAt', 'takeoverPhrase']
+             )
+          && request.resource.data.takeoverPhrase == 'takeover'
+          && roomDoc(roomId).seating.hasAny([playerUid])
+          && roomDoc(roomId).seating.hasAny([request.resource.data.target])
+          && isFinalNamedVote(roomId, playerUid);
 
         allow delete: if false;
       }

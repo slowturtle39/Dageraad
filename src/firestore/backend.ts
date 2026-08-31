@@ -544,10 +544,16 @@ export class FirestoreBackend implements Backend {
   async vote(roomId: string, target: string | null, abstain: boolean): Promise<void> {
     if (target === this.uid) throw new Error('no self-votes');
     const room = await this.room(roomId);
-    const ok = room.phase === 'voting' || (room.phase === 'day' && target === null);
+    const ok = (room.phase === 'voting' && target !== null && !abstain)
+      || (room.phase === 'day' && target === null);
     if (!ok) throw new Error(`cannot vote in phase ${room.phase}`);
+    if (target !== null && !room.seating.includes(target)) throw new Error('target is not seated');
     const ref = doc(this.db, paths.vote(roomId, this.uid));
     const existing = (await getDoc(ref)).data() as Partial<VoteDoc> | undefined;
+    if (room.phase === 'voting' && existing?.round === room.currentRound
+      && existing.target !== null && existing.target !== undefined) {
+      throw new Error('vote is final');
+    }
     await setDoc(ref, {
       round: room.currentRound,
       target,
@@ -556,6 +562,33 @@ export class FirestoreBackend implements Backend {
       // Preserve that request only from this round; last round's document is stale.
       readyToVote: existing?.round === room.currentRound && existing.readyToVote === true,
       castAt: Date.now(),
+    });
+  }
+
+  async emergencyVote(
+    roomId: string, voterUid: string, targetUid: string, phrase: string,
+  ): Promise<void> {
+    const room = await this.room(roomId);
+    if (room.refereeUid !== this.uid) throw new Error('referee only');
+    if (phrase.trim() !== 'takeover') throw new Error('type takeover to confirm');
+    if (room.phase !== 'voting') throw new Error('voting is not open');
+    if (!room.seating.includes(voterUid) || !room.seating.includes(targetUid)) {
+      throw new Error('both players must be seated');
+    }
+    if (voterUid === targetUid) throw new Error('no self-votes');
+    const ref = doc(this.db, paths.vote(roomId, voterUid));
+    const existing = (await getDoc(ref)).data() as Partial<VoteDoc> | undefined;
+    if (existing?.round === room.currentRound
+      && existing.target !== null && existing.target !== undefined) {
+      throw new Error('vote is final');
+    }
+    await setDoc(ref, {
+      round: room.currentRound,
+      target: targetUid,
+      abstain: false,
+      readyToVote: false,
+      castAt: Date.now(),
+      takeoverPhrase: phrase.trim(),
     });
   }
 
@@ -568,7 +601,7 @@ export class FirestoreBackend implements Backend {
    */
   async requestEarlyVote(roomId: string, requested: boolean): Promise<void> {
     const room = await this.room(roomId);
-    if (room.phase !== 'day' && room.phase !== 'voting') {
+    if (room.phase !== 'day') {
       throw new Error(`cannot ask to vote in phase ${room.phase}`);
     }
     const ref = doc(this.db, paths.vote(roomId, this.uid));
@@ -670,13 +703,20 @@ export class FirestoreBackend implements Backend {
       throw new Error('bots are only for practice rooms');
     }
     if (target === botUid) throw new Error('no self-votes');
-    const ok = room.phase === 'voting' || (room.phase === 'day' && target === null);
+    const ok = room.phase === 'voting' && target !== null && !abstain;
     if (!ok) throw new Error(`cannot vote in phase ${room.phase}`);
+    if (!room.seating.includes(target)) throw new Error('target is not seated');
 
     const player = await getDoc(doc(this.db, paths.player(roomId, botUid)));
     if (!(player.data() as PlayerDoc | undefined)?.isBot) throw new Error('not a bot');
 
-    await setDoc(doc(this.db, paths.vote(roomId, botUid)), {
+    const voteRef = doc(this.db, paths.vote(roomId, botUid));
+    const existing = (await getDoc(voteRef)).data() as Partial<VoteDoc> | undefined;
+    if (existing?.round === room.currentRound
+      && existing.target !== null && existing.target !== undefined) {
+      throw new Error('vote is final');
+    }
+    await setDoc(voteRef, {
       round: room.currentRound, target, abstain, castAt: Date.now(),
     });
   }

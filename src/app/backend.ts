@@ -275,6 +275,11 @@ export interface Backend {
    */
   vote(roomId: string, target: string | null, abstain: boolean): Promise<void>;
 
+  /** Phrase-confirmed referee fallback for one player whose device failed. */
+  emergencyVote(
+    roomId: string, voterUid: string, targetUid: string, phrase: string,
+  ): Promise<void>;
+
   /**
    * "I am ready — let us vote now." Reversible, and not an abstain.
    *

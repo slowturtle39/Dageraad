@@ -29,7 +29,7 @@ function view(prompt: Prompt, over: Partial<PromptView> = {}): PromptView {
     ownSeat: 0 as SeatIndex,
     picked: [], pickedCenters: [], centerCount: 3,
     onPickSeat: () => {}, onPickCenter: () => {},
-    onConfirm: () => {}, onDecline: () => {},
+    onConfirm: () => {},
     ...over,
   };
 }
@@ -122,17 +122,9 @@ describe('a seat the engine excluded is not offered', () => {
 });
 
 describe('declining', () => {
-  it('is always offered, because it is a real answer', () => {
-    // A window that closes on somebody who meant to do nothing has to record
-    // that, or their seat never settles and they receive no reveals at all.
-    let declined = false;
-    const el = renderPrompt(view(
-      { kind: 'seat', exclude: [], optional: false },
-      { onDecline: () => { declined = true; } },
-    ));
-    const buttons = Array.from(el.querySelectorAll<HTMLButtonElement>('.btn'));
-    buttons[buttons.length - 1]!.click();
-    expect(declined).toBe(true);
+  it('is not offered to roles whose action is mandatory', () => {
+    const el = renderPrompt(view({ kind: 'seat', exclude: [], optional: false }));
+    expect(el.textContent).not.toContain('Sla over');
   });
 });
 
@@ -149,11 +141,11 @@ describe('the two-round Heks prompt', () => {
 describe('the Dorpsgek picks a direction and nobody else learns it', () => {
   const p: Prompt = { kind: 'dorpsgek', variant: 'standard' };
 
-  it('offers both directions as their own buttons', () => {
+  it('offers both directions and the explicit no-turn choice', () => {
     const el = renderPrompt(view(p));
     const dirs = Array.from(el.querySelectorAll<HTMLElement>('[data-direction]'))
       .map((b) => b.dataset.direction);
-    expect(dirs).toEqual(['left', 'right']);
+    expect(dirs).toEqual(['left', 'right', 'none']);
   });
 
   it('sends the direction it was tapped with', () => {

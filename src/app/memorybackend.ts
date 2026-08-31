@@ -457,10 +457,31 @@ class MemoryBackend implements Backend {
     // discussion. A named target is confined to 'voting' — letting one be
     // locked in early would quietly make a simultaneous vote a first-mover one.
     const phase = r.view.phase;
-    const ok = phase === 'voting' || (phase === 'day' && target === null);
+    const ok = (phase === 'voting' && target !== null && !abstain)
+      || (phase === 'day' && target === null);
     if (!ok) throw new Error(`cannot vote in phase ${phase}`);
+    if (target !== null && !r.view.seating.includes(target)) throw new Error('target is not seated');
     const existing = r.votes.get(this.uid);
+    if (phase === 'voting' && existing?.target !== null && existing?.target !== undefined) {
+      throw new Error('vote is final');
+    }
     r.votes.set(this.uid, { target, abstain, readyToVote: existing?.readyToVote });
+    this.world.notify(roomId);
+  }
+
+  async emergencyVote(
+    roomId: string, voterUid: string, targetUid: string, phrase: string,
+  ): Promise<void> {
+    const r = this.world.room(roomId);
+    this.requireReferee(r);
+    if (phrase.trim() !== 'takeover') throw new Error('type takeover to confirm');
+    if (r.view.phase !== 'voting') throw new Error('voting is not open');
+    if (!r.view.seating.includes(voterUid)) throw new Error('voter is not seated');
+    if (!r.view.seating.includes(targetUid)) throw new Error('target is not seated');
+    if (voterUid === targetUid) throw new Error('no self-votes');
+    const existing = r.votes.get(voterUid);
+    if (existing?.target !== null && existing?.target !== undefined) throw new Error('vote is final');
+    r.votes.set(voterUid, { target: targetUid, abstain: false });
     this.world.notify(roomId);
   }
 
@@ -540,9 +561,11 @@ class MemoryBackend implements Backend {
     if (!player?.isBot) throw new Error('not a bot');
     if (target === botUid) throw new Error('no self-votes');
     const phase = r.view.phase;
-    const ok = phase === 'voting' || (phase === 'day' && target === null);
+    const ok = phase === 'voting' && target !== null && !abstain;
     if (!ok) throw new Error(`cannot vote in phase ${phase}`);
-
+    if (!r.view.seating.includes(target)) throw new Error('target is not seated');
+    const existing = r.votes.get(botUid);
+    if (existing?.target !== null && existing?.target !== undefined) throw new Error('vote is final');
     r.votes.set(botUid, { target, abstain });
     this.world.notify(roomId);
   }
@@ -551,7 +574,7 @@ class MemoryBackend implements Backend {
   async requestEarlyVote(roomId: string, requested: boolean): Promise<void> {
     const r = this.world.room(roomId);
     const phase = r.view.phase;
-    if (phase !== 'day' && phase !== 'voting') {
+    if (phase !== 'day') {
       throw new Error(`cannot ask to vote in phase ${phase}`);
     }
     const existing = r.votes.get(this.uid) ?? { target: null, abstain: false };
@@ -788,7 +811,7 @@ class MemoryRefereeStore implements RoomStore, DayStore {
     // Publish the counts the table is allowed to see: how many, never who.
     r.view.abstainCount = [...out.values()].filter((v) => v.abstain).length;
     r.view.earlyVoteCount = [...out.values()].filter((v) => v.readyToVote === true).length;
-    r.view.votesCast = [...out.values()].filter((v) => v.target !== null || v.abstain).length;
+    r.view.votesCast = [...out.values()].filter((v) => v.target !== null).length;
     this.world.notify(this.roomId);
     return out;
   }

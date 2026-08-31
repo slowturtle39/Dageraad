@@ -205,6 +205,7 @@ const nl: Dict = {
   'prompt.dorpsgek': 'Welke kant schuiven de kaarten op? Alleen jij weet dit.',
   'prompt.shiftLeft': 'Naar links',
   'prompt.shiftRight': 'Naar rechts',
+  'prompt.dontTurn': 'Niet draaien',
   'prompt.waiting': 'Wacht op de anderen…',
   'prompt.nothingToDo': 'Je hoeft nu niets te doen.',
 
@@ -433,6 +434,7 @@ const en: Dict = {
   'prompt.dorpsgek': 'Which way do the cards shift? Only you know this.',
   'prompt.shiftLeft': 'To the left',
   'prompt.shiftRight': 'To the right',
+  'prompt.dontTurn': 'Do not turn',
   'prompt.waiting': 'Waiting for the others\u2026',
   'prompt.nothingToDo': 'Nothing for you to do right now.',
 

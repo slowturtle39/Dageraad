@@ -26,7 +26,6 @@ export interface PromptView {
   onPickSeat: (seat: SeatIndex) => void;
   onPickCenter: (index: number) => void;
   onConfirm: (choice: Choice) => void;
-  onDecline: () => void;
 }
 
 /**
@@ -148,16 +147,6 @@ export function renderPrompt(view: PromptView): HTMLElement {
     actions.append(confirm);
   }
 
-  // Declining is always available and is a real answer, not a failure to
-  // answer: a window that closes on somebody who wanted to do nothing must
-  // record that, or their seat never settles and they get no reveals at all.
-  const skip = document.createElement('button');
-  skip.type = 'button';
-  skip.className = 'btn';
-  skip.textContent = t(lang, 'action.skip');
-  skip.addEventListener('click', () => view.onDecline());
-  actions.append(skip);
-
   el.append(actions);
   return el;
 }
@@ -212,6 +201,7 @@ function directionRow(view: PromptView): HTMLElement {
   const options: Array<['left' | 'right' | 'none', string]> = [
     ['left', t(view.lang, 'prompt.shiftLeft')],
     ['right', t(view.lang, 'prompt.shiftRight')],
+    ['none', t(view.lang, 'prompt.dontTurn')],
   ];
   for (const [direction, label] of options) {
     const b = document.createElement('button');

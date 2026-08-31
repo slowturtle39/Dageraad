@@ -25,10 +25,8 @@ export interface DayConfig {
   suspenseExtensionMs: number;
   votingMode: 'in-app' | 'irl';
   /**
-   * Safety bound on waiting for the last vote. Voting is MANDATORY (see
-   * `waitForEveryVote`), so this is not a deadline players are racing — it is
-   * the point at which something has clearly gone wrong and the host needs to
-   * intervene rather than the game silently resolving without somebody.
+   * Retained for saved configurations and older callers. Mandatory voting no
+   * longer times out; a failed device is resolved through emergency takeover.
    */
   voteWaitTimeoutMs: number;
   /** How often to check whether a majority wants to skip the vote. */
@@ -163,9 +161,8 @@ export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
     await store.setPhase('voting');
     missingVotes = await waitForEveryVote(store, clock, config, hooks);
 
-    // A vote is a target OR an abstain, so the group can still land on "no
-    // vote" here — it just has to be everybody saying so, not a silence.
-    endedByAbstain = isMajorityAbstaining(await store.readVotes(), config.seatCount);
+    // Once the ballot opens every seat names somebody. Abstaining belongs to
+    // the discussion and cannot be introduced or changed here.
   }
 
   const votes = [...(await store.readVotes()).values()];
@@ -233,12 +230,12 @@ async function watchDiscussion(
  * Voting is mandatory once the timer has expired and the group did not abstain
  * (Milan, 2026-08-26). So this is not a race against a deadline: there is no
  * point at which a slow player is dropped and the tally resolves without them.
- * A vote counts as cast when the player has named a target or explicitly
- * abstained — silence is not an answer.
+ * A vote counts as cast only when the player has named a target. Abstaining is
+ * a discussion decision and is never a ballot response.
  *
- * `voteWaitTimeoutMs` exists only so a broken client cannot hang the evening
- * forever. Reaching it means something is wrong and the host should look, which
- * is why the seats still missing are returned rather than swallowed.
+ * There is deliberately no timeout resolution. A failed phone is handled by
+ * the phrase-confirmed referee takeover; silently dropping that seat would
+ * make a mandatory simultaneous ballot produce a result without everyone.
  */
 async function waitForEveryVote(
   store: DayStore,
@@ -246,26 +243,16 @@ async function waitForEveryVote(
   config: DayConfig,
   hooks: DayRunnerHooks,
 ): Promise<SeatIndex[]> {
-  let waited = 0;
   for (;;) {
     const votes = await store.readVotes();
     const cast = [...votes.values()].filter(
-      (v) => v.target !== null || v.abstain,
+      (v) => v.target !== null,
     ).length;
     hooks.onVoteProgress?.(cast, config.seatCount);
 
     if (cast >= config.seatCount) return [];
-    if (waited >= config.voteWaitTimeoutMs) {
-      const missing: SeatIndex[] = [];
-      for (let s = 0; s < config.seatCount; s++) {
-        const v = votes.get(s);
-        if (!v || (v.target === null && !v.abstain)) missing.push(s);
-      }
-      return missing;
-    }
 
     await clock.sleep(config.abstainPollMs);
-    waited += config.abstainPollMs;
   }
 }
 

@@ -22,7 +22,8 @@ import {
 } from './ui/prompt.js';
 import { describeReveal, renderSheet } from './ui/sheet.js';
 import { renderVoting } from './ui/voting.js';
-import { runGame } from './app/refereeRunner.js';
+import { readRoomOnce, runGame, type BotSeats } from './app/refereeRunner.js';
+import { randomBot } from './engine/bot.js';
 import { detectLang, roleName, setLang, t, type Lang } from './ui/i18n.js';
 import {
   DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG, TWO_ROUND_CONFIG,
@@ -60,6 +61,11 @@ interface Local {
   error: string | null;
   busy: boolean;
   menuOpen: boolean;
+  emergencyMenuOpen: boolean;
+  emergencyVoteOpen: boolean;
+  emergencyTyped: string;
+  emergencyVoter: string;
+  emergencyTarget: string;
   recovering: boolean;
   recoveryTyped: string;
   shareCopied: boolean;
@@ -73,6 +79,8 @@ interface Local {
   abstaining: boolean;
   /** "Let us vote now." A decision about the clock, not the outcome. */
   readyToVote: boolean;
+  votePanelOpen: boolean;
+  finalVoteRound: number | null;
   /** Private result messages acknowledged in the current round. */
   acknowledgedPrivateInfo: number;
   privateInfoRound: number | null;
@@ -102,6 +110,11 @@ const local: Local = {
   error: null,
   busy: false,
   menuOpen: false,
+  emergencyMenuOpen: false,
+  emergencyVoteOpen: false,
+  emergencyTyped: '',
+  emergencyVoter: '',
+  emergencyTarget: '',
   recovering: false,
   recoveryTyped: '',
   shareCopied: false,
@@ -111,6 +124,8 @@ const local: Local = {
   voteTarget: null,
   abstaining: false,
   readyToVote: false,
+  votePanelOpen: false,
+  finalVoteRound: null,
   acknowledgedPrivateInfo: 0,
   privateInfoRound: null,
   refereeRunning: false,
@@ -392,7 +407,8 @@ const actions: AppActions = {
     if (!roomId || local.refereeRunning) return;
     // A fresh seed per round, so two rounds of one evening are not the same
     // deal. The engine's shuffle is seeded so a round stays replayable.
-    const dealt = await attempt(() => backend.startGame(roomId, seedFromUrl()));
+    const dealSeed = seedFromUrl();
+    const dealt = await attempt(() => backend.startGame(roomId, dealSeed));
     if (!dealt) return;
 
     local.refereeRunning = true;
@@ -402,7 +418,10 @@ const actions: AppActions = {
       // result and recording the round — is the existing referee path. This
       // file does not reimplement any of it; it presses start and follows
       // along through onPhase so the tablet redraws as the night moves.
-      const room = controller.current().room;
+      const room = await readRoomOnce(backend, roomId);
+      const bots = demo
+        ? botSeatsFor(demo, room.seating, dealSeed ^ 0x51f15e)
+        : botSeatsForPlayers(room, controller.current().players, dealSeed ^ 0x51f15e);
       const durations = fastDurations();
       const dayConfig = fastDayConfig();
       await runGame({
@@ -412,11 +431,9 @@ const actions: AppActions = {
         onWindowOpen: () => render(),
         ...(durations ? { durations } : {}),
         ...(dayConfig ? { dayConfig } : {}),
-        // Demo only. In a real room every seat is a person, and a bot seat
-        // would be the referee answering on somebody's behalf.
-        ...(demo && room
-          ? { bots: botSeatsFor(demo, room.seating, Math.floor(Math.random() * 1e6)) }
-          : {}),
+        // Demo bots have their own simulated devices. Real practice bots have
+        // no login, so the referee receives only the narrow bot-seat capability.
+        ...(bots ? { bots } : {}),
       });
     } catch (err) {
       local.error = String(err);
@@ -489,7 +506,8 @@ const actions: AppActions = {
 
     const room = state.room;
     if (!room) return;
-    if (room.phase === 'voting' || room.phase === 'day') {
+    if (room.phase === 'voting' && local.votePanelOpen
+      && local.finalVoteRound !== room.round) {
       // §7: never yourself. The rules reject it too, but a screen that lets
       // you tap it and then fails is a screen that lied.
       const ownSeat = room.seating.indexOf(state.uid);
@@ -559,6 +577,20 @@ function returnHome(): void {
  */
 function defaultName(mode: ControllerMode): string {
   return mode === 'table-device' ? 'Tafel' : 'Speler';
+}
+
+/** Real Firebase bots have no login; the referee uses the narrow bot methods. */
+function botSeatsForPlayers(
+  room: { seating: string[] },
+  players: Array<{ uid: string; isBot?: boolean }>,
+  seed: number,
+): BotSeats | undefined {
+  const bots = new Set(players.filter((player) => player.isBot).map((player) => player.uid));
+  const seats = new Set<SeatIndex>();
+  room.seating.forEach((uid, seat) => {
+    if (bots.has(uid)) seats.add(seat as SeatIndex);
+  });
+  return seats.size === 0 ? undefined : { seats, bot: randomBot(seed) };
 }
 
 /* -------------------------------- render -------------------------------- */
@@ -644,7 +676,9 @@ function render(): void {
     // first live card pick there, otherwise a successful tap looks ignored.
     selected: pendingPrompt && local.picked.length === 1
       ? local.picked[0]
-      : local.pendingSwap,
+      : state.room?.phase === 'voting' && local.votePanelOpen
+        ? local.voteTarget
+        : local.pendingSwap,
     prompting: pendingPrompt !== undefined,
     legalTargetSeats: pendingPrompt
       ? state.room?.seating
@@ -664,6 +698,12 @@ function render(): void {
     app.prepend(gameProgress());
   }
 
+  if (state.room && local.votePanelOpen
+    && (state.room.phase === 'day' || state.room.phase === 'voting')) {
+    const ownSeat = state.room.seating.indexOf(state.uid);
+    if (ownSeat >= 0) app.append(votePanel(ownSeat as SeatIndex));
+  }
+
   if (state.roomId) app.append(bottomBar(true));
   if (local.showAllTime) app.append(allTimeSheet());
   if (local.showProfiles) app.append(profileSheet());
@@ -674,6 +714,8 @@ function render(): void {
   if (overlay) app.append(overlay);
 
   if (local.menuOpen) app.append(menu());
+  if (local.emergencyMenuOpen) app.append(emergencyMenu());
+  if (local.emergencyVoteOpen) app.append(emergencyVoteSheet());
   if (local.recovering) app.append(recoverySheet());
 }
 
@@ -700,10 +742,31 @@ function bottomBar(inRoom: boolean): HTMLElement {
   bar.className = 'bottombar';
 
   if (inRoom) {
-    bar.append(button(t(local.lang, 'menu.title'), () => {
+    const menuButton = button(t(local.lang, 'menu.title'), () => {
       local.menuOpen = true;
       render();
-    }));
+    });
+    menuButton.classList.add('bottombar__menu');
+    bar.append(menuButton);
+
+    const room = controller.current().room;
+    if (room && (room.phase === 'day' || room.phase === 'voting')
+      && room.seating.includes(controller.current().uid)) {
+      const final = local.finalVoteRound === room.round;
+      const voteLabel = final
+        ? (local.lang === 'nl' ? 'Stem vastgelegd' : 'Vote recorded')
+        : local.votePanelOpen
+          ? (local.lang === 'nl' ? 'Stemmen inklappen' : 'Close ballot')
+          : (local.lang === 'nl' ? 'Stemmen' : 'Voting');
+      const voteButton = button(voteLabel, () => {
+        if (final) return;
+        local.votePanelOpen = !local.votePanelOpen;
+        render();
+      });
+      voteButton.disabled = final;
+      voteButton.classList.add('bottombar__vote');
+      bar.append(voteButton);
+    }
   }
   bar.append(button(local.lang === 'nl' ? 'EN' : 'NL', () => {
     local.lang = local.lang === 'nl' ? 'en' : 'nl';
@@ -849,10 +912,11 @@ function menu(): HTMLElement {
   leave.classList.add('menu__item');
   sheet.append(leave);
 
-  const recover = button(t(local.lang, 'menu.recover'), () => {
+  const recover = button(
+    local.lang === 'nl' ? 'Noodbediening' : 'Emergency controls',
+    () => {
     local.menuOpen = false;
-    local.recovering = true;
-    local.recoveryTyped = '';
+    local.emergencyMenuOpen = true;
     local.error = null;
     render();
   });
@@ -868,6 +932,183 @@ function menu(): HTMLElement {
   sheet.append(close);
 
   return sheet;
+}
+
+function emergencyMenu(): HTMLElement {
+  const sheet = document.createElement('div');
+  sheet.className = 'menu menu--emergency';
+
+  const title = document.createElement('h2');
+  title.className = 'setup__title';
+  title.textContent = local.lang === 'nl' ? 'Noodbediening' : 'Emergency controls';
+  sheet.append(title);
+
+  const note = document.createElement('p');
+  note.className = 'sheet__note';
+  note.textContent = local.lang === 'nl'
+    ? 'Alleen gebruiken als een apparaat uitvalt. Vertel de tafel wat je doet.'
+    : 'Use only when a device fails. Tell the table what you are doing.';
+  sheet.append(note);
+
+  const controllerTakeover = button(t(local.lang, 'menu.recover'), () => {
+    local.emergencyMenuOpen = false;
+    local.recovering = true;
+    local.recoveryTyped = '';
+    local.error = null;
+    render();
+  });
+  controllerTakeover.classList.add('menu__item', 'menu__item--danger');
+  sheet.append(controllerTakeover);
+
+  const state = controller.current();
+  const canVote = state.room?.phase === 'voting'
+    && state.room.refereeUid === state.uid;
+  const emergencyVote = button(
+    local.lang === 'nl' ? 'Stem overnemen' : 'Take over a vote',
+    () => {
+      local.emergencyMenuOpen = false;
+      local.emergencyVoteOpen = true;
+      local.emergencyTyped = '';
+      local.emergencyVoter = '';
+      local.emergencyTarget = '';
+      local.error = null;
+      render();
+    },
+  );
+  emergencyVote.disabled = !canVote;
+  emergencyVote.classList.add('menu__item', 'menu__item--danger');
+  sheet.append(emergencyVote);
+
+  if (!canVote) {
+    const unavailable = document.createElement('p');
+    unavailable.className = 'sheet__note';
+    unavailable.textContent = local.lang === 'nl'
+      ? 'Een noodstem kan alleen door de huidige spelleider worden uitgebracht wanneer de stemming open is.'
+      : 'Only the current controller can cast an emergency vote while voting is open.';
+    sheet.append(unavailable);
+  }
+
+  const close = button(t(local.lang, 'menu.close'), () => {
+    local.emergencyMenuOpen = false;
+    render();
+  });
+  close.classList.add('menu__item');
+  sheet.append(close);
+  return sheet;
+}
+
+function emergencyVoteSheet(): HTMLElement {
+  const state = controller.current();
+  const room = state.room;
+  const wrap = document.createElement('div');
+  wrap.className = 'recover';
+
+  const title = document.createElement('h2');
+  title.className = 'setup__title';
+  title.textContent = local.lang === 'nl' ? 'Noodstem uitbrengen' : 'Cast emergency vote';
+  const warning = document.createElement('p');
+  warning.className = 'recover__warning';
+  warning.textContent = local.lang === 'nl'
+    ? 'Dit legt namens een andere speler een definitieve stem vast. Een bestaande stem wordt nooit overschreven.'
+    : 'This records a final vote for another player. An existing vote is never overwritten.';
+  wrap.append(title, warning);
+
+  const players = room ? room.seating.map((uid, seat) => ({
+    uid, seat, name: seatNames()[seat as SeatIndex] ?? uid,
+  })) : [];
+  const voter = selectField(
+    local.lang === 'nl' ? 'Speler met uitgevallen apparaat' : 'Player whose device failed',
+    local.emergencyVoter,
+    players,
+    (value) => {
+      local.emergencyVoter = value;
+      if (local.emergencyTarget === value) local.emergencyTarget = '';
+      render();
+    },
+  );
+  const targets = players.filter((player) => player.uid !== local.emergencyVoter);
+  const target = selectField(
+    local.lang === 'nl' ? 'Definitieve stem op' : 'Final vote for',
+    local.emergencyTarget,
+    targets,
+    (value) => { local.emergencyTarget = value; render(); },
+  );
+  wrap.append(voter, target);
+
+  const phrase = document.createElement('label');
+  phrase.className = 'recover__field';
+  phrase.textContent = local.lang === 'nl'
+    ? 'Typ takeover om dit bewust te bevestigen'
+    : 'Type takeover to confirm deliberately';
+  const input = document.createElement('input');
+  input.className = 'join__name';
+  input.type = 'text';
+  input.value = local.emergencyTyped;
+  input.autocomplete = 'off';
+  phrase.append(input);
+  wrap.append(phrase);
+
+  const confirm = button(local.lang === 'nl' ? 'Noodstem vastleggen' : 'Record emergency vote', () => {
+    const roomId = state.roomId;
+    if (!roomId) return;
+    void attempt(
+      () => backend.emergencyVote(
+        roomId, local.emergencyVoter, local.emergencyTarget, local.emergencyTyped.trim(),
+      ),
+      local.lang === 'nl' ? 'De noodstem kon niet worden vastgelegd.' : 'The emergency vote could not be recorded.',
+    ).then((ok) => {
+      if (!ok) return;
+      local.emergencyVoteOpen = false;
+      local.emergencyTyped = '';
+      local.emergencyVoter = '';
+      local.emergencyTarget = '';
+      render();
+    });
+  });
+  confirm.classList.add('btn--primary');
+  confirm.disabled = local.emergencyTyped.trim() !== 'takeover'
+    || !local.emergencyVoter || !local.emergencyTarget;
+  input.addEventListener('input', () => {
+    local.emergencyTyped = input.value;
+    confirm.disabled = local.emergencyTyped.trim() !== 'takeover'
+      || !local.emergencyVoter || !local.emergencyTarget;
+  });
+  const cancel = button(t(local.lang, 'menu.close'), () => {
+    local.emergencyVoteOpen = false;
+    local.emergencyTyped = '';
+    local.error = null;
+    render();
+  });
+  wrap.append(confirm, cancel);
+  if (local.error) wrap.append(fatal(local.error));
+  return wrap;
+}
+
+function selectField(
+  label: string,
+  value: string,
+  options: Array<{ uid: string; name: string }>,
+  onChange: (value: string) => void,
+): HTMLElement {
+  const field = document.createElement('label');
+  field.className = 'recover__field';
+  field.textContent = label;
+  const select = document.createElement('select');
+  select.className = 'join__name';
+  const empty = document.createElement('option');
+  empty.value = '';
+  empty.textContent = '—';
+  select.append(empty);
+  for (const option of options) {
+    const item = document.createElement('option');
+    item.value = option.uid;
+    item.textContent = option.name;
+    select.append(item);
+  }
+  select.value = value;
+  select.addEventListener('change', () => onChange(select.value));
+  field.append(select);
+  return field;
 }
 
 function recoverySheet(): HTMLElement {
@@ -975,9 +1216,6 @@ function tableOverlay(): HTMLElement | null {
   const privateReceipt = nextPrivateReceipt();
   if (privateReceipt) return privateReceipt;
 
-  if (room.phase === 'day' || room.phase === 'voting') {
-    return voteSheet(ownSeat as SeatIndex);
-  }
   if (room.phase === 'results' && room.finalRoles) {
     return resultSheet(ownSeat as SeatIndex);
   }
@@ -1073,10 +1311,6 @@ function promptSheet(
         render();
       },
       onConfirm: send,
-      // Declining is a real answer. A window that closes on somebody who meant
-      // to do nothing has to record that, or their seat never settles and they
-      // receive none of their reveals.
-      onDecline: () => send({ kind: 'none' }),
     }),
     note: t(local.lang, 'reveal.staleWarning'),
     passiveScrim: true,
@@ -1099,19 +1333,22 @@ function firstPending() {
   );
 }
 
-function voteSheet(ownSeat: SeatIndex): HTMLElement {
+function votePanel(ownSeat: SeatIndex): HTMLElement {
   const state = controller.current();
   const room = state.room!;
   const roomId = state.roomId!;
 
-  const cast = (target: SeatIndex | null, abstain: boolean) => {
+  const cast = async (target: SeatIndex | null, abstain: boolean): Promise<boolean> => {
     const uid = target === null ? null : (room.seating[target] ?? null);
-    void attempt(() => backend.vote(roomId, uid, abstain));
+    return attempt(() => backend.vote(roomId, uid, abstain));
   };
 
-  return renderSheet({
-    title: t(local.lang, room.phase === 'voting' ? 'day.voteNow' : 'day.discussing'),
-    body: renderVoting({
+  const panel = document.createElement('section');
+  panel.className = 'ballotpanel';
+  const title = document.createElement('h2');
+  title.className = 'sheet__title';
+  title.textContent = t(local.lang, room.phase === 'voting' ? 'day.voteNow' : 'day.discussing');
+  panel.append(title, renderVoting({
       lang: local.lang,
       ownSeat,
       names: seatNames(),
@@ -1121,11 +1358,13 @@ function voteSheet(ownSeat: SeatIndex): HTMLElement {
       seatCount: room.seating.length,
       votesCast: room.votesCast,
       votingOpen: room.phase === 'voting',
+      finalSubmitted: local.finalVoteRound === room.round,
       // What this device BELIEVES it is, from its own dealt card. The engine
       // resolves the shield on whoever holds the Bodyguard card at dawn, so a
       // player swapped away from it goes on shielding nobody (§6.0).
       isBodyguard: state.own.originalRole === 'bodyguard',
       onTarget: (seat) => {
+        if (local.finalVoteRound === room.round || room.phase !== 'voting') return;
         local.voteTarget = local.voteTarget === seat ? null : seat;
         render();
       },
@@ -1133,25 +1372,38 @@ function voteSheet(ownSeat: SeatIndex): HTMLElement {
       // discussion and counts at any moment, so it is sent immediately rather
       // than waiting for a confirm.
       onAbstain: (next) => {
+        if (room.phase !== 'day') return;
         local.abstaining = next;
-        cast(next ? null : local.voteTarget, next);
+        void cast(null, next);
         render();
       },
-      onConfirm: () => cast(local.voteTarget, false),
+      onConfirm: () => {
+        if (local.voteTarget === null || local.finalVoteRound === room.round) return;
+        void cast(local.voteTarget, false).then((ok) => {
+          if (!ok) return;
+          local.finalVoteRound = room.round;
+          local.votePanelOpen = false;
+          local.voteTarget = null;
+          render();
+        });
+      },
       readyToVote: local.readyToVote,
       earlyVoteCount: room.earlyVoteCount,
       // Sent immediately, like the abstain, because it is counted
       // simultaneously — a request that only lands when you confirm something
       // else is not a show of hands.
       onReadyToVote: (next) => {
+        if (room.phase !== 'day') return;
         local.readyToVote = next;
         void attempt(() => backend.requestEarlyVote(roomId, next));
         render();
       },
-    }),
-    variant: 'vote',
-    passiveScrim: true,
-  });
+      onCollapse: () => {
+        local.votePanelOpen = false;
+        render();
+      },
+    }));
+  return panel;
 }
 
 /**

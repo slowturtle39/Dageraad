@@ -294,10 +294,17 @@ async function castBotVotes(opts: RefereeRunnerOptions, room: RoomView): Promise
   if (!bots) return;
   const state = await opts.backend.refereeNightState(opts.roomId);
   if (!state) return;
+  const random = opts.random ?? Math.random;
 
   for (const seat of bots.seats) {
-    const choice = bots.bot.chooseVote(seat, state);
-    const targetUid = choice.target === null ? null : (room.seating[choice.target] ?? null);
+    // Bots never participate in the discussion's abstain/ready toggles. Once
+    // the ballot opens they immediately pick one OTHER seated player, exactly
+    // once, and their named vote is as final as a human's.
+    const targets = room.seating
+      .map((_, target) => target as SeatIndex)
+      .filter((target) => target !== seat);
+    const targetSeat = targets[Math.floor(random() * targets.length)];
+    const targetUid = targetSeat === undefined ? null : (room.seating[targetSeat] ?? null);
     const ownUid = room.seating[seat];
     // Defensive: a bot that named itself would be refused by the rules anyway,
     // and a refusal thrown here would abort the whole day for everyone.
@@ -308,20 +315,18 @@ async function castBotVotes(opts: RefereeRunnerOptions, room: RoomView): Promise
         // The seat has a login of its own — a simulated table, where the test
         // holds all eight phones. It votes for ITSELF, through the ordinary
         // player method, which is why this needs no privilege at all.
-        await own.vote(opts.roomId, safeTarget, choice.abstain || safeTarget === null);
+        if (safeTarget) await own.vote(opts.roomId, safeTarget, false);
       } else if (ownUid) {
         // A real AI player: no login, no browser. The controlling browser
         // answers for it through the NARROW bot-only method, which refuses
         // unless the seat really holds an `isBot` player in a practice room.
         // A general "vote as any player" would be one rule away from the
         // referee quietly voting for a human.
-        await opts.backend.voteAsBot(
-          opts.roomId, ownUid, safeTarget, choice.abstain || safeTarget === null,
-        );
+        if (safeTarget) await opts.backend.voteAsBot(opts.roomId, ownUid, safeTarget, false);
       }
     } catch {
-      // A bot that cannot vote is a bug in the bot, not a reason to end the
-      // evening. It shows up as a missing vote, which the day runner reports.
+      // A bot that cannot vote is a bug in the bot, not a reason to invent a
+      // result. The ballot stays open so the referee can use emergency control.
     }
   }
 }

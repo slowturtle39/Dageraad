@@ -25,6 +25,8 @@ export interface VotingView {
   votesCast: number;
   /** True once the discussion has ended and voting is open. */
   votingOpen: boolean;
+  /** A named vote has been accepted for this round and can no longer change. */
+  finalSubmitted?: boolean;
   /**
    * You believe you are the Bodyguard, so you shield instead of voting: every
    * vote against whoever you name is cancelled, your own included.
@@ -50,61 +52,72 @@ export interface VotingView {
   readyToVote?: boolean;
   earlyVoteCount?: number;
   onReadyToVote?: (next: boolean) => void;
+  onCollapse?: () => void;
 }
 
 export function renderVoting(view: VotingView): HTMLElement {
   const el = document.createElement('div');
 
-  const chosen = view.target === null ? null : view.names[view.target];
-  const line = document.createElement('p');
-  line.className = 'sheet__sub';
-  if (view.isBodyguard) {
-    line.textContent = chosen
-      ? `Je beschermt ${chosen}. Alle stemmen op ${chosen} vervallen.`
-      : 'Tik iemand aan om te beschermen. Alle stemmen op die persoon vervallen.';
-  } else {
-    line.textContent = chosen
-      ? `Je stemt op ${chosen}.`
-      : 'Tik iemand aan de tafel aan om op te stemmen.';
-  }
-  el.append(line);
-
-  // The Bodyguard MUST name someone once voting is open (Milan, 2026-08-26) —
-  // shielding is not optional. He may still join a majority that decides not to
-  // vote at all during the discussion, because that ends the vote for everybody
-  // rather than letting him quietly do nothing while it happens.
-  const mustProtect = view.isBodyguard === true && view.votingOpen;
-
-  const abstain = document.createElement('button');
-  abstain.type = 'button';
-  abstain.className = view.abstain ? 'btn btn--primary' : 'btn';
-  abstain.textContent = t(view.lang, 'action.abstain');
-  abstain.disabled = mustProtect;
-  if (!mustProtect) {
-    abstain.addEventListener('click', () => view.onAbstain(!view.abstain));
-  }
-  el.append(abstain);
-
-  if (mustProtect) {
-    const note = document.createElement('p');
-    note.className = 'sheet__note';
-    note.textContent = 'Je moet iemand beschermen — overslaan kan niet.';
-    el.append(note);
+  if (view.onCollapse) {
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'btn vote__collapse';
+    close.textContent = view.lang === 'nl' ? 'Stemmen inklappen' : 'Close ballot';
+    close.addEventListener('click', view.onCollapse);
+    el.append(close);
   }
 
-  // The count is shown to everyone because the rule is a simultaneous show of
-  // hands — knowing how close it is IS the mechanic. It reveals nothing about
-  // anyone's role, only their current intention.
+  if (view.finalSubmitted) {
+    const recorded = document.createElement('p');
+    recorded.className = 'sheet__sub vote__recorded';
+    recorded.textContent = view.lang === 'nl'
+      ? 'Je stem is vastgelegd. Je kunt hem niet meer wijzigen.'
+      : 'Your vote is recorded. It can no longer be changed.';
+    el.append(recorded);
+  }
+
+  if (view.votingOpen && !view.finalSubmitted) {
+    const chosen = view.target === null ? null : view.names[view.target];
+    const line = document.createElement('p');
+    line.className = 'sheet__sub';
+    if (view.isBodyguard) {
+      line.textContent = chosen
+        ? copy(view.lang,
+            `Je beschermt ${chosen}. Alle stemmen op ${chosen} vervallen.`,
+            `You protect ${chosen}. All votes against ${chosen} are cancelled.`)
+        : copy(view.lang,
+            'Tik iemand aan om te beschermen. Alle stemmen op die persoon vervallen.',
+            'Tap someone to protect. All votes against that player are cancelled.');
+    } else {
+      line.textContent = chosen
+        ? copy(view.lang, `Je stemt op ${chosen}.`, `You vote for ${chosen}.`)
+        : copy(view.lang,
+            'Tik iemand aan de tafel aan om op te stemmen.',
+            'Tap someone at the table to vote for them.');
+    }
+    el.append(line);
+  }
+
   const needed = Math.floor(view.seatCount / 2) + 1;
-  const tally = document.createElement('p');
-  tally.className = 'sheet__note';
-  // Live from the first second: the group may decide not to vote at any moment,
-  // so the count has to be true at any moment too. Showing how close it is IS
-  // the mechanic — and it reveals intention, never anybody's role.
-  tally.textContent =
-    `${view.abstainCount} van de ${view.seatCount} willen niet stemmen. ` +
-    `Vanaf ${needed} gaat de stemming niet door.`;
-  el.append(tally);
+  if (!view.votingOpen) {
+    const abstain = document.createElement('button');
+    abstain.type = 'button';
+    abstain.className = view.abstain ? 'btn btn--primary' : 'btn';
+    abstain.textContent = t(view.lang, 'action.abstain');
+    abstain.addEventListener('click', () => view.onAbstain(!view.abstain));
+    el.append(abstain);
+
+    const tally = document.createElement('p');
+    tally.className = 'sheet__note';
+    tally.textContent = copy(
+      view.lang,
+      `${view.abstainCount} van de ${view.seatCount} willen niet stemmen. ` +
+        `Vanaf ${needed} gaat de stemming niet door.`,
+      `${view.abstainCount} of ${view.seatCount} do not want a vote. ` +
+        `At ${needed}, the ballot is cancelled.`,
+    );
+    el.append(tally);
+  }
 
   // Only during the discussion. Once the ballot is open there is nothing left
   // to ask for, and a button that does nothing is worse than no button.
@@ -136,21 +149,27 @@ export function renderVoting(view: VotingView): HTMLElement {
     // can see perfectly well whose hand is still down.
     const progress = document.createElement('p');
     progress.className = 'sheet__note';
-    progress.textContent =
-      view.votesCast >= view.seatCount
-        ? 'Iedereen heeft gestemd.'
-        : `${view.votesCast} van de ${view.seatCount} hebben gestemd. ` +
-          `Er wordt op de rest gewacht — iedereen moet stemmen.`;
+    progress.textContent = view.votesCast >= view.seatCount
+      ? copy(view.lang, 'Iedereen heeft gestemd.', 'Everyone has voted.')
+      : copy(
+          view.lang,
+          `${view.votesCast} van de ${view.seatCount} hebben gestemd. ` +
+            'Er wordt op de rest gewacht - iedereen moet stemmen.',
+          `${view.votesCast} of ${view.seatCount} have voted. ` +
+            'Waiting for the rest - everyone must vote.',
+        );
     el.append(progress);
   }
 
-  const confirm = document.createElement('button');
-  confirm.type = 'button';
-  confirm.className = 'btn btn--primary';
-  confirm.textContent = t(view.lang, 'action.vote');
-  confirm.disabled = view.target === null && !view.abstain;
-  confirm.addEventListener('click', () => view.onConfirm());
-  el.append(confirm);
+  if (view.votingOpen && !view.finalSubmitted) {
+    const confirm = document.createElement('button');
+    confirm.type = 'button';
+    confirm.className = 'btn btn--primary';
+    confirm.textContent = t(view.lang, 'action.vote');
+    confirm.disabled = view.target === null;
+    confirm.addEventListener('click', () => view.onConfirm());
+    el.append(confirm);
+  }
 
   return el;
 }
@@ -178,9 +197,9 @@ export function renderResults(view: ResultsView): HTMLElement {
   const teams = document.createElement('div');
   teams.className = 'stats__grid';
   teams.append(
-    teamTile('Dorp', result.teamsWon.village),
-    teamTile('Wolven', result.teamsWon.wolf),
-    teamTile('Looier', result.teamsWon.solo),
+    teamTile(copy(view.lang, 'Dorp', 'Village'), result.teamsWon.village, view.lang),
+    teamTile(copy(view.lang, 'Wolven', 'Wolves'), result.teamsWon.wolf, view.lang),
+    teamTile(copy(view.lang, 'Looier', 'Tanner'), result.teamsWon.solo, view.lang),
   );
   el.append(teams);
 
@@ -193,7 +212,9 @@ export function renderResults(view: ResultsView): HTMLElement {
     name.className = 'rolerow__name';
     name.textContent =
       `${view.names[seat] ?? seat}` +
-      (result.eliminated.includes(seat) ? ' — gelyncht' : '');
+      (result.eliminated.includes(seat)
+        ? copy(view.lang, ' - gelyncht', ' - eliminated')
+        : '');
 
     const roleEl = document.createElement('span');
     roleEl.className = 'rolerow__n';
@@ -212,12 +233,12 @@ export function renderResults(view: ResultsView): HTMLElement {
   return el;
 }
 
-function teamTile(label: string, won: boolean): HTMLElement {
+function teamTile(label: string, won: boolean, lang: Lang): HTMLElement {
   const el = document.createElement('div');
   el.className = 'stat';
   const v = document.createElement('div');
   v.className = 'stat__value';
-  v.textContent = won ? 'wint' : '—';
+  v.textContent = won ? copy(lang, 'wint', 'wins') : '—';
   const l = document.createElement('div');
   l.className = 'stat__label';
   l.textContent = label;
@@ -230,7 +251,8 @@ function lynchLine(view: ResultsView): string {
   return view.result.eliminated
     .map((s) => {
       const name = view.names[s] ?? s;
-      const role = ROLES[view.finalRoles[s]!]?.nl;
+      const finalRole = view.finalRoles[s]!;
+      const role = ROLES[finalRole] ? roleName(view.lang, finalRole) : undefined;
       return role ? `${name} (${role})` : `${name}`;
     })
     .join(' en ');
@@ -245,10 +267,18 @@ function describeOutcome(view: ResultsView): string {
       // A tie is no longer a reprieve: everyone on the top count hangs
       // (2026-08-26). It only means "nobody died" when no vote counted at all.
       if (result.eliminated.length === 0) return t(lang, 'day.tie');
-      return `Gelijkspel — ${lynchLine(view)} hangen allebei.`;
+      return copy(
+        lang,
+        `Gelijkspel - ${lynchLine(view)} hangen allemaal.`,
+        `Tie - ${lynchLine(view)} are all eliminated.`,
+      );
     }
     case 'eliminated':
-      return `${lynchLine(view)} werd gelyncht.`;
+      return copy(
+        lang,
+        `${lynchLine(view)} werd gelyncht.`,
+        `${lynchLine(view)} was eliminated.`,
+      );
   }
 }
 
@@ -264,13 +294,25 @@ function summariseVotes(view: ResultsView): string {
   const looier = view.result.discarded.filter((d) => d.reason === 'looier');
   if (looier.length > 0) {
     const who = looier.map((d) => view.names[d.voter] ?? d.voter).join(', ');
-    parts.push(`De stem van ${who} telde niet mee — de Looier stemt nooit mee.`);
+    parts.push(copy(
+      view.lang,
+      `De stem van ${who} telde niet mee - de Looier stemt nooit mee.`,
+      `${who}'s vote did not count - the Tanner never votes.`,
+    ));
   }
   const timedOut = Object.entries(view.outcomes).filter(
     ([, o]) => o === 'not-scored',
   ).length;
   if (timedOut > 0) {
-    parts.push(`${timedOut}× geen stem uitgebracht; dat telt niet als een foute stem.`);
+    parts.push(copy(
+      view.lang,
+      `${timedOut}x geen stem uitgebracht; dat telt niet als een foute stem.`,
+      `${timedOut}x no vote cast; that does not count as an incorrect vote.`,
+    ));
   }
   return parts.join(' ');
+}
+
+function copy(lang: Lang, nl: string, en: string): string {
+  return lang === 'nl' ? nl : en;
 }

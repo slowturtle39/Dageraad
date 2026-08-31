@@ -34,6 +34,7 @@ describe('the voting sheet', () => {
     // see whose hand is still down anyway.
     expect(src).toMatch(/votesCast/);
     expect(src).toMatch(/iedereen moet stemmen/);
+    expect(src).toMatch(/everyone must vote/);
   });
 
   it('needs strictly more than half to end the vote', () => {
@@ -79,21 +80,29 @@ describe('the Bodyguard shields instead of voting (2026-08-26)', () => {
 
   it('takes the abstain button away once voting has opened', () => {
     // He must name someone; skipping is not an option (Milan, 2026-08-26).
-    expect(src).toMatch(/mustProtect/);
-    expect(src).toMatch(/abstain\.disabled = mustProtect/);
-    expect(src).toMatch(/overslaan kan niet/);
+    expect(src).toMatch(/if \(!view\.votingOpen\)/);
+    expect(src).toMatch(/if \(view\.votingOpen && !view\.finalSubmitted\)/);
   });
 
   it('leaves him free to join a majority that calls off the vote entirely', () => {
     // That ends the vote for everybody rather than letting him quietly do
     // nothing while it happens, so it is a different thing from skipping.
-    expect(src).toMatch(/view\.isBodyguard === true && view\.votingOpen/);
+    expect(src).toMatch(/const abstain/);
+    expect(src).toMatch(/onAbstain/);
   });
 
   it('keys off what he BELIEVES he is, not the truth', () => {
     // §6.0: the engine resolves the shield on whoever holds the Bodyguard card
     // at dawn. A player whose card was swapped away goes on shielding nobody.
     expect(src).toMatch(/believe/i);
+  });
+});
+
+describe('a named vote is final', () => {
+  it('shows a recorded state and removes the confirm action', () => {
+    expect(src).toMatch(/finalSubmitted/);
+    expect(src).toMatch(/Je stem is vastgelegd/);
+    expect(src).toMatch(/view\.votingOpen && !view\.finalSubmitted/);
   });
 });
 
@@ -108,7 +117,7 @@ describe('a tie is now a double execution', () => {
     // Seat 0 has two votes, seat 1 has one — not actually tied here; the point
     // of this test is the renderer, so assert on the source and the shape.
     expect(result.eliminated.length).toBeGreaterThan(0);
-    expect(src).toMatch(/hangen allebei/);
+    expect(src).toMatch(/hangen allemaal/);
     expect(src).toMatch(/lynchLine/);
   });
 

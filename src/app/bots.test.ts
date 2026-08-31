@@ -194,7 +194,10 @@ describe('a mixed table plays a whole round', () => {
   it('runs from lobby to results with humans and bots in the same seating', async () => {
     const { world, tablet, roomId } = await practiceRoom();
     const humans = ['Milan', 'Sanne', 'Joris'];
-    for (const n of humans) await world.device(`u:${n}`).joinRoom(roomId, n);
+    const humanDevices = humans.map((n) => world.device(`u:${n}`));
+    for (let i = 0; i < humans.length; i++) {
+      await humanDevices[i]!.joinRoom(roomId, humans[i]!);
+    }
     for (let i = 0; i < 4; i++) await tablet.addBot(roomId);
 
     const view = await room(tablet, roomId);
@@ -224,6 +227,13 @@ describe('a mixed table plays a whole round', () => {
       // goes through the narrow `voteAsBot`. That is the real path.
       bots: { seats: botSeats, bot: randomBot(4) },
       random: seeded(9),
+      onPhase: (phase) => {
+        if (phase !== 'voting') return;
+        void Promise.all(humanDevices.map((device, seat) => {
+          const target = view.seating[(seat + 1) % view.seating.length]!;
+          return device.vote(roomId, target, false);
+        }));
+      },
     });
     let done = false;
     const settled = run.then((v) => { done = true; return v; }, (e) => { done = true; throw e; });
@@ -234,9 +244,8 @@ describe('a mixed table plays a whole round', () => {
     // Practice writes nothing permanent — that is the whole reason bots are
     // confined to it.
     expect(result.resultsPersisted).toBe(false);
-    // Every bot voted; the three humans did not, and that is the expected
-    // shape of a playtest rather than a failure.
-    const missing = new Set(result.day.missingVotes);
-    for (const seat of botSeats) expect(missing.has(seat)).toBe(false);
+    // Bots and humans all vote once the ballot opens. The day cannot resolve
+    // with a missing seat.
+    expect(result.day.missingVotes).toEqual([]);
   });
 });

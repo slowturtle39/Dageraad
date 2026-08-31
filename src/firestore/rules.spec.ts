@@ -267,7 +267,7 @@ describe('voting', () => {
   it('rejects a self-vote at the rules level, not just in the UI', async () => {
     await assertFails(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
-        target: ALICE, abstain: false,
+        round: 1, target: ALICE, abstain: false,
       }),
     );
   });
@@ -275,15 +275,69 @@ describe('voting', () => {
   it('accepts a normal vote', async () => {
     await assertSucceeds(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
-        target: BOB, abstain: false,
+        round: 1, target: BOB, abstain: false,
       }),
     );
+  });
+
+  it('refuses changing a named vote after it is cast', async () => {
+    const ref = doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE);
+    await assertSucceeds(setDoc(ref, {
+      round: 1, target: BOB, abstain: false,
+    }));
+    await assertFails(updateDoc(ref, { target: BOB, readyToVote: true }));
+  });
+
+  it('refuses abstaining once the ballot is open', async () => {
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
+        round: 1, target: null, abstain: true,
+      }),
+    );
+  });
+
+  it('lets the referee cast one missing vote through the takeover path', async () => {
+    await assertSucceeds(
+      setDoc(doc(as(REF), 'rooms', ROOM, 'votes', ALICE), {
+        round: 1, target: BOB, abstain: false, readyToVote: false,
+        castAt: 1, takeoverPhrase: 'takeover',
+      }),
+    );
+  });
+
+  it('refuses emergency voting with the wrong phrase or by a player', async () => {
+    const payload = {
+      round: 1, target: BOB, abstain: false, readyToVote: false,
+      castAt: 1, takeoverPhrase: 'wrong',
+    };
+    await assertFails(setDoc(doc(as(REF), 'rooms', ROOM, 'votes', ALICE), payload));
+    await assertFails(setDoc(doc(as(BOB), 'rooms', ROOM, 'votes', ALICE), {
+      ...payload, takeoverPhrase: 'takeover',
+    }));
+  });
+
+  it('never lets emergency control overwrite a final human vote', async () => {
+    const vote = doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE);
+    await assertSucceeds(setDoc(vote, {
+      round: 1, target: BOB, abstain: false,
+    }));
+    await assertFails(setDoc(doc(as(REF), 'rooms', ROOM, 'votes', ALICE), {
+      round: 1, target: BOB, abstain: false, readyToVote: false,
+      castAt: 2, takeoverPhrase: 'takeover',
+    }));
+  });
+
+  it('refuses an emergency self-vote', async () => {
+    await assertFails(setDoc(doc(as(REF), 'rooms', ROOM, 'votes', ALICE), {
+      round: 1, target: ALICE, abstain: false, readyToVote: false,
+      castAt: 1, takeoverPhrase: 'takeover',
+    }));
   });
 
   it('keeps votes hidden from other players while voting is open', async () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'votes', ALICE), {
-        target: BOB, abstain: false,
+        round: 1, target: BOB, abstain: false,
       });
     });
     // Otherwise the last person to vote sees the tally before deciding.
@@ -294,7 +348,7 @@ describe('voting', () => {
     await seed('results');
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'votes', ALICE), {
-        target: BOB, abstain: false,
+        round: 1, target: BOB, abstain: false,
       });
     });
     await assertSucceeds(getDoc(doc(as(BOB), 'rooms', ROOM, 'votes', ALICE)));
@@ -304,7 +358,7 @@ describe('voting', () => {
     await seed('night');
     await assertFails(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
-        target: BOB, abstain: false,
+        round: 1, target: BOB, abstain: false,
       }),
     );
   });
@@ -319,7 +373,7 @@ describe('the abstain toggle during the discussion (§7, revised 2026-08-26)', (
     // reject every abstain and the whole mechanic would appear to do nothing.
     await assertSucceeds(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
-        target: null, abstain: true,
+        round: 1, target: null, abstain: true,
       }),
     );
   });
@@ -327,7 +381,7 @@ describe('the abstain toggle during the discussion (§7, revised 2026-08-26)', (
   it('accepts switching the abstain back off — it is a show of hands', async () => {
     await assertSucceeds(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
-        target: null, abstain: false,
+        round: 1, target: null, abstain: false,
       }),
     );
   });
@@ -337,7 +391,7 @@ describe('the abstain toggle during the discussion (§7, revised 2026-08-26)', (
     // vote into a first-mover one, even though nobody can read it yet.
     await assertFails(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
-        target: BOB, abstain: false,
+        round: 1, target: BOB, abstain: false,
       }),
     );
   });
@@ -345,7 +399,7 @@ describe('the abstain toggle during the discussion (§7, revised 2026-08-26)', (
   it('still refuses a self-vote, in either phase', async () => {
     await assertFails(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
-        target: ALICE, abstain: true,
+        round: 1, target: ALICE, abstain: true,
       }),
     );
   });
@@ -353,7 +407,7 @@ describe('the abstain toggle during the discussion (§7, revised 2026-08-26)', (
   it('keeps abstains unreadable by other players', async () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'votes', ALICE), {
-        target: null, abstain: true,
+        round: 1, target: null, abstain: true,
       });
     });
     // The public count reaches the table via the room document, written by the
@@ -1128,7 +1182,7 @@ describe('asking to open the ballot early', () => {
     await seed('day');
     await assertSucceeds(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
-        target: null, abstain: false, readyToVote: true,
+        round: 1, target: null, abstain: false, readyToVote: true,
       }),
     );
   });
@@ -1137,7 +1191,7 @@ describe('asking to open the ballot early', () => {
     await seed('day');
     await assertSucceeds(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
-        target: null, abstain: false, readyToVote: false,
+        round: 1, target: null, abstain: false, readyToVote: false,
       }),
     );
   });
@@ -1149,7 +1203,7 @@ describe('asking to open the ballot early', () => {
     await seed('day');
     await assertFails(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
-        target: BOB, abstain: false, readyToVote: true,
+        round: 1, target: BOB, abstain: false, readyToVote: true,
       }),
     );
   });
@@ -1158,7 +1212,7 @@ describe('asking to open the ballot early', () => {
     await seed('voting');
     await assertFails(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
-        target: ALICE, abstain: false, readyToVote: true,
+        round: 1, target: ALICE, abstain: false, readyToVote: true,
       }),
     );
   });
@@ -1167,7 +1221,7 @@ describe('asking to open the ballot early', () => {
     await seed('day');
     await assertFails(
       setDoc(doc(as(BOB), 'rooms', ROOM, 'votes', ALICE), {
-        target: null, abstain: false, readyToVote: true,
+        round: 1, target: null, abstain: false, readyToVote: true,
       }),
     );
   });
@@ -1178,7 +1232,7 @@ describe('asking to open the ballot early', () => {
     await seed('day');
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'votes', ALICE), {
-        target: null, abstain: false, readyToVote: true,
+        round: 1, target: null, abstain: false, readyToVote: true,
       });
     });
     await assertFails(getDoc(doc(as(BOB), 'rooms', ROOM, 'votes', ALICE)));
@@ -1189,7 +1243,7 @@ describe('asking to open the ballot early', () => {
     await seed('day');
     await assertFails(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
-        target: null, abstain: false, readyToVote: true, points: 99,
+        round: 1, target: null, abstain: false, readyToVote: true, points: 99,
       }),
     );
   });
@@ -1198,7 +1252,7 @@ describe('asking to open the ballot early', () => {
     await seed('night');
     await assertFails(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
-        target: null, abstain: false, readyToVote: true,
+        round: 1, target: null, abstain: false, readyToVote: true,
       }),
     );
   });
@@ -1311,7 +1365,7 @@ describe('AI players, and the narrow capability that answers for them', () => {
     await withBot('voting');
     await assertSucceeds(
       setDoc(doc(as(REF), 'rooms', ROOM, 'votes', BOT), {
-        target: ALICE, abstain: false, castAt: 1,
+        round: 1, target: ALICE, abstain: false, castAt: 1,
       }),
     );
   });
@@ -1322,7 +1376,7 @@ describe('AI players, and the narrow capability that answers for them', () => {
     await withBot('voting');
     await assertFails(
       setDoc(doc(as(REF), 'rooms', ROOM, 'votes', ALICE), {
-        target: BOB, abstain: false, castAt: 1,
+        round: 1, target: BOB, abstain: false, castAt: 1,
       }),
     );
   });
@@ -1336,7 +1390,7 @@ describe('AI players, and the narrow capability that answers for them', () => {
     });
     await assertFails(
       setDoc(doc(as(REF), 'rooms', ROOM, 'votes', BOT), {
-        target: ALICE, abstain: false, castAt: 1,
+        round: 1, target: ALICE, abstain: false, castAt: 1,
       }),
     );
   });
@@ -1345,7 +1399,7 @@ describe('AI players, and the narrow capability that answers for them', () => {
     await withBot('voting');
     await assertFails(
       setDoc(doc(as(REF), 'rooms', ROOM, 'votes', BOT), {
-        target: BOT, abstain: false, castAt: 1,
+        round: 1, target: BOT, abstain: false, castAt: 1,
       }),
     );
   });
@@ -1354,7 +1408,7 @@ describe('AI players, and the narrow capability that answers for them', () => {
     await withBot('day');
     await assertFails(
       setDoc(doc(as(REF), 'rooms', ROOM, 'votes', BOT), {
-        target: ALICE, abstain: false, castAt: 1,
+        round: 1, target: ALICE, abstain: false, castAt: 1,
       }),
     );
   });
@@ -1363,7 +1417,7 @@ describe('AI players, and the narrow capability that answers for them', () => {
     await withBot('night');
     await assertFails(
       setDoc(doc(as(REF), 'rooms', ROOM, 'votes', BOT), {
-        target: ALICE, abstain: false, castAt: 1,
+        round: 1, target: ALICE, abstain: false, castAt: 1,
       }),
     );
   });
@@ -1372,7 +1426,7 @@ describe('AI players, and the narrow capability that answers for them', () => {
     await withBot('voting');
     await assertFails(
       setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', BOT), {
-        target: BOB, abstain: false, castAt: 1,
+        round: 1, target: BOB, abstain: false, castAt: 1,
       }),
     );
   });
@@ -1381,7 +1435,7 @@ describe('AI players, and the narrow capability that answers for them', () => {
     await withBot('voting');
     await assertFails(
       setDoc(doc(as(REF), 'rooms', ROOM, 'votes', BOT), {
-        target: ALICE, abstain: false, castAt: 1, points: 99,
+        round: 1, target: ALICE, abstain: false, castAt: 1, points: 99,
       }),
     );
   });

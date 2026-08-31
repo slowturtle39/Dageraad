@@ -190,7 +190,7 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
     await updateDoc(this.room(), {
       abstainCount: [...out.values()].filter((v) => v.abstain).length,
       earlyVoteCount: [...out.values()].filter((v) => v.readyToVote === true).length,
-      votesCast: [...out.values()].filter((v) => v.target !== null || v.abstain).length,
+      votesCast: [...out.values()].filter((v) => v.target !== null).length,
     });
 
     return out;

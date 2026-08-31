@@ -162,6 +162,11 @@ describe('a human Dubbelganger is asked, and has time to answer', () => {
       dayConfig: { discussionMs: 5_000, abstainPollMs: 1_000, voteWaitTimeoutMs: 10_000 },
       bots: { seats: botSeats, bot: randomBot(3) },
       random: seeded(4),
+      onPhase: (phase) => {
+        if (phase === 'voting') {
+          void me.vote(roomId, room.seating[(room.seating.indexOf(me.uid) + 1) % room.seating.length]!, false);
+        }
+      },
     }), hand.tick);
 
     // Every answer this hand gave was given four seconds after the question
@@ -216,6 +221,11 @@ describe('a human Dubbelganger is asked, and has time to answer', () => {
       dayConfig: { discussionMs: 5_000, abstainPollMs: 1_000, voteWaitTimeoutMs: 10_000 },
       bots: { seats: botSeats, bot: randomBot(3) },
       random: seeded(6),
+      onPhase: (phase) => {
+        if (phase === 'voting') {
+          void me.vote(roomId, room.seating[(room.seating.indexOf(me.uid) + 1) % room.seating.length]!, false);
+        }
+      },
     }));
 
     expect(visibleMs).toBeGreaterThanOrEqual(5_000);
@@ -238,6 +248,11 @@ describe('a human Dubbelganger is asked, and has time to answer', () => {
       dayConfig: { discussionMs: 5_000, abstainPollMs: 1_000, voteWaitTimeoutMs: 10_000 },
       bots: { seats: botSeats, bot: randomBot(3) },
       random: seeded(8),
+      onPhase: (phase) => {
+        if (phase === 'voting') {
+          void me.vote(roomId, room.seating[(room.seating.indexOf(me.uid) + 1) % room.seating.length]!, false);
+        }
+      },
     }));
 
     expect(result.resultsPersisted).toBe(false);

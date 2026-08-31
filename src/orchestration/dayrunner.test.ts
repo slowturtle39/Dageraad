@@ -88,11 +88,18 @@ async function drive(clock: FakeClock, totalMs: number) {
   await tick();
 }
 
+function castAll(store: TestDayStore, count = 5): void {
+  for (let seat = 0; seat < count; seat++) {
+    store.cast(seat as SeatIndex, ((seat + 1) % count) as SeatIndex);
+  }
+}
+
 describe('the suspense extension', () => {
   const state = table(['weerwolf', 'dorpeling', 'ziener', 'jager', 'medium']);
 
   it('never fires when the toggle is off, however the coin lands', async () => {
     const store = new TestDayStore();
+    castAll(store);
     const clock = new FakeClock();
     const run = runDay({
       state, store, clock,
@@ -107,6 +114,7 @@ describe('the suspense extension', () => {
 
   it('fires on a low roll and announces it publicly', async () => {
     const store = new TestDayStore();
+    castAll(store);
     const clock = new FakeClock();
     const run = runDay({
       state, store, clock,
@@ -122,6 +130,7 @@ describe('the suspense extension', () => {
 
   it('does not fire on a high roll', async () => {
     const store = new TestDayStore();
+    castAll(store);
     const clock = new FakeClock();
     const run = runDay({
       state, store, clock,
@@ -134,6 +143,7 @@ describe('the suspense extension', () => {
 
   it('is skipped entirely when playing without a discussion timer', async () => {
     const store = new TestDayStore();
+    castAll(store);
     const clock = new FakeClock();
     const run = runDay({
       state, store, clock,
@@ -201,22 +211,27 @@ describe('voting is mandatory (Milan, 2026-08-26)', () => {
     expect(out.result.eliminated).toEqual([0]);
   });
 
-  it('reports who is missing rather than silently resolving without them', async () => {
+  it('stays open past the old safety bound until every missing player votes', async () => {
     const store = new TestDayStore();
     const clock = new FakeClock();
     store.cast(1, 0);
     store.cast(2, 0);   // seats 0, 3, 4 never vote
 
-    const run = runDay({ state, store, clock, config: FAST });
+    let done = false;
+    const run = runDay({ state, store, clock, config: FAST }).then((result) => {
+      done = true;
+      return result;
+    });
     await drive(clock, 60_000);
-    const out = await run;
-
-    // Reaching the safety bound means something is wrong and the host should
-    // look — not that the game quietly went ahead.
-    expect(out.missingVotes).toEqual([0, 3, 4]);
+    expect(done).toBe(false);
+    store.cast(0, 1);
+    store.cast(3, 1);
+    store.cast(4, 1);
+    await drive(clock, 5_000);
+    expect((await run).missingVotes).toEqual([]);
   });
 
-  it('counts an explicit abstain as having voted — silence is not an answer', async () => {
+  it('does not count a discussion abstain as a final ballot', async () => {
     const store = new TestDayStore();
     const clock = new FakeClock();
     store.cast(0, null, true);
@@ -225,8 +240,15 @@ describe('voting is mandatory (Milan, 2026-08-26)', () => {
     store.cast(3, 0);
     store.cast(4, 0);
 
-    const run = runDay({ state, store, clock, config: FAST });
+    let done = false;
+    const run = runDay({ state, store, clock, config: FAST }).then((result) => {
+      done = true;
+      return result;
+    });
     await drive(clock, 40_000);
+    expect(done).toBe(false);
+    store.cast(0, 1, false);
+    await drive(clock, 5_000);
     expect((await run).missingVotes).toEqual([]);
   });
 
@@ -299,13 +321,18 @@ describe('voting is mandatory (Milan, 2026-08-26)', () => {
     store.cast(4, 0);
 
     const run = runDay({ state, store, clock, config: FAST });
-    await drive(clock, 40_000);
+    await drive(clock, 11_000);
+    // The ballot is now open; everybody replaces the discussion toggle with
+    // one final named vote.
+    castAll(store);
+    await drive(clock, 10_000);
     const out = await run;
     expect(out.endedByAbstain).toBe(false);   // only 2 of 5 ever held it
   });
 
   it('walks the phases in order', async () => {
     const store = new TestDayStore();
+    castAll(store);
     const clock = new FakeClock();
     const run = runDay({ state, store, clock, config: FAST });
     await drive(clock, 40_000);

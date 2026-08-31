@@ -73,7 +73,7 @@ function viewSlot(ctx: Ctx, slot: number): RoleId | null {
 /** §6.1 #1 — shields another player's card for the rest of the night. */
 const schildwacht: Applier = function* (ctx) {
   const choice = yield ask(ctx, 'shield', {
-    kind: 'seat', exclude: [ctx.actor], optional: true,
+    kind: 'seat', exclude: [ctx.actor], optional: false,
   });
   const seat = seatOf(choice);
   if (seat === null) {
@@ -122,7 +122,7 @@ const alphawolf: Applier = function* (ctx) {
     return;
   }
   const choice = yield ask(ctx, 'alpha-target', {
-    kind: 'seat', exclude: [ctx.actor], optional: true,
+    kind: 'seat', exclude: [ctx.actor], optional: false,
   });
   const seat = seatOf(choice);
   if (seat === null) {
@@ -138,7 +138,7 @@ const alphawolf: Applier = function* (ctx) {
 /** §6.1 #4 — views one other player's card. */
 const mystiekewolf: Applier = function* (ctx) {
   const choice = yield ask(ctx, 'mystic-view', {
-    kind: 'seat', exclude: [ctx.actor], optional: true,
+    kind: 'seat', exclude: [ctx.actor], optional: false,
   });
   const seat = seatOf(choice);
   if (seat === null) {
@@ -203,7 +203,7 @@ const leerlingziener: Applier = function* (ctx) {
  * player is told, privately (§12: never on the shared tablet).
  */
 const rechter: Applier = function* (ctx) {
-  const choice = yield ask(ctx, 'judge', { kind: 'seat', exclude: [ctx.actor], optional: true });
+  const choice = yield ask(ctx, 'judge', { kind: 'seat', exclude: [ctx.actor], optional: false });
   const seat = seatOf(choice);
   if (seat === null) {
     ctx.info(ctx.actor, { kind: 'no-action', step: ctx.step });
@@ -353,7 +353,7 @@ const dorpsgek: Applier = function* (ctx) {
  */
 const medium: Applier = function* (ctx) {
   const choice = yield ask(ctx, 'medium-target', {
-    kind: 'seat', exclude: [ctx.actor], optional: true,
+    kind: 'seat', exclude: [ctx.actor], optional: false,
   });
   const seat = seatOf(choice);
   if (seat === null) {
@@ -408,7 +408,7 @@ const onderzoeker: Applier = function* (ctx) {
     const choice = yield ask(
       ctx,
       step,
-      { kind: 'seat', exclude: [ctx.actor, ...seen], optional: true },
+      { kind: 'seat', exclude: [ctx.actor, ...seen], optional: false },
       step === 'pi-second'
         ? { dependsOnReveal: true, ...(previousReveal ? { seen: previousReveal } : {}) }
         : {},

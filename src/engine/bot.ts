@@ -46,7 +46,6 @@ export function randomBot(seed: number): Bot {
           const allowed = seats.filter((s) => !excluded.has(s) && s !== request.seat);
           // An optional action is declined some of the time, so test games
           // exercise the "nobody acted" paths rather than only the happy ones.
-          if (request.prompt.optional && next() < 0.15) return { kind: 'none' };
           const seat = pick(allowed);
           return seat === undefined ? { kind: 'none' } : { kind: 'seat', seat };
         }

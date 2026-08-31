@@ -293,13 +293,13 @@ describe('voting', () => {
     await store.setPhase('voting');
 
     await phones[0]!.device.vote(roomId, 'u:Sanne', false);
-    await phones[1]!.device.vote(roomId, null, true);
+    await phones[1]!.device.vote(roomId, 'u:Joris', false);
     await store.readVotes();
 
     let room: RoomView | null = null;
     phones[2]!.device.watchRoom(roomId, (r) => { room = r; });
     expect(room!.votesCast).toBe(2);
-    expect(room!.abstainCount).toBe(1);
+    expect(room!.abstainCount).toBe(0);
     // The seating order is public — who voted for whom is not. Everything the
     // room view says about the vote is COUNTS, and nothing else.
     const voteFields = Object.entries(room!)
@@ -314,6 +314,31 @@ describe('voting', () => {
     for (const [key, value] of voteFields) {
       expect(typeof value, `${key} must be a count`).toBe('number');
     }
+  });
+
+  it('makes a named vote final', async () => {
+    const { tablet, roomId, phones } = await lobbyOfEight();
+    await tablet.startGame(roomId, 3);
+    await tablet.refereeStore(roomId).setPhase('voting');
+    await phones[0]!.device.vote(roomId, 'u:Sanne', false);
+    await expect(phones[0]!.device.vote(roomId, 'u:Joris', false))
+      .rejects.toThrow(/final/);
+  });
+
+  it('lets the referee replace a missing vote, but never an existing one', async () => {
+    const { tablet, roomId, phones } = await lobbyOfEight();
+    await tablet.startGame(roomId, 3);
+    await tablet.refereeStore(roomId).setPhase('voting');
+
+    await expect(tablet.emergencyVote(roomId, 'u:Milan', 'u:Sanne', 'wrong'))
+      .rejects.toThrow(/takeover/);
+    await expect(tablet.emergencyVote(roomId, 'u:Milan', 'u:Sanne', 'takeover'))
+      .resolves.toBeUndefined();
+    await expect(tablet.emergencyVote(roomId, 'u:Milan', 'u:Joris', 'takeover'))
+      .rejects.toThrow(/final/);
+    await expect(phones[1]!.device.emergencyVote(
+      roomId, 'u:Joris', 'u:Sanne', 'takeover',
+    )).rejects.toThrow(/referee/);
   });
 });
 
