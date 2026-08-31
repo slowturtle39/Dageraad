@@ -1,5 +1,5 @@
 import { initializeApp, type FirebaseApp, type FirebaseOptions } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, type Auth } from 'firebase/auth';
+import { getAuth, signInAnonymously, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 
 /**
@@ -41,29 +41,49 @@ export async function connect(config: FirebaseOptions): Promise<Connection> {
   return { app, db, auth, uid };
 }
 
-function currentUid(auth: Auth): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const stop = onAuthStateChanged(
-      auth,
-      (user) => {
-        if (user) {
-          stop();
-          resolve(user.uid);
-        }
-      },
-      (err) => {
-        stop();
-        reject(err);
-      },
+const STALE_USER_CODES = new Set([
+  'auth/invalid-user-token',
+  'auth/user-disabled',
+  'auth/user-not-found',
+  'auth/user-token-expired',
+]);
+
+function errorCode(err: unknown): string | null {
+  if (typeof err !== 'object' || err === null || !('code' in err)) return null;
+  return typeof err.code === 'string' ? err.code : null;
+}
+
+/**
+ * Return a uid whose token Firebase has just accepted.
+ *
+ * Auth restores an anonymous user from IndexedDB before it knows whether that
+ * user still exists server-side. Returning that uid immediately leaves one
+ * browser in a deceptive state: the app thinks it signed in, while every
+ * Firestore operation is denied. Force-refreshing the token closes that gap.
+ * Only a specifically invalid user is replaced; a network error must not
+ * discard somebody's stable identity and detach their all-time history.
+ */
+export async function currentUid(auth: Auth): Promise<string> {
+  await auth.authStateReady();
+
+  const cached = auth.currentUser;
+  if (cached) {
+    try {
+      await cached.getIdToken(true);
+      return cached.uid;
+    } catch (err) {
+      if (!STALE_USER_CODES.has(errorCode(err) ?? '')) throw err;
+      await auth.signOut();
+    }
+  }
+
+  try {
+    const credential = await signInAnonymously(auth);
+    return credential.user.uid;
+  } catch (err) {
+    throw new Error(
+      'Anonymous sign-in failed. Is Anonymous auth enabled in the Firebase ' +
+      `console? (SETUP.md §10.3). Underlying error: ${String(err)}`,
     );
-    signInAnonymously(auth).catch((err: unknown) => {
-      stop();
-      reject(
-        new Error(
-          'Anonymous sign-in failed. Is Anonymous auth enabled in the Firebase ' +
-          `console? (SETUP.md §10.3). Underlying error: ${String(err)}`,
-        ),
-      );
-    });
-  });
+  }
 }

@@ -130,6 +130,7 @@ const nl: Dict = {
   'join.open': 'Doe mee met een bestaande kamer',
   'join.instructions': 'Open bij voorkeur de link die de host deelt. Heb je alleen de code, vul die dan hieronder in.',
   'join.noSuchRoom': 'Die kamer bestaat niet. Klopt de code?',
+  'firebase.permissionDenied': 'Firebase weigert deze browsersessie. Ververs de pagina; de app herstelt dan automatisch een verlopen anonieme aanmelding. Blijft dit terugkomen, controleer dan of de browser Google/Firebase-verkeer blokkeert.',
   'join.refereeCannotPlay':
     'Dit apparaat leidt het spel en speelt niet mee — het kan alle kaarten ' +
     'inzien. Doe mee op je eigen telefoon.',
@@ -363,6 +364,7 @@ const en: Dict = {
   'join.open': 'Join an existing room',
   'join.instructions': 'Prefer opening the link shared by the host. If you only have the code, enter it below.',
   'join.noSuchRoom': 'No such room. Is the code right?',
+  'firebase.permissionDenied': 'Firebase refused this browser session. Refresh the page; the app will then automatically repair an expired anonymous sign-in. If this keeps happening, check whether the browser blocks Google/Firebase traffic.',
   'join.refereeCannotPlay':
     'This device runs the game and does not play — it can see every card. ' +
     'Join on your own phone instead.',

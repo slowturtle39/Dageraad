@@ -302,7 +302,12 @@ async function attempt(fn: () => Promise<void>, onFail?: string): Promise<boolea
     await fn();
     return true;
   } catch (err) {
-    local.error = onFail ?? String(err);
+    const code = typeof err === 'object' && err !== null && 'code' in err
+      ? String(err.code)
+      : '';
+    local.error = code === 'permission-denied' || code === 'firestore/permission-denied'
+      ? t(local.lang, 'firebase.permissionDenied')
+      : onFail ?? String(err);
     return false;
   } finally {
     local.busy = false;
