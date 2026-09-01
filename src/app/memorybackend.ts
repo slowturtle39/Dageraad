@@ -386,6 +386,11 @@ class MemoryBackend implements Backend {
     r.view.practiceSkipDiscussion = false;
     r.view.finalRoles = null;
     r.view.outcome = null;
+    delete r.view.eliminatedSeats;
+    delete r.view.winningTeams;
+    delete r.view.finalVotes;
+    delete r.view.discardedVotes;
+    delete r.view.finalTally;
 
     const seatCount = r.view.seating.length;
     const cards = cardsForRoles(r.view.activeRoles, seatCount);
@@ -619,6 +624,11 @@ class MemoryBackend implements Backend {
     this.requireReferee(r);
     r.view.finalRoles = results.finalRoles;
     r.view.outcome = results.outcome;
+    r.view.eliminatedSeats = results.eliminatedSeats;
+    r.view.winningTeams = results.winningTeams;
+    r.view.finalVotes = results.finalVotes;
+    r.view.discardedVotes = results.discardedVotes;
+    r.view.finalTally = results.finalTally;
     // Only a live game leaves a permanent record. See the note on the
     // interface: these documents are append-only and there is no delete path.
     if (persist) {

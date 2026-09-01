@@ -1,9 +1,9 @@
 import type {
   GameConfig, PrivateInfo, RoleId, SeatIndex, Choice, NightEvent, NightState,
-  DecisionRequest,
+  DecisionRequest, Team,
 } from '../engine/types.js';
 import type { Timeline } from '../engine/timeline.js';
-import type { VoteOutcome } from '../engine/dayphase.js';
+import type { DiscardReason, VoteOutcome } from '../engine/dayphase.js';
 import type { RoundRecord, SessionMember, SessionStanding } from './session.js';
 import type { HistoryRecord } from '../stats/alltime.js';
 import type { FriendProfile } from './friend.js';
@@ -96,6 +96,16 @@ export interface RoomView {
   /** Set when the game is over, so every device can show the same result. */
   finalRoles: Record<SeatIndex, RoleId> | null;
   outcome: string | null;
+  /** Public dawn summary. Missing only on rooms finished by an older build. */
+  eliminatedSeats?: SeatIndex[];
+  /** The teams that actually won; normally one, but represented honestly. */
+  winningTeams?: Team[];
+  /** Every ballot becomes public only after resolution. */
+  finalVotes?: Record<SeatIndex, SeatIndex | null>;
+  /** Why a ballot did not count, keyed by voter seat. */
+  discardedVotes?: Partial<Record<SeatIndex, DiscardReason>>;
+  /** Final count after Looier and Bodyguard effects. */
+  finalTally?: Record<SeatIndex, number>;
 }
 
 export type RoomPhase = 'lobby' | 'night' | 'day' | 'voting' | 'results';
@@ -162,6 +172,11 @@ export interface SeatResult {
 /** Everything the table learns at dawn, in one object. */
 export interface GameResults {
   outcome: string;
+  eliminatedSeats: SeatIndex[];
+  winningTeams: Team[];
+  finalVotes: Record<SeatIndex, SeatIndex | null>;
+  discardedVotes: Partial<Record<SeatIndex, DiscardReason>>;
+  finalTally: Record<SeatIndex, number>;
   /** Every seat's card at dawn (§6.0) — what the win condition is judged on. */
   finalRoles: Record<SeatIndex, RoleId>;
   seats: Record<SeatIndex, SeatResult>;

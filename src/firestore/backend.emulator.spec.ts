@@ -77,6 +77,29 @@ describe('FirestoreBackend through the real emulators', () => {
     expect(member).toMatchObject({ uid: host.uid, joinedAtRound: 1, leftAtRound: null });
   });
 
+  it('publishes the complete dawn ballot and win summary', async () => {
+    const referee = await client('public-result');
+    const roomId = await referee.backend.createRoom(roomOptions(false, 'tablet'));
+    await referee.backend.publishResults(roomId, {
+      outcome: 'tie',
+      eliminatedSeats: [0, 1],
+      winningTeams: ['wolf'],
+      finalVotes: { 0: 1, 1: 0 },
+      discardedVotes: {},
+      finalTally: { 0: 1, 1: 1 },
+      finalRoles: { 0: 'weerwolf', 1: 'dorpeling' },
+      seats: {},
+    }, false);
+
+    expect(await readRoom(referee.db, roomId)).toMatchObject({
+      outcome: 'tie',
+      eliminatedSeats: [0, 1],
+      winningTeams: ['wolf'],
+      finalVotes: { 0: 1, 1: 0 },
+      finalTally: { 0: 1, 1: 1 },
+    });
+  });
+
   it('hands a failed tablet over only through the phrase-confirmed recovery method', async () => {
     const tablet = await client('recovery-tablet');
     const roomId = await tablet.backend.createRoom(roomOptions(false, 'tablet'));

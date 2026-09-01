@@ -1469,6 +1469,97 @@ body {
   margin-top: 10px;
 }
 
+/* At dawn the cards are the main event. The explanation sits alongside them
+   without a scrim, rather than turning the public reveal into another modal. */
+.resultpanel {
+  position: fixed;
+  z-index: 18;
+  left: 0;
+  right: 0;
+  bottom: 58px;
+  max-height: 43%;
+  overflow-y: auto;
+  padding: 16px 18px max(16px, env(safe-area-inset-bottom));
+  background: var(--bg-raised);
+  border-top: 1px solid var(--line);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+#app:has(.resultpanel) .tablewrap {
+  padding-bottom: 43%;
+}
+
+#app:has(.resultpanel) .tablewrap .table {
+  width: min(78%, 310px);
+}
+
+.resultpanel__outcome,
+.resultpanel__winner {
+  margin: 6px 0 0;
+}
+
+.resultpanel__winner {
+  color: var(--gold);
+  font-family: var(--font);
+  font-size: 1.05rem;
+}
+
+.resultpanel__heading {
+  margin: 14px 0 6px;
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 0.95rem;
+}
+
+.results__votes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 4px 12px;
+}
+
+.results__vote,
+.resultpanel__tally {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 0.82rem;
+}
+
+.resultpanel__tally {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.results__row--eliminated {
+  border-right: 2px solid var(--blood);
+}
+
+.resultpanel__next {
+  margin-top: 14px;
+}
+
+@media (min-width: 960px) {
+  .resultpanel {
+    left: auto;
+    right: 20px;
+    bottom: 72px;
+    width: min(390px, calc(100vw - 40px));
+    max-height: calc(100vh - 150px);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.3);
+  }
+
+  #app:has(.resultpanel) .tablewrap {
+    padding-right: 430px;
+    padding-bottom: 8px;
+  }
+
+  #app:has(.resultpanel) .tablewrap .table {
+    width: min(72vw, 76vh, 700px);
+  }
+}
+
 .results__row {
   margin: 0;
   padding: 6px 8px;

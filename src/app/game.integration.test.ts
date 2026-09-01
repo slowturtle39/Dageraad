@@ -129,6 +129,11 @@ describe('a whole evening', () => {
       expect(room.phase).toBe('results');
       expect(room.outcome).toBe(result.outcome);
       expect(room.finalRoles).toEqual(result.finalRoles);
+      expect(room.eliminatedSeats).toEqual(result.results.eliminatedSeats);
+      expect(room.winningTeams).toEqual(result.results.winningTeams);
+      expect(room.finalVotes).toEqual(result.results.finalVotes);
+      expect(room.discardedVotes).toEqual(result.results.discardedVotes);
+      expect(room.finalTally).toEqual(result.results.finalTally);
     }
 
     // Voting is mandatory once the group has not abstained (§7), and eight bots

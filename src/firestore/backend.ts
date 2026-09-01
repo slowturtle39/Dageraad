@@ -1,5 +1,5 @@
 import {
-  collection, doc, getDoc, getDocs, onSnapshot, setDoc, updateDoc, writeBatch,
+  collection, deleteField, doc, getDoc, getDocs, onSnapshot, setDoc, updateDoc, writeBatch,
   type Firestore,
 } from 'firebase/firestore';
 import { cardsForRoles, deal } from '../engine/deal.js';
@@ -320,6 +320,11 @@ export class FirestoreBackend implements Backend {
       practiceSkipDiscussion: false,
       finalRoles: null,
       outcome: null,
+      eliminatedSeats: deleteField(),
+      winningTeams: deleteField(),
+      finalVotes: deleteField(),
+      discardedVotes: deleteField(),
+      finalTally: deleteField(),
     });
 
     batch.set(doc(this.db, paths.engineState(roomId)), engineStateToDoc(dealt.state));
@@ -404,6 +409,11 @@ export class FirestoreBackend implements Backend {
       discussionExtendedByMs: room.discussionExtendedByMs ?? 0,
       finalRoles: room.finalRoles ?? null,
       outcome: room.outcome ?? null,
+      ...(room.eliminatedSeats ? { eliminatedSeats: room.eliminatedSeats } : {}),
+      ...(room.winningTeams ? { winningTeams: room.winningTeams } : {}),
+      ...(room.finalVotes ? { finalVotes: room.finalVotes } : {}),
+      ...(room.discardedVotes ? { discardedVotes: room.discardedVotes } : {}),
+      ...(room.finalTally ? { finalTally: room.finalTally } : {}),
     };
   }
 
@@ -756,6 +766,11 @@ export class FirestoreBackend implements Backend {
     await updateDoc(this.roomRef(roomId), {
       finalRoles: results.finalRoles,
       outcome: results.outcome,
+      eliminatedSeats: results.eliminatedSeats,
+      winningTeams: results.winningTeams,
+      finalVotes: results.finalVotes,
+      discardedVotes: results.discardedVotes,
+      finalTally: results.finalTally,
     });
   }
 

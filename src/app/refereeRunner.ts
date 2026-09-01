@@ -2,7 +2,7 @@ import { finalRoleOf } from '../engine/state.js';
 import type { Bot } from '../engine/bot.js';
 import type { DayOptions } from '../engine/dayphase.js';
 import type { Durations } from '../engine/timeline.js';
-import type { RoleId, SeatIndex } from '../engine/types.js';
+import type { RoleId, SeatIndex, Team } from '../engine/types.js';
 import type { Clock } from '../orchestration/clock.js';
 import { PausableClock, SystemClock } from '../orchestration/clock.js';
 import {
@@ -226,6 +226,7 @@ async function buildResults(
 
   const finalRoles: Record<SeatIndex, RoleId> = {};
   const seats: Record<SeatIndex, SeatResult> = {};
+  const finalVotes: Record<SeatIndex, SeatIndex | null> = {};
 
   for (let seat = 0; seat < state.seatCount; seat++) {
     const finalRole = finalRoleOf(state, seat);
@@ -233,6 +234,7 @@ async function buildResults(
 
     const vote = votes.get(seat);
     const targetSeat = vote?.target ?? null;
+    finalVotes[seat] = targetSeat;
     seats[seat] = {
       finalRole,
       originalRole: state.originalRole[seat]!,
@@ -245,7 +247,22 @@ async function buildResults(
     };
   }
 
-  return { outcome: day.result.outcome, finalRoles, seats };
+  const winningTeams = Object.entries(day.result.teamsWon)
+    .filter(([, won]) => won)
+    .map(([team]) => team as Team);
+
+  return {
+    outcome: day.result.outcome,
+    eliminatedSeats: [...day.result.eliminated],
+    winningTeams,
+    finalVotes,
+    discardedVotes: Object.fromEntries(
+      day.result.discarded.map(({ voter, reason }) => [voter, reason]),
+    ),
+    finalTally: { ...day.result.tally },
+    finalRoles,
+    seats,
+  };
 }
 
 /**

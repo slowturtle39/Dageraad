@@ -1,9 +1,9 @@
 import type {
   CardId, GameConfig, PrivateInfo, RoleId, Choice, NightEvent, NightState,
-  DecisionRequest,
+  DecisionRequest, Team,
 } from '../engine/types.js';
 import type { Timeline } from '../engine/timeline.js';
-import type { VoteOutcome } from '../engine/dayphase.js';
+import type { DiscardReason, VoteOutcome } from '../engine/dayphase.js';
 import type { RoundResult } from '../app/session.js';
 
 /**
@@ -133,6 +133,12 @@ export interface RoomDoc {
    */
   finalRoles: Record<number, RoleId> | null;
   outcome: string | null;
+  /** Full public result, added after the first real playtest exposed raw `tie`. */
+  eliminatedSeats?: number[];
+  winningTeams?: Team[];
+  finalVotes?: Record<number, number | null>;
+  discardedVotes?: Partial<Record<number, DiscardReason>>;
+  finalTally?: Record<number, number>;
   /**
    * SLOT -> the role lying face up there right now (§12).
    *

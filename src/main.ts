@@ -22,6 +22,7 @@ import {
 } from './ui/prompt.js';
 import { describeReveal, renderSheet } from './ui/sheet.js';
 import { renderVoting } from './ui/voting.js';
+import { renderResults } from './ui/results.js';
 import { readRoomOnce, runGame, type BotSeats } from './app/refereeRunner.js';
 import { randomBot } from './engine/bot.js';
 import { detectLang, roleName, setLang, t, type Lang } from './ui/i18n.js';
@@ -1414,47 +1415,27 @@ function votePanel(ownSeat: SeatIndex): HTMLElement {
 /**
  * What the table sees at dawn.
  *
- * Built from the PUBLIC room document — `outcome` and `finalRoles`, the two
- * things `publishResults` makes public — rather than from the referee's
- * `DayResult`. That object has per-seat vote outcomes the room never
- * publishes, and reaching for it here would mean either inventing values or
- * reading something this device is not supposed to have. The per-player
- * record lives in the append-only results documents, which the stats screens
- * already aggregate from.
+ * Built only from the PUBLIC room document. Votes stay secret throughout the
+ * game and are published here once resolution is complete, together with the
+ * deaths and winning team. This panel has no scrim: at dawn the open cards are
+ * the main event, and the explanation belongs beside them rather than over
+ * them.
  */
 function resultSheet(ownSeat: SeatIndex): HTMLElement {
   const room = controller.current().room!;
-  const names = seatNames();
-
-  const body = document.createElement('div');
-
-  const headline = document.createElement('p');
-  headline.className = 'sheet__sub';
-  headline.textContent = room.outcome ?? '';
-  body.append(headline);
-
-  const list = document.createElement('div');
-  list.className = 'results__seats';
-  for (const [seatKey, role] of Object.entries(room.finalRoles ?? {})) {
-    const seat = Number(seatKey) as SeatIndex;
-    const row = document.createElement('p');
-    row.className = 'results__row';
-    if (seat === ownSeat) row.classList.add('results__row--own');
-    // Every card at dawn, which is the ONE moment roles become public.
-    row.textContent = `${names[seat] ?? seat}: ${roleName(local.lang, role)}`;
-    list.append(row);
-  }
-  body.append(list);
-
   const state = controller.current();
-  return renderSheet({
-    title: t(local.lang, 'results.title'),
-    variant: 'result',
-    body,
-    ...(state.room && canDeal(state.room, state.uid)
-      ? { actions: [{ label: t(local.lang, 'results.nextRound'), primary: true, onSelect: actions.onDeal }] }
-      : {}),
-    passiveScrim: true,
+  return renderResults({
+    lang: local.lang,
+    outcome: room.outcome ?? '',
+    finalRoles: room.finalRoles ?? {},
+    names: seatNames(),
+    ownSeat,
+    ...(room.eliminatedSeats ? { eliminatedSeats: room.eliminatedSeats } : {}),
+    ...(room.winningTeams ? { winningTeams: room.winningTeams } : {}),
+    ...(room.finalVotes ? { finalVotes: room.finalVotes } : {}),
+    ...(room.discardedVotes ? { discardedVotes: room.discardedVotes } : {}),
+    ...(room.finalTally ? { finalTally: room.finalTally } : {}),
+    ...(state.room && canDeal(state.room, state.uid) ? { onNextRound: actions.onDeal } : {}),
   });
 }
 
