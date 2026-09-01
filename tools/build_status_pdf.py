@@ -63,7 +63,7 @@ def header_footer(canvas, doc):
     canvas.drawString(20 * mm, A4[1] - 12 * mm, "DAGERAAD")
     canvas.setFont("Helvetica", 8.5)
     canvas.drawRightString(A4[0] - 20 * mm, A4[1] - 12 * mm,
-                           "Projectstatus · 31 augustus 2026 · live")
+                           "Projectstatus · 1 september 2026 · live")
     canvas.setStrokeColor(RULE)
     canvas.setLineWidth(0.5)
     canvas.line(20 * mm, A4[1] - 15 * mm, A4[0] - 20 * mm, A4[1] - 15 * mm)
@@ -226,7 +226,7 @@ story.append(Paragraph("Wat er nu in zit", H2))
 story.append(panel([
     ["Eigen rol", "Iedereen ziet zijn eigen kaart en zijn eigen nachtvragen op zijn eigen telefoon. Niemand anders ziet ze."],
     ["Nacht", "Vensters met een vaste lengte, onthullingen die pas vrijkomen wanneer ze aan de beurt zijn."],
-    ["Dag", "Een instelbare klok (standaard 15 minuten), vroeg stemmen bij meer dan de helft, een inklapbaar stemvak en daarna de uitslag met alle kaarten open."],
+    ["Dag", "Een instelbare klok (standaard 15 minuten), vroeg stemmen bij meer dan de helft en een inklapbaar stemvak. De einduitslag toont naast het bord alle stemmen, de telling, de gelynchte spelers, de winnaars en alle kaarten."],
     ["Stemmen", "Een stem op een speler is definitief. Het spel wacht op iedereen; bots stemmen pas zodra het stemvak opent en kiezen altijd willekeurig een andere speler."],
     ["Standen", "De stand van de avond zelf, én een eeuwige stand over alle officiële avonden heen."],
     ["Wie leidt", "Een los tafelapparaat, of de telefoon van een speler in een groep die elkaar vertrouwt."],
@@ -368,6 +368,7 @@ story.append(panel([
 story.append(Paragraph("Winvoorwaarden", H2))
 story.append(panel([
     ["Looier gelyncht", "De Looier wint <b>alleen</b>. Dorp én wolven verliezen — ook als er in dezelfde stemming een wolf omkwam, wat de Jager kan veroorzaken."],
+    ["Gelijkspel", "Iedereen met de hoogste eindtelling wordt gelyncht. De uitkomst hangt af van hun kaarten bij zonsopgang: alleen wolf of wolven gedood betekent dorpswinst; een combinatie van wolf en onschuldige betekent wolvenwinst."],
     ["Alle wolven in het midden", "De wolven kunnen niet winnen. Het dorp wint alleen als er niemand gelyncht wordt: lynch je een onschuldige, dan wint niemand."],
     ["Stemmen", "Verplicht en definitief. Zodra de klok om is en er niet is afgezien, wacht het spel tot iedereen een speler heeft gekozen - niemand wordt overgeslagen en een stem kan niet worden gewijzigd."],
     ["Niet stemmen", "De knop staat de hele tijd aan en telt op <b>elk moment</b>: zodra een meerderheid niet wil stemmen, stopt het overleg meteen. Het is een gelijktijdig handopsteken — wie zijn knop weer uitzet, draait het terug."],
@@ -401,7 +402,7 @@ story.append(Paragraph("De beveiligingsregels zijn echt getest", H2))
 story.append(Paragraph(
     "De regels zijn geschreven als <i>aanvallen</i>, niet als gelukkige paden: "
     "elke test is iets wat een van ons met de ontwikkelaarsconsole open zou "
-    "kunnen proberen. Op 31 augustus zijn <b>147 emulatorcontroles</b> geslaagd. "
+    "kunnen proberen. Op 1 september zijn <b>148 emulatorcontroles</b> geslaagd. "
     "Daaronder zitten aanvallen op het wijzigen van een definitieve stem, "
     "stemmen voor een mens via de botroute, een verkeerde noodcode en het "
     "overschrijven van een al uitgebrachte stem. Geen van die aanvallen kwam "
@@ -465,7 +466,6 @@ story.append(panel([
 
 story.append(Paragraph("Nog open", H2))
 story.append(panel([
-    ["Gelijkspel → wolven winnen", "Voorlopig zo. Uitspelen."],
     ["De 50%-drempel om af te zien", "Weegt nu zwaarder: het is de enige manier waarop het dorp een potje zonder wolven wint."],
     ["Curator en voorwerpen", "Alleen bouwen als de groep ze wil; de regels liggen nergens vast."],
 ], [56 * mm, 98 * mm]))
