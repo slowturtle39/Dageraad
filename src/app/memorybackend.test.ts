@@ -133,6 +133,36 @@ describe('lobby', () => {
     expect(players.find((p) => p.uid === 'u:Milan')!.displayName)
       .toBe('Milan (tablet kapot)');
   });
+
+  it('lets the controller remove a failed human device without deleting history', async () => {
+    const { tablet, roomId, phones } = await lobbyOfEight();
+    await tablet.removePlayer(roomId, phones[1]!.device.uid);
+
+    const room = await readRoomOnce(tablet, roomId);
+    expect(room.seating).not.toContain(phones[1]!.device.uid);
+    expect(room.members.find((member) => member.uid === phones[1]!.device.uid))
+      .toMatchObject({ leftAtRound: 0 });
+  });
+
+  it('never reuses a surviving bot id after removing another bot', async () => {
+    const world = new MemoryWorld(seededRandom(13));
+    const tablet = world.device('tablet');
+    const roomId = await tablet.createRoom({
+      displayName: 'Tafel', activeRoles: DEFAULT_ACTIVE_ROLES,
+      config: TWO_ROUND_CONFIG, playing: false, mode: 'practice',
+    });
+    await tablet.addBot(roomId);
+    await tablet.addBot(roomId);
+    let players: PlayerView[] = [];
+    tablet.watchPlayers(roomId, (next) => { players = next; });
+    const original = players.filter((player) => player.isBot).map((player) => player.uid);
+    await tablet.removeBot(roomId, original[0]!);
+    await tablet.addBot(roomId);
+
+    const ids = players.filter((player) => player.isBot).map((player) => player.uid);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain(original[1]);
+  });
 });
 
 describe('starting a game', () => {
@@ -193,6 +223,33 @@ describe('starting a game', () => {
     await expect(tablet.setSeating(roomId, ['u:Milan'])).rejects.toThrow(/frozen/);
     await expect(tablet.setActiveRoles(roomId, [], TWO_ROUND_CONFIG)).rejects.toThrow(/frozen/);
     await expect(tablet.startGame(roomId, 2)).rejects.toThrow(/already running/);
+  });
+
+  it('requires an explicit setup step between finished rounds', async () => {
+    const { tablet, roomId } = await lobbyOfEight();
+    await tablet.startGame(roomId, 1);
+    await tablet.refereeStore(roomId).setPhase('results');
+    await expect(tablet.startGame(roomId, 2)).rejects.toThrow(/already running/);
+
+    await tablet.prepareNextRound(roomId);
+    await tablet.startGame(roomId, 2);
+    await expect(readRoomOnce(tablet, roomId)).resolves.toMatchObject({
+      phase: 'night', round: 2,
+    });
+  });
+
+  it('refuses two seated devices claiming the same friend profile', async () => {
+    const world = new MemoryWorld(seededRandom(17));
+    const tablet = world.device('tablet');
+    const roomId = await tablet.createRoom({
+      displayName: 'Tafel', activeRoles: DEFAULT_ACTIVE_ROLES,
+      config: TWO_ROUND_CONFIG, playing: false,
+    });
+    const friend = { friendId: 'friend-milan', friendName: 'Milan' };
+    await world.device('phone-a').joinRoom(roomId, 'Milan', friend);
+    await world.device('phone-b').joinRoom(roomId, 'Milan reserve', friend);
+
+    await expect(tablet.startGame(roomId, 1)).rejects.toThrow(/ander profiel/);
   });
 
   it('lets a latecomer join mid-round and seats them in the NEXT one', async () => {
@@ -259,6 +316,19 @@ describe('night submissions', () => {
     // Seat 0 is the first phone — the tablet is the referee and takes no seat.
     expect([...subs.keys()]).toEqual([0]);
   });
+
+  it('restores the submitted decision keys after a refresh', async () => {
+    const { tablet, roomId, phones } = await lobbyOfEight();
+    await tablet.startGame(roomId, 9);
+    const player = phones[0]!.device;
+    await player.submit(roomId, 0, {
+      first: { kind: 'seat', seat: 3 }, second: { kind: 'none' },
+    });
+
+    await expect(player.submittedKeys(roomId, 1, 0))
+      .resolves.toEqual(['first', 'second']);
+    await expect(player.submittedKeys(roomId, 2, 0)).resolves.toEqual([]);
+  });
 });
 
 describe('voting', () => {
@@ -323,6 +393,17 @@ describe('voting', () => {
     await phones[0]!.device.vote(roomId, 'u:Sanne', false);
     await expect(phones[0]!.device.vote(roomId, 'u:Joris', false))
       .rejects.toThrow(/final/);
+  });
+
+  it('restores this device’s final vote after a refresh', async () => {
+    const { tablet, roomId, phones } = await lobbyOfEight();
+    await tablet.startGame(roomId, 3);
+    await tablet.refereeStore(roomId).setPhase('voting');
+    await phones[0]!.device.vote(roomId, 'u:Sanne', false);
+
+    await expect(phones[0]!.device.ownVote(roomId)).resolves.toEqual({
+      round: 1, target: 'u:Sanne', abstain: false, readyToVote: false,
+    });
   });
 
   it('lets the referee replace a missing vote, but never an existing one', async () => {

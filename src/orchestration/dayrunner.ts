@@ -43,7 +43,7 @@ export const DEFAULT_DAY_CONFIG: DayConfig = {
   suspenseExtensionMs: 2 * 60_000,
   votingMode: 'in-app',
   voteWaitTimeoutMs: 10 * 60_000,
-  abstainPollMs: 1_000,
+  abstainPollMs: 3_000,
   seatCount: 0,
 };
 
@@ -102,6 +102,8 @@ export interface DayRunnerOptions {
    * random thing in the whole system.
    */
   random?: () => number;
+  /** Resume an already-open ballot without replaying the discussion. */
+  resumeAt?: 'day' | 'voting';
 }
 
 export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
@@ -117,10 +119,13 @@ export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
   let extended = false;
   let endedByAbstain = false;
 
-  await store.setPhase('day');
-  await store.setDiscussionDeadline?.(
-    config.discussionEnabled ? clock.now() + config.discussionMs : null,
-  );
+  const resumeAt = opts.resumeAt ?? 'day';
+  if (resumeAt === 'day') {
+    await store.setPhase('day');
+    await store.setDiscussionDeadline?.(
+      config.discussionEnabled ? clock.now() + config.discussionMs : null,
+    );
+  }
 
   // ---- discussion -------------------------------------------------------
   //
@@ -131,7 +136,7 @@ export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
   // This deliberately makes abstaining strong: a table that works out early
   // that there is nothing to gain can simply stop, rather than sitting out a
   // timer they have all already given up on.
-  if (config.discussionEnabled) {
+  if (resumeAt === 'day' && config.discussionEnabled) {
     let ending = await watchDiscussion(
       store, clock, config, config.discussionMs, hooks,
     );
@@ -167,7 +172,6 @@ export async function runDay(opts: DayRunnerOptions): Promise<DayRunResult> {
 
   const votes = [...(await store.readVotes()).values()];
   const result = resolveDay(opts.state, votes, opts.dayOptions);
-  await store.setPhase('results');
 
   return {
     result,

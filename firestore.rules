@@ -78,6 +78,9 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/rooms/$(roomId)/players/$(playerUid))
         .data.isBot == true;
     }
+    function isBotUid(roomId, playerUid) {
+      return playerUid.matches('^bot-' + roomId + '-[0-9]+$');
+    }
     function ordinaryVoteFields() {
       return request.resource.data.keys().hasOnly(
         ['round', 'target', 'abstain', 'readyToVote', 'castAt']
@@ -102,21 +105,32 @@ service cloud.firestore {
       return inPhase(roomId, 'lobby')
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['seating'])
-        && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid()))
+        && existsAfter(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid()))
         && request.resource.data.seating.size() <= 12
         && request.resource.data.seating.toSet().size()
              == request.resource.data.seating.size()
-        && request.resource.data.seating.toSet()
-             .hasAll(resource.data.seating.toSet())
         && (
-          (request.resource.data.seating.size() == resource.data.seating.size()
+          (getAfter(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid()))
+               .data.leftAtRound == null
+            && request.resource.data.seating.size() == resource.data.seating.size()
+            && request.resource.data.seating.toSet()
+               .hasAll(resource.data.seating.toSet())
             && request.resource.data.seating.toSet().size()
                == resource.data.seating.toSet().size())
-          || (request.resource.data.seating.size() == resource.data.seating.size() + 1
+          || (getAfter(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid()))
+               .data.leftAtRound == null
+            && request.resource.data.seating.size() == resource.data.seating.size() + 1
             && request.resource.data.seating.toSet().size()
                == resource.data.seating.toSet().size() + 1
+            && request.resource.data.seating.toSet()
+               .hasAll(resource.data.seating.toSet())
             && request.resource.data.seating.toSet().hasAll([uid()])
             && !resource.data.seating.toSet().hasAny([uid()]))
+          || (request.resource.data.seating.size() == resource.data.seating.size() - 1
+            && resource.data.seating.toSet()
+               .hasAll(request.resource.data.seating.toSet())
+            && resource.data.seating.toSet().hasAny([uid()])
+            && !request.resource.data.seating.toSet().hasAny([uid()]))
         );
     }
     // Emergency recovery is a deliberate, trusted-group action. Firestore
@@ -163,7 +177,12 @@ service cloud.firestore {
       // recovery route is intentionally narrow and phrase-confirmed.
       allow update: if signedIn()
         && (
-          ((isHost(roomId) || isReferee(roomId) || memberArrangesLobbySeating(roomId))
+          ((isReferee(roomId)
+            || (isHost(roomId)
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+                     ['activeRoles', 'config', 'seating', 'pausedAt', 'discussionEndsAt']
+                   ))
+            || memberArrangesLobbySeating(roomId))
             && !changed('refereeUid')
             && !changed('hostUid')
         // Whether this evening counts is fixed when the room is made. A room
@@ -179,7 +198,8 @@ service cloud.firestore {
             || ((isHost(roomId) || isReferee(roomId)) && inPhase(roomId, 'lobby')))
         // One shared timer for the evening, chosen before the room exists.
         && !changed('discussionMs')
-        && (!changed('discussionEndsAt') || isReferee(roomId))
+        && (!changed('discussionEndsAt') || isReferee(roomId)
+            || (isHost(roomId) && changed('pausedAt')))
         // The practice shortcut is never accepted in an official room.
         && (!changed('practiceSkipDiscussion')
             || (isReferee(roomId) && (
@@ -199,7 +219,9 @@ service cloud.firestore {
           || memberClaimsEmergencyControl(roomId)
         );
 
-      allow delete: if isHost(roomId);
+      allow delete: if isHost(roomId)
+        && resource.data.phase == 'lobby'
+        && resource.data.currentRound == 0;
 
       // ------------------------------------------------------------ players
       // Public per-player info: display name, avatar, seat. Everyone can read
@@ -229,6 +251,7 @@ service cloud.firestore {
         allow create: if isReferee(roomId)
           && inPhase(roomId, 'lobby')
           && isPractice(roomId)
+          && isBotUid(roomId, playerUid)
           && request.resource.data.keys().hasOnly(
                ['displayName', 'avatar', 'joinedAt', 'isBot']
              )
@@ -258,6 +281,7 @@ service cloud.firestore {
         allow delete: if isReferee(roomId)
           && inPhase(roomId, 'lobby')
           && isPractice(roomId)
+          && isBotUid(roomId, playerUid)
           && isBotPlayer(roomId, playerUid);
       }
 
@@ -370,6 +394,7 @@ service cloud.firestore {
         // record. Same phase rules and the same no-self-vote as a person's.
         allow create: if isReferee(roomId)
           && isPractice(roomId)
+          && isBotUid(roomId, playerUid)
           && isBotPlayer(roomId, playerUid)
           && ordinaryVoteFields()
           && inPhase(roomId, 'voting')
@@ -377,6 +402,7 @@ service cloud.firestore {
 
         allow update: if isReferee(roomId)
           && isPractice(roomId)
+          && isBotUid(roomId, playerUid)
           && isBotPlayer(roomId, playerUid)
           && ordinaryVoteFields()
           && !currentVoteIsFinal(roomId)
@@ -442,6 +468,7 @@ service cloud.firestore {
         allow create: if isReferee(roomId)
           && isPractice(roomId)
           && inPhase(roomId, 'lobby')
+          && isBotUid(roomId, memberUid)
           && request.resource.data.keys().hasOnly(
                ['uid', 'joinedAtRound', 'leftAtRound', 'friendId', 'friendName']
              )
@@ -456,7 +483,7 @@ service cloud.firestore {
           && isBotPlayer(roomId, memberUid);
 
         allow create: if signedIn()
-          && (memberUid == uid() || isHost(roomId))
+          && (memberUid == uid() || isHost(roomId) || isReferee(roomId))
           && request.resource.data.keys().hasOnly(
                ['uid', 'joinedAtRound', 'leftAtRound', 'friendId', 'friendName']
              )
@@ -474,12 +501,14 @@ service cloud.firestore {
         // would erase rounds you actually played, and `joinedAtRound` must
         // never move at all — it is the seed.
         allow update: if signedIn()
-          && (memberUid == uid() || isHost(roomId))
+          && (memberUid == uid() || isHost(roomId) || isReferee(roomId))
           && request.resource.data.keys().hasOnly(
                ['uid', 'joinedAtRound', 'leftAtRound', 'friendId', 'friendName']
              )
           && request.resource.data.uid == resource.data.uid
           && request.resource.data.joinedAtRound == resource.data.joinedAtRound
+          && request.resource.data.get('friendId', '') == resource.data.get('friendId', '')
+          && request.resource.data.get('friendName', '') == resource.data.get('friendName', '')
           && (
                // going home
                (resource.data.leftAtRound == null
@@ -502,6 +531,7 @@ service cloud.firestore {
         allow delete: if isReferee(roomId)
           && inPhase(roomId, 'lobby')
           && isPractice(roomId)
+          && isBotUid(roomId, memberUid)
           && isBotPlayer(roomId, memberUid);
       }
 
@@ -636,6 +666,8 @@ service cloud.firestore {
         && request.resource.data.won is bool
         && request.resource.data.friendId is string
         && request.resource.data.friendId.size() > 0
+        && request.resource.data.round <= currentRound(request.resource.data.roomId)
+        && existsAfter(/databases/$(database)/documents/rooms/$(request.resource.data.roomId)/rounds/$(request.resource.data.round))
         // The id binds the row to its room, round and player, so recording the
         // same round twice is a collision rather than a second row — a referee
         // refreshing a tab cannot double-count a year.

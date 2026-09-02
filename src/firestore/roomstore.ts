@@ -8,7 +8,7 @@ import type {
   Choice, DecisionRequest, NightEvent, PrivateInfo, SeatIndex,
 } from '../engine/types.js';
 import type { DayStore } from '../orchestration/dayrunner.js';
-import type { RoomStore } from '../orchestration/store.js';
+import type { NightCheckpoint, RoomStore } from '../orchestration/store.js';
 import { paths, type RoomPhase } from './schema.js';
 import type { PublicNightView } from '../engine/publicview.js';
 
@@ -37,6 +37,27 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
 
   private room() {
     return doc(this.db, paths.room(this.roomId));
+  }
+
+  async readNightCheckpoint(): Promise<NightCheckpoint | null> {
+    const snap = await getDoc(doc(this.db, paths.engineState(this.roomId)));
+    const data = snap.data() as {
+      completedWindowIndex?: number;
+      nightAnswers?: NightCheckpoint['answers'];
+    } | undefined;
+    return typeof data?.completedWindowIndex === 'number'
+      ? {
+          completedWindowIndex: data.completedWindowIndex,
+          answers: Array.isArray(data.nightAnswers) ? data.nightAnswers : [],
+        }
+      : null;
+  }
+
+  async saveNightCheckpoint(checkpoint: NightCheckpoint): Promise<void> {
+    await setDoc(doc(this.db, paths.engineState(this.roomId)), {
+      completedWindowIndex: checkpoint.completedWindowIndex,
+      nightAnswers: checkpoint.answers,
+    }, { merge: true });
   }
 
   async setWindowIndex(windowIndex: number): Promise<void> {
@@ -87,16 +108,15 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
    * tell who may read this document, not when it should have been written. The
    * discipline lives in `referee.ts`.
    */
-  async releasePrivateInfo(seat: SeatIndex, info: PrivateInfo[]): Promise<void> {
+  async setPrivateInfo(seat: SeatIndex, info: PrivateInfo[]): Promise<void> {
     const uid = await this.uidForSeat(seat);
     if (!uid) return;
     const ref = doc(this.db, paths.private(this.roomId, uid));
-    const existing = (await getDoc(ref)).data() as { privateInfo?: PrivateInfo[] } | undefined;
     await setDoc(
       ref,
       {
-        privateInfo: [...(existing?.privateInfo ?? []), ...info],
-        revealedThrough: (existing?.privateInfo?.length ?? 0) + info.length,
+        privateInfo: info,
+        revealedThrough: info.length,
       },
       { merge: true },
     );
@@ -136,13 +156,8 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
     });
   }
 
-  async appendPublicEvents(events: NightEvent[]): Promise<void> {
-    if (events.length === 0) return;
-    const ref = this.room();
-    const existing = (await getDoc(ref)).data() as { publicEvents?: NightEvent[] } | undefined;
-    await updateDoc(ref, {
-      publicEvents: [...(existing?.publicEvents ?? []), ...events],
-    });
+  async setPublicEvents(events: NightEvent[]): Promise<void> {
+    await updateDoc(this.room(), { publicEvents: events });
   }
 
   /**
@@ -187,11 +202,20 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
     // The public counts, republished from what was just read. Counts only:
     // who abstained, who asked to vote, and who targeted whom all stay
     // referee-only until the results (§7).
-    await updateDoc(this.room(), {
-      abstainCount: [...out.values()].filter((v) => v.abstain).length,
-      earlyVoteCount: [...out.values()].filter((v) => v.readyToVote === true).length,
-      votesCast: [...out.values()].filter((v) => v.target !== null).length,
-    });
+    const counts: [number, number, number] = [
+      [...out.values()].filter((v) => v.abstain).length,
+      [...out.values()].filter((v) => v.readyToVote === true).length,
+      [...out.values()].filter((v) => v.target !== null).length,
+    ];
+    if (!this.publishedVoteCounts
+      || counts.some((count, index) => count !== this.publishedVoteCounts![index])) {
+      await updateDoc(this.room(), {
+        abstainCount: counts[0],
+        earlyVoteCount: counts[1],
+        votesCast: counts[2],
+      });
+      this.publishedVoteCounts = counts;
+    }
 
     return out;
   }
@@ -214,6 +238,7 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
   /* ---------------------------- seat lookup ---------------------------- */
 
   private seatCache: Map<string, SeatIndex> | null = null;
+  private publishedVoteCounts: [number, number, number] | null = null;
 
   /**
    * uid -> seat, from the room's seating list. Index IS the seat.

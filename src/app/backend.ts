@@ -271,6 +271,9 @@ export interface Backend {
    */
   startGame(roomId: string, seed: number): Promise<void>;
 
+  /** Return finished room to setup and seat the next round's roster. */
+  prepareNextRound(roomId: string): Promise<void>;
+
   /** Finished rounds, for the scoreboard and for the stats screens. */
   watchRounds(roomId: string, cb: (rounds: RoundRecord[]) => void): Unsubscribe;
 
@@ -280,6 +283,8 @@ export interface Backend {
 
   /** A player writing their own night choices for the current window. */
   submit(roomId: string, windowIndex: number, choices: Record<string, Choice>): Promise<void>;
+  /** This device's already-saved keys for one night window (refresh recovery). */
+  submittedKeys(roomId: string, round: number, windowIndex: number): Promise<string[]>;
 
   /**
    * A player's vote. `target` is a uid, or null for an abstain.
@@ -289,6 +294,10 @@ export interface Backend {
    * any moment, but nobody may lock in a target early.
    */
   vote(roomId: string, target: string | null, abstain: boolean): Promise<void>;
+  /** This device's current-round vote toggles/ballot (refresh recovery). */
+  ownVote(roomId: string): Promise<{
+    round: number; target: string | null; abstain: boolean; readyToVote: boolean;
+  } | null>;
 
   /** Phrase-confirmed referee fallback for one player whose device failed. */
   emergencyVote(
@@ -328,6 +337,12 @@ export interface Backend {
 
   /** Remove one, by uid. Lobby only, so no round is ever half-played. */
   removeBot(roomId: string, botUid: string): Promise<void>;
+
+  /** Host/referee: mark a human as departed; the current dealt round survives. */
+  removePlayer(roomId: string, playerUid: string): Promise<void>;
+
+  /** Referee-only authoritative bot seats, read coherently when a run starts. */
+  refereeBotSeats(roomId: string): Promise<SeatIndex[]>;
 
   /**
    * Cast a bot's day vote. Deliberately NOT "vote as any player".
@@ -370,6 +385,13 @@ export interface Backend {
    * permanently (§16).
    */
   publishResults(roomId: string, results: GameResults, persist: boolean): Promise<void>;
+
+  /** Atomically expose results and persist/reconcile the finished round. */
+  finalizeRound(
+    roomId: string,
+    results: GameResults,
+    record: RoundRecord | null,
+  ): Promise<void>;
 
   /**
    * Append the finished round to the evening's record.

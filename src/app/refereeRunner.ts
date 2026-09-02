@@ -88,9 +88,16 @@ export class RefereeError extends Error {}
 export function readRoomOnce(backend: Backend, roomId: string): Promise<RoomView> {
   return new Promise((resolve, reject) => {
     let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      off();
+      reject(new RefereeError(`room read timed out: ${roomId}`));
+    }, 10_000);
     const off = backend.watchRoom(roomId, (room) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timeout);
       // Unsubscribe on the next tick: a synchronous callback (memory backend)
       // would otherwise call this before `off` has been assigned.
       queueMicrotask(() => off());
@@ -145,10 +152,21 @@ export async function runGame(opts: RefereeRunnerOptions): Promise<GameRunResult
     config: room.config,
     store,
     clock,
+    setNightPhase: room.phase === 'night',
+    advanceToDay: room.phase !== 'voting',
     ...(opts.durations ? { durations: opts.durations } : {}),
     ...(opts.onWindowOpen ? { onWindowOpen: opts.onWindowOpen } : {}),
     ...(opts.bots ? { bots: { seats: opts.bots.seats, bot: opts.bots.bot } } : {}),
   });
+
+  const resumingDay = room.phase === 'day';
+  const remainingDiscussionMs = resumingDay && room.discussionEndsAt != null
+    ? Math.max(0, room.discussionEndsAt - (room.pausedAt ?? clock.now()))
+    : (room.discussionMs ?? DEFAULT_DAY_CONFIG.discussionMs);
+  // A crash may have happened halfway through the bot loop. Retrying is safe:
+  // named votes are create-only, and castBotVotes deliberately absorbs the
+  // refusal for any bot whose final vote already exists.
+  if (room.phase === 'voting') await castBotVotes(opts, room);
 
   const day = await runDay({
     state: night.result.state,
@@ -161,9 +179,15 @@ export async function runGame(opts: RefereeRunnerOptions): Promise<GameRunResult
       // anywhere else is how two of the first three tappers end an eight-player
       // vote.
       seatCount: room.seating.length,
-      discussionMs: room.discussionMs ?? DEFAULT_DAY_CONFIG.discussionMs,
+      discussionMs: remainingDiscussionMs,
       ...opts.dayConfig,
+      // An extension that is already visible must never be rolled a second time
+      // after a refresh. If none fired yet, the original rule still applies.
+      ...(resumingDay && room.discussionExtendedByMs > 0
+        ? { suspenseExtension: false }
+        : {}),
     },
+    resumeAt: room.phase === 'voting' ? 'voting' : 'day',
     ...(opts.dayOptions ? { dayOptions: opts.dayOptions } : {}),
     ...(opts.dayHooks ? { hooks: opts.dayHooks } : {}),
     ...(opts.random ? { random: opts.random } : {}),
@@ -171,7 +195,6 @@ export async function runGame(opts: RefereeRunnerOptions): Promise<GameRunResult
 
   const results = await buildResults(night, day, store, room);
   const persist = mayRecordResults(mode);
-  await backend.publishResults(roomId, results, persist);
 
   // The evening's record. Only a live round goes in: a bot game would
   // permanently inflate somebody's scoreboard and every stats breakdown built
@@ -191,7 +214,8 @@ export async function runGame(opts: RefereeRunnerOptions): Promise<GameRunResult
       suspicionAccuracy: seat.suspicionAccuracy,
     })).filter((r) => r.uid !== ''),
   };
-  if (persist) await backend.recordRound(roomId, record);
+  await backend.finalizeRound(roomId, results, persist ? record : null);
+  opts.onPhase?.('results');
 
   return {
     night,
@@ -285,11 +309,13 @@ function withPhaseHook(
   let lastPhase: string = room.phase;
 
   return {
+    readNightCheckpoint: () => inner.readNightCheckpoint(),
+    saveNightCheckpoint: (checkpoint) => inner.saveNightCheckpoint(checkpoint),
     setWindowIndex: (i) => inner.setWindowIndex(i),
     readSubmissions: (i) => inner.readSubmissions(i),
-    releasePrivateInfo: (seat, info) => inner.releasePrivateInfo(seat, info),
+    setPrivateInfo: (seat, info) => inner.setPrivateInfo(seat, info),
     releaseDecisions: (seat, requests) => inner.releaseDecisions(seat, requests),
-    appendPublicEvents: (events) => inner.appendPublicEvents(events),
+    setPublicEvents: (events) => inner.setPublicEvents(events),
     publishPublicView: (view) => inner.publishPublicView(view),
     recordLatency: (samples) => inner.recordLatency(samples),
     readVotes: () => inner.readVotes(),

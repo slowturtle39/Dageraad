@@ -73,6 +73,7 @@ const kindFor = (room: RoomView, uid: string) =>
  */
 async function endRound(tablet: Backend, roomId: string): Promise<void> {
   await tablet.refereeStore(roomId).setPhase('results');
+  await tablet.prepareNextRound(roomId);
 }
 
 describe('a real room routes every device correctly', () => {

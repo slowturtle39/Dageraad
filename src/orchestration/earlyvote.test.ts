@@ -133,7 +133,7 @@ describe('a majority ends the discussion early', () => {
       }
     });
 
-    expect(store.phases).toEqual(['day', 'voting', 'results']);
+    expect(store.phases).toEqual(['day', 'voting']);
     // Ended by the ballot, NOT by everybody giving up.
     expect(result.endedByAbstain).toBe(false);
   });

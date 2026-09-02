@@ -11,7 +11,7 @@ import { PausableClock } from './clock.js';
 import { answerKey, probe, requestsForWindow } from './replay.js';
 import { publicView } from '../engine/publicview.js';
 import { resolvePrecommit } from '../engine/precommit.js';
-import type { RoomStore } from './store.js';
+import type { NightCheckpoint, RoomStore } from './store.js';
 
 /**
  * The referee loop — the thing that actually runs a night.
@@ -38,6 +38,10 @@ export interface RefereeOptions {
   store: RoomStore;
   clock: Clock;
   durations?: Durations;
+  /** Rebuild a finished night after a refresh without rewinding the public phase. */
+  setNightPhase?: boolean;
+  /** Leave an already-open ballot open after reconstructing the night state. */
+  advanceToDay?: boolean;
   /** Optional: called when a window opens, so a UI can prompt. */
   onWindowOpen?: (window: WindowInfo) => void;
   /**
@@ -80,15 +84,20 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
   const nightOrder = defaultNightOrder(activeRoles);
   const timeline = buildTimeline(activeRoles, config, durations);
 
-  const answers = new Map<string, Choice>();
+  const checkpoint = await store.readNightCheckpoint();
+  const answers = new Map<string, Choice>(
+    checkpoint?.answers.map(({ key, choice }) => [key, choice]) ?? [],
+  );
   const samples: LatencySample[] = [];
   const timedOut: DecisionRequest[] = [];
-  const releasedSoFar = new Map<SeatIndex, number>();
-  let publicEventsWritten = 0;
+  const releasedSoFar = releasedAtCheckpoint(
+    checkpoint, state, nightOrder, config, timeline, answers,
+  );
 
-  await store.setPhase('night');
+  if (opts.setNightPhase !== false) await store.setPhase('night');
 
   for (const phase of timeline.phases) {
+    if (phase.index <= (checkpoint?.completedWindowIndex ?? -1)) continue;
     const current = probe(state, nightOrder, config, answers);
     const requests = requestsForWindow(current, state, phase);
 
@@ -173,11 +182,7 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
       store, after.result, timeline, phase.revealAtMs, releasedSoFar, after.settledSeats,
     );
 
-    const events = after.result.events.slice(publicEventsWritten);
-    if (events.length > 0) {
-      await store.appendPublicEvents(events);
-      publicEventsWritten = after.result.events.length;
-    }
+    await store.setPublicEvents(after.result.events);
 
     // What the table can see, recomputed from the state this window resolved
     // to. AFTER the window, never on a tap: publishing when somebody answers
@@ -189,6 +194,7 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
     // look identical from outside — the same reason a window sleeps its full
     // length whether or not anyone is in it.
     await store.publishPublicView(publicView(after.result.state));
+    await store.saveNightCheckpoint(checkpointFor(phase.index, answers));
   }
 
   // Final pass with every answer in hand.
@@ -196,8 +202,7 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
   await releaseDueReveals(
     store, final.result, timeline, Number.POSITIVE_INFINITY, releasedSoFar, final.settledSeats,
   );
-  const tail = final.result.events.slice(publicEventsWritten);
-  if (tail.length > 0) await store.appendPublicEvents(tail);
+  await store.setPublicEvents(final.result.events);
   await store.publishPublicView(publicView(final.result.state));
 
   await store.recordLatency(samples);
@@ -209,7 +214,7 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
     if (opts.bots?.seats.has(seat)) continue;
     await store.releaseDecisions(seat, []);
   }
-  await store.setPhase('day');
+  if (opts.advanceToDay !== false) await store.setPhase('day');
 
   return { result: final.result, timeline, samples, timedOut };
 }
@@ -248,9 +253,40 @@ async function releaseDueReveals(
     const fresh: PrivateInfo[] = info.slice(already);
     if (fresh.length === 0) continue;
 
-    await store.releasePrivateInfo(seat, fresh);
+    await store.setPrivateInfo(seat, info);
     releasedSoFar.set(seat, info.length);
   }
+}
+
+function checkpointFor(completedWindowIndex: number, answers: Map<string, Choice>): NightCheckpoint {
+  return {
+    completedWindowIndex,
+    answers: [...answers].map(([key, choice]) => ({ key, choice })),
+  };
+}
+
+/** Reconstruct what was already released at the last durable window boundary. */
+function releasedAtCheckpoint(
+  checkpoint: NightCheckpoint | null,
+  state: NightState,
+  nightOrder: RoleId[],
+  config: GameConfig,
+  timeline: Timeline,
+  answers: Map<string, Choice>,
+): Map<SeatIndex, number> {
+  const released = new Map<SeatIndex, number>();
+  if (!checkpoint) return released;
+  const phase = timeline.phases.find((candidate) => candidate.index === checkpoint.completedWindowIndex);
+  if (!phase) return released;
+  const current = probe(state, nightOrder, config, answers);
+  for (const [seatKey, info] of Object.entries(current.result.privateInfo)) {
+    const seat = Number(seatKey) as SeatIndex;
+    if (!current.settledSeats.has(seat)) continue;
+    const dealt = current.result.state.originalRole[seat];
+    const dueAt = dealt ? timeline.revealAtMs[dealt] : undefined;
+    if (dueAt === undefined || dueAt <= phase.revealAtMs) released.set(seat, info.length);
+  }
+  return released;
 }
 
 /**

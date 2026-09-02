@@ -1,5 +1,6 @@
 import {
-  collection, deleteField, doc, getDoc, getDocs, onSnapshot, setDoc, updateDoc, writeBatch,
+  collection, deleteField, doc, getDoc, getDocs, onSnapshot, runTransaction, setDoc,
+  updateDoc, writeBatch,
   type Firestore,
 } from 'firebase/firestore';
 import { cardsForRoles, deal } from '../engine/deal.js';
@@ -27,7 +28,8 @@ import type { HistoryRecord } from '../stats/alltime.js';
 import {
   engineStateFromDoc, engineStateToDoc, paths,
   type FriendDoc, type HistoryDoc,
-  type EngineStateDoc, type PlayerDoc, type PrivateDoc, type RoomDoc, type VoteDoc,
+  type EngineStateDoc, type PlayerDoc, type PrivateDoc, type RoomDoc, type RoundDoc,
+  type VoteDoc,
 } from './schema.js';
 
 /**
@@ -49,6 +51,7 @@ export class FirestoreBackend implements Backend {
   constructor(
     private readonly db: Firestore,
     readonly uid: string,
+    private readonly onListenerError: (error: unknown) => void = () => {},
   ) {}
 
   private roomRef(roomId: string) {
@@ -56,7 +59,7 @@ export class FirestoreBackend implements Backend {
   }
 
   private session(roomId: string): FirestoreSessionStore {
-    return new FirestoreSessionStore(this.db, roomId);
+    return new FirestoreSessionStore(this.db, roomId, this.onListenerError);
   }
 
   private async room(roomId: string): Promise<RoomDoc> {
@@ -172,39 +175,40 @@ export class FirestoreBackend implements Backend {
     displayName: string,
     friend?: FriendLabel,
   ): Promise<void> {
-    const room = await this.room(roomId);
-
-    // A referee who sat the game out cannot change their mind and take a seat:
-    // they have already seen the room from the one place every card is visible.
-    // Sitting down now would deal a card to somebody who can read them all.
-    const already = await getDoc(doc(this.db, paths.member(roomId, this.uid)));
-    if (room.refereeUid === this.uid && !already.exists()) {
-      throw new Error('the referee is not a player in this room');
-    }
-
-    await this.writePlayer(roomId, displayName);
-
-    if (already.exists()) {
-      // A rename, or somebody coming back after leaving. Coming back re-uses
-      // the original joinedAtRound and therefore the original seed — otherwise
-      // stepping out for a round would be a way to top your score up off the
-      // bottom of the table.
-      const member = already.data() as { leftAtRound?: number | null };
-      if (member.leftAtRound !== null && member.leftAtRound !== undefined) {
-        await this.session(roomId).rejoin(this.uid);
+    const roomRef = this.roomRef(roomId);
+    const memberRef = doc(this.db, paths.member(roomId, this.uid));
+    const playerRef = doc(this.db, paths.player(roomId, this.uid));
+    await runTransaction(this.db, async (tx) => {
+      const [roomSnap, memberSnap] = await Promise.all([
+        tx.get(roomRef), tx.get(memberRef),
+      ]);
+      if (!roomSnap.exists()) throw new Error(`no room ${roomId}`);
+      const room = roomSnap.data() as RoomDoc;
+      if (room.refereeUid === this.uid && !memberSnap.exists()) {
+        throw new Error('the referee is not a player in this room');
       }
-      return;
-    }
 
-    await this.session(roomId).join(this.uid, friendLabel(friend, displayName));
+      const player: PlayerDoc = { displayName, avatar: null, joinedAt: Date.now() };
+      tx.set(playerRef, player);
+      if (memberSnap.exists()) {
+        const member = memberSnap.data() as { leftAtRound?: number | null };
+        if (member.leftAtRound !== null && member.leftAtRound !== undefined) {
+          tx.update(memberRef, { leftAtRound: null });
+        }
+        return;
+      }
 
-    // In the lobby they sit down immediately; mid-round they wait. Seating is
-    // the room document's, and in the lobby present members may rearrange it.
-    if (room.phase === 'lobby') {
-      await updateDoc(this.roomRef(roomId), {
-        seating: [...room.seating, this.uid],
+      const label = friendLabel(friend, displayName);
+      tx.set(memberRef, {
+        uid: this.uid,
+        joinedAtRound: room.currentRound + 1,
+        leftAtRound: null,
+        ...label,
       });
-    }
+      if (room.phase === 'lobby' && !room.seating.includes(this.uid)) {
+        tx.update(roomRef, { seating: [...room.seating, this.uid] });
+      }
+    });
   }
 
   /**
@@ -260,11 +264,28 @@ export class FirestoreBackend implements Backend {
   }
 
   async setPaused(roomId: string, paused: boolean): Promise<void> {
-    const room = await this.room(roomId);
-    if (room.hostUid !== this.uid && room.refereeUid !== this.uid) {
-      throw new Error('host or referee only');
-    }
-    await updateDoc(this.roomRef(roomId), { pausedAt: paused ? Date.now() : null });
+    await runTransaction(this.db, async (tx) => {
+      const ref = this.roomRef(roomId);
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error(`no room ${roomId}`);
+      const room = snap.data() as RoomDoc;
+      if (room.hostUid !== this.uid && room.refereeUid !== this.uid) {
+        throw new Error('host or referee only');
+      }
+      const now = Date.now();
+      if (paused) {
+        if (room.pausedAt === null) tx.update(ref, { pausedAt: now });
+        return;
+      }
+      if (room.pausedAt === null) return;
+      const extension = now - room.pausedAt;
+      tx.update(ref, {
+        pausedAt: null,
+        discussionEndsAt: room.discussionEndsAt === null
+          ? null
+          : room.discussionEndsAt + extension,
+      });
+    });
   }
 
   /* ------------------------------- the deal ------------------------------ */
@@ -280,15 +301,14 @@ export class FirestoreBackend implements Backend {
   async startGame(roomId: string, seed: number): Promise<void> {
     const room = await this.room(roomId);
     if (room.refereeUid !== this.uid) throw new Error('referee only');
-    // A round may start from the lobby or from the results of the last one.
-    // Anything else means a round is already running.
-    if (room.phase !== 'lobby' && room.phase !== 'results') {
+    if (room.phase !== 'lobby') {
       throw new Error('a round is already running');
     }
 
     const nextRound = room.currentRound + 1;
     const members = await this.readMembers(roomId);
     const seating = seatingForNextRound(members, room.seating, nextRound);
+    assertUniqueFriendProfiles(members, seating);
 
     const tooSmall = canStartRound(seating.length);
     if (tooSmall) throw new Error(tooSmall);
@@ -344,6 +364,15 @@ export class FirestoreBackend implements Backend {
     await batch.commit();
   }
 
+  async prepareNextRound(roomId: string): Promise<void> {
+    const room = await this.room(roomId);
+    if (room.refereeUid !== this.uid) throw new Error('referee only');
+    if (room.phase !== 'results') throw new Error('round is not finished');
+    const members = await this.readMembers(roomId);
+    const seating = seatingForNextRound(members, room.seating, room.currentRound + 1);
+    await updateDoc(this.roomRef(roomId), { phase: 'lobby', seating });
+  }
+
   /* -------------------------------- reads -------------------------------- */
 
   /**
@@ -364,11 +393,15 @@ export class FirestoreBackend implements Backend {
       cb(room ? this.composeRoomView(roomId, room, members, rounds) : null);
     };
 
-    const stopRoom = onSnapshot(this.roomRef(roomId), (snap) => {
-      haveRoom = true;
-      room = snap.exists() ? (snap.data() as RoomDoc) : null;
-      emit();
-    });
+    const stopRoom = onSnapshot(
+      this.roomRef(roomId),
+      (snap) => {
+        haveRoom = true;
+        room = snap.exists() ? (snap.data() as RoomDoc) : null;
+        emit();
+      },
+      this.onListenerError,
+    );
     const session = this.session(roomId);
     const stopMembers = session.watchMembers((m) => { members = m; emit(); });
     const stopRounds = session.watchRounds((r) => { rounds = r; emit(); });
@@ -469,11 +502,16 @@ export class FirestoreBackend implements Backend {
         );
         emit();
       },
+      this.onListenerError,
     );
-    const stopRoom = onSnapshot(this.roomRef(roomId), (snap) => {
-      seating = (snap.data() as RoomDoc | undefined)?.seating ?? [];
-      emit();
-    });
+    const stopRoom = onSnapshot(
+      this.roomRef(roomId),
+      (snap) => {
+        seating = (snap.data() as RoomDoc | undefined)?.seating ?? [];
+        emit();
+      },
+      this.onListenerError,
+    );
     const stopMembers = this.session(roomId).watchMembers((m) => { members = m; emit(); });
 
     return () => { stopPlayers(); stopRoom(); stopMembers(); };
@@ -481,14 +519,18 @@ export class FirestoreBackend implements Backend {
 
   /** This device's own card and reveals. Never anybody else's. */
   watchPrivate(roomId: string, cb: (own: PrivateView) => void): Unsubscribe {
-    return onSnapshot(doc(this.db, paths.private(roomId, this.uid)), (snap) => {
-      const data = snap.data() as PrivateDoc | undefined;
-      cb({
-        originalRole: data?.originalRole ?? null,
-        privateInfo: data?.privateInfo ?? [],
-        pending: data?.pendingDecisions ?? [],
-      });
-    });
+    return onSnapshot(
+      doc(this.db, paths.private(roomId, this.uid)),
+      (snap) => {
+        const data = snap.data() as PrivateDoc | undefined;
+        cb({
+          originalRole: data?.originalRole ?? null,
+          privateInfo: data?.privateInfo ?? [],
+          pending: data?.pendingDecisions ?? [],
+        });
+      },
+      this.onListenerError,
+    );
   }
 
   watchRounds(roomId: string, cb: (rounds: RoundRecord[]) => void): Unsubscribe {
@@ -543,6 +585,15 @@ export class FirestoreBackend implements Backend {
     });
   }
 
+  async submittedKeys(roomId: string, round: number, windowIndex: number): Promise<string[]> {
+    const snap = await getDoc(doc(this.db, paths.submission(roomId, this.uid)));
+    const data = snap.data() as {
+      round?: number; windowIndex?: number; choices?: Record<string, Choice>;
+    } | undefined;
+    if (data?.round !== round || data.windowIndex !== windowIndex) return [];
+    return Object.keys(data.choices ?? {});
+  }
+
   /**
    * A vote, or an abstain.
    *
@@ -573,6 +624,20 @@ export class FirestoreBackend implements Backend {
       readyToVote: existing?.round === room.currentRound && existing.readyToVote === true,
       castAt: Date.now(),
     });
+  }
+
+  async ownVote(roomId: string): Promise<{
+    round: number; target: string | null; abstain: boolean; readyToVote: boolean;
+  } | null> {
+    const data = (await getDoc(doc(this.db, paths.vote(roomId, this.uid))))
+      .data() as Partial<VoteDoc> | undefined;
+    if (typeof data?.round !== 'number') return null;
+    return {
+      round: data.round,
+      target: data.target ?? null,
+      abstain: data.abstain === true,
+      readyToVote: data.readyToVote === true,
+    };
   }
 
   async emergencyVote(
@@ -657,9 +722,12 @@ export class FirestoreBackend implements Backend {
     if (room.seating.length >= 12) throw new Error('Maximaal 12 spelers.');
 
     const players = await getDocs(collection(this.db, paths.players(roomId)));
-    const bots = players.docs.filter((d) => (d.data() as PlayerDoc).isBot).length;
-    const uid = `bot-${roomId}-${bots + 1}`;
-    const displayName = BOT_NAMES[bots % BOT_NAMES.length] ?? `AI ${bots + 1}`;
+    const botDocs = players.docs.filter((d) => (d.data() as PlayerDoc).isBot);
+    const used = new Set(players.docs.map((entry) => entry.id));
+    let number = 1;
+    while (used.has(`bot-${roomId}-${number}`)) number += 1;
+    const uid = `bot-${roomId}-${number}`;
+    const displayName = BOT_NAMES[botDocs.length % BOT_NAMES.length] ?? `AI ${number}`;
 
     const batch = writeBatch(this.db);
     batch.set(doc(this.db, paths.player(roomId, uid)), {
@@ -698,6 +766,35 @@ export class FirestoreBackend implements Backend {
       seating: room.seating.filter((uid) => uid !== botUid),
     });
     await batch.commit();
+  }
+
+  async removePlayer(roomId: string, playerUid: string): Promise<void> {
+    await runTransaction(this.db, async (tx) => {
+      const roomRef = this.roomRef(roomId);
+      const memberRef = doc(this.db, paths.member(roomId, playerUid));
+      const [roomSnap, memberSnap] = await Promise.all([tx.get(roomRef), tx.get(memberRef)]);
+      if (!roomSnap.exists() || !memberSnap.exists()) throw new Error('player not found');
+      const room = roomSnap.data() as RoomDoc;
+      if (room.hostUid !== this.uid && room.refereeUid !== this.uid) {
+        throw new Error('host or referee only');
+      }
+      const player = await tx.get(doc(this.db, paths.player(roomId, playerUid)));
+      if ((player.data() as PlayerDoc | undefined)?.isBot) throw new Error('use removeBot');
+      tx.update(memberRef, { leftAtRound: room.currentRound });
+      if (room.phase === 'lobby') {
+        tx.update(roomRef, { seating: room.seating.filter((uid) => uid !== playerUid) });
+      }
+    });
+  }
+
+  async refereeBotSeats(roomId: string): Promise<SeatIndex[]> {
+    const room = await this.room(roomId);
+    if (room.refereeUid !== this.uid) throw new Error('referee only');
+    const players = await getDocs(collection(this.db, paths.players(roomId)));
+    const bots = new Set(
+      players.docs.filter((entry) => (entry.data() as PlayerDoc).isBot).map((entry) => entry.id),
+    );
+    return room.seating.flatMap((uid, seat) => bots.has(uid) ? [seat as SeatIndex] : []);
   }
 
   /** A bot's day vote. Never a human's — see Backend.voteAsBot. */
@@ -774,6 +871,71 @@ export class FirestoreBackend implements Backend {
     });
   }
 
+  async finalizeRound(
+    roomId: string,
+    results: GameResults,
+    record: RoundRecord | null,
+  ): Promise<void> {
+    const room = await this.room(roomId);
+    if (room.refereeUid !== this.uid) throw new Error('referee only');
+
+    const batch = writeBatch(this.db);
+    if (record) {
+      const roundRef = doc(this.db, paths.round(roomId, record.round));
+      if (!(await getDoc(roundRef)).exists()) {
+        const roundDoc: RoundDoc = {
+          round: record.round,
+          activeRoles: record.activeRoles,
+          seatCount: record.seatCount,
+          outcome: record.outcome,
+          results: record.results,
+          recordedAt: Date.now(),
+        };
+        batch.set(roundRef, roundDoc);
+      }
+
+      if ((room.mode ?? 'practice') === 'official') {
+        const members = await this.readMembers(roomId);
+        const byUid = new Map(members.map((member) => [member.uid, member]));
+        for (const line of record.results) {
+          const member = byUid.get(line.uid);
+          if (!member?.friendId) continue;
+          const historyRef = doc(
+            this.db,
+            paths.historyEntry(roomId, record.round, member.friendId),
+          );
+          if ((await getDoc(historyRef)).exists()) continue;
+          const historyDoc: HistoryDoc = {
+            roomId,
+            round: record.round,
+            friendId: member.friendId,
+            name: member.friendName ?? member.friendId,
+            seat: line.seat,
+            originalRole: line.originalRole,
+            finalRole: line.finalRole,
+            won: line.won,
+            voteOutcome: line.voteOutcome,
+            suspicionAccuracy: line.suspicionAccuracy,
+            recordedAt: Date.now(),
+          };
+          batch.set(historyRef, historyDoc);
+        }
+      }
+    }
+
+    batch.update(this.roomRef(roomId), {
+      phase: 'results',
+      finalRoles: results.finalRoles,
+      outcome: results.outcome,
+      eliminatedSeats: results.eliminatedSeats,
+      winningTeams: results.winningTeams,
+      finalVotes: results.finalVotes,
+      discardedVotes: results.discardedVotes,
+      finalTally: results.finalTally,
+    });
+    await batch.commit();
+  }
+
   /**
    * Append the finished round to the evening's record.
    *
@@ -845,22 +1007,28 @@ export class FirestoreBackend implements Backend {
 
   /** The all-time record. Aggregated on read; nothing here is a total. */
   watchHistory(cb: (records: HistoryRecord[]) => void): Unsubscribe {
-    return onSnapshot(collection(this.db, paths.history()), (snap) => {
-      cb(snap.docs.map((d) => d.data() as HistoryDoc));
-    });
+    return onSnapshot(
+      collection(this.db, paths.history()),
+      (snap) => cb(snap.docs.map((d) => d.data() as HistoryDoc)),
+      this.onListenerError,
+    );
   }
 
   watchFriends(cb: (friends: FriendProfile[]) => void): Unsubscribe {
-    return onSnapshot(collection(this.db, paths.friends()), (snap) => {
-      cb(snap.docs.map((d) => {
-        const data = d.data() as Partial<FriendDoc>;
-        return {
-          id: d.id,
-          displayName: data.displayName ?? d.id,
-          createdAt: data.createdAt ?? 0,
-        };
-      }));
-    });
+    return onSnapshot(
+      collection(this.db, paths.friends()),
+      (snap) => {
+        cb(snap.docs.map((d) => {
+          const data = d.data() as Partial<FriendDoc>;
+          return {
+            id: d.id,
+            displayName: data.displayName ?? d.id,
+            createdAt: data.createdAt ?? 0,
+          };
+        }));
+      },
+      this.onListenerError,
+    );
   }
 
   async createFriend(displayName: string): Promise<FriendProfile> {
@@ -879,6 +1047,17 @@ function validateRoleSelection(roles: RoleId[]): void {
   const special = roles.filter((role) => role !== 'dorpeling');
   if (new Set(special).size !== special.length) {
     throw new Error('only Villagers may appear more than once');
+  }
+}
+
+function assertUniqueFriendProfiles(members: SessionMember[], seating: string[]): void {
+  const byUid = new Map(members.map((member) => [member.uid, member]));
+  const seen = new Set<string>();
+  for (const uid of seating) {
+    const friendId = byUid.get(uid)?.friendId;
+    if (!friendId) continue;
+    if (seen.has(friendId)) throw new Error('Iedere speler moet een ander profiel kiezen.');
+    seen.add(friendId);
   }
 }
 

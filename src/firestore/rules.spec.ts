@@ -120,8 +120,10 @@ describe('phrase-confirmed emergency control', () => {
     }));
   });
 
-  it('keeps ordinary host phase changes working', async () => {
-    await assertSucceeds(updateDoc(doc(as(HOST), 'rooms', ROOM), { phase: 'voting' }));
+  it('keeps phase changes with the referee, not a separate host', async () => {
+    await assertSucceeds(updateDoc(doc(as(REF), 'rooms', ROOM), { phase: 'voting' }));
+    await seed();
+    await assertFails(updateDoc(doc(as(HOST), 'rooms', ROOM), { phase: 'voting' }));
   });
 });
 
@@ -154,6 +156,23 @@ describe('the shared discussion timer and practice shortcut', () => {
     await seed('night', 0, 1, 'practice');
     await assertFails(updateDoc(doc(as(HOST), 'rooms', ROOM), {
       activeRoles: ['weerwolf'],
+    }));
+  });
+
+  it('lets the host pause and resume while preserving a shifted deadline', async () => {
+    await seed('day', 0, 1, 'practice');
+    await assertSucceeds(updateDoc(doc(as(HOST), 'rooms', ROOM), { pausedAt: 1000 }));
+    await assertSucceeds(updateDoc(doc(as(HOST), 'rooms', ROOM), {
+      pausedAt: null,
+      discussionEndsAt: 999_000,
+    }));
+  });
+
+  it('does not let a player disguise a deadline rewrite as a pause', async () => {
+    await seed('day', 0, 1, 'practice');
+    await assertFails(updateDoc(doc(as(ALICE), 'rooms', ROOM), {
+      pausedAt: 1000,
+      discussionEndsAt: 999_000,
     }));
   });
 });
@@ -726,6 +745,30 @@ describe('going home, and coming back', () => {
       }),
     );
   });
+
+  it('lets the referee mark a failed device as departed', async () => {
+    await seed('day', 0, 4);
+    await assertSucceeds(updateDoc(doc(as(REF), 'rooms', ROOM, 'members', ALICE), {
+      leftAtRound: 4,
+    }));
+  });
+
+  it('does not let host or referee rewrite a player profile while removing them', async () => {
+    await seed('day', 0, 4);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'members', ALICE), {
+        uid: ALICE, joinedAtRound: 1, leftAtRound: null,
+        friendId: 'friend-alice', friendName: 'Alice',
+      });
+    });
+    for (const actor of [HOST, REF]) {
+      await assertFails(updateDoc(doc(as(actor), 'rooms', ROOM, 'members', ALICE), {
+        leftAtRound: 4,
+        friendId: 'friend-attacker',
+        friendName: 'Attacker',
+      }));
+    }
+  });
 });
 
 describe('round records are the scoreboard, so they are append-only', () => {
@@ -888,9 +931,9 @@ describe('whether an evening counts is decided once', () => {
     await assertFails(updateDoc(doc(as(HOST), 'rooms', ROOM), { mode: 'practice' }));
   });
 
-  it('still lets the phase move, which is the legitimate case', async () => {
+  it('still lets the referee move the phase, which is the legitimate case', async () => {
     await seed('day', 0, 4, 'official');
-    await assertSucceeds(updateDoc(doc(as(HOST), 'rooms', ROOM), { phase: 'voting' }));
+    await assertSucceeds(updateDoc(doc(as(REF), 'rooms', ROOM), { phase: 'voting' }));
   });
 });
 
@@ -959,20 +1002,29 @@ describe('the all-time record cannot be forged', () => {
   });
   const id = (roomId = ROOM, round = 4, friendId = 'f:milan') =>
     `${roomId}_${round}_${friendId}`;
+  const seedRound = async () => env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'rooms', ROOM, 'rounds', '4'), {
+      round: 4, activeRoles: ['ziener'], seatCount: 2,
+      outcome: 'eliminated', results: [], recordedAt: 1,
+    });
+  });
 
   it('the referee of an official evening can record it', async () => {
     await seed('results', 0, 4, 'official');
+    await seedRound();
     await assertSucceeds(setDoc(doc(as(REF), 'history', id()), entry()));
   });
 
   it('a player cannot write their own history row', async () => {
     // This is a player writing their own all-time scoreboard.
     await seed('results', 0, 4, 'official');
+    await seedRound();
     await assertFails(setDoc(doc(as(ALICE), 'history', id()), entry()));
   });
 
   it('not even the host can', async () => {
     await seed('results', 0, 4, 'official');
+    await seedRound();
     await assertFails(setDoc(doc(as(HOST), 'history', id()), entry()));
   });
 
@@ -980,6 +1032,7 @@ describe('the all-time record cannot be forged', () => {
     // The whole point of the mode. Testing must never touch real history, and
     // this is checked against the room rather than trusted from the write.
     await seed('results', 0, 4, 'practice');
+    await seedRound();
     await assertFails(setDoc(doc(as(REF), 'history', id()), entry()));
   });
 
@@ -987,6 +1040,7 @@ describe('the all-time record cannot be forged', () => {
     // Create-only stops a row being overwritten; binding the id is what stops
     // the same round being counted twice under another name.
     await seed('results', 0, 4, 'official');
+    await seedRound();
     await assertFails(setDoc(doc(as(REF), 'history', 'anything'), entry()));
     await assertFails(setDoc(doc(as(REF), 'history', id(ROOM, 9)), entry()));
     await assertFails(
@@ -996,6 +1050,7 @@ describe('the all-time record cannot be forged', () => {
 
   it('refuses a smuggled points field', async () => {
     await seed('results', 0, 4, 'official');
+    await seedRound();
     await assertFails(
       setDoc(doc(as(REF), 'history', id()), entry({ points: 9999 })),
     );
@@ -1003,9 +1058,15 @@ describe('the all-time record cannot be forged', () => {
 
   it('refuses a row with no friend to belong to', async () => {
     await seed('results', 0, 4, 'official');
+    await seedRound();
     await assertFails(
       setDoc(doc(as(REF), 'history', `${ROOM}_4_`), entry({ friendId: '' })),
     );
+  });
+
+  it('refuses a history row when no matching finished round exists', async () => {
+    await seed('results', 0, 4, 'official');
+    await assertFails(setDoc(doc(as(REF), 'history', id()), entry()));
   });
 
   it('is immutable once written, by anybody', async () => {

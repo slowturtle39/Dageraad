@@ -8,7 +8,7 @@ export interface ResultsView {
   outcome: string;
   finalRoles: Record<SeatIndex, RoleId>;
   names: Record<SeatIndex, string>;
-  ownSeat: SeatIndex;
+  ownSeat: SeatIndex | null;
   eliminatedSeats?: SeatIndex[];
   winningTeams?: Team[];
   finalVotes?: Record<SeatIndex, SeatIndex | null>;

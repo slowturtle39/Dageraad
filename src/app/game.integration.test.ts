@@ -95,6 +95,34 @@ const FAST_DAY = {
 };
 
 describe('a whole evening', () => {
+  it('resumes an open ballot without exposing a phase rewind', async () => {
+    const world = new MemoryWorld(seeded(31));
+    const tablet = world.device('tablet');
+    const roomId = await tablet.createRoom({
+      displayName: 'Tafel', playing: false,
+      activeRoles: Array<RoleId>(5).fill('dorpeling'),
+      config: TWO_ROUND_CONFIG,
+    });
+    const phones = [world.device('phone-a'), world.device('phone-b')];
+    await phones[0]!.joinRoom(roomId, 'A');
+    await phones[1]!.joinRoom(roomId, 'B');
+    await tablet.startGame(roomId, 17);
+    await tablet.refereeStore(roomId).setPhase('voting');
+    await phones[0]!.vote(roomId, phones[1]!.uid, false);
+    await phones[1]!.vote(roomId, phones[0]!.uid, false);
+
+    const phases: string[] = [];
+    const clock = new FakeClock();
+    await play(clock, runGame({
+      backend: tablet, roomId, clock,
+      dayConfig: FAST_DAY,
+      onPhase: (phase) => phases.push(phase),
+    }));
+
+    expect(phases).toEqual(['voting', 'results']);
+    await expect(readRoomOnce(tablet, roomId)).resolves.toMatchObject({ phase: 'results' });
+  });
+
   it('plays a two-round night and a vote from lobby to results', async () => {
     const table = await seatTable(TWO_ROUND_CONFIG);
     await table.tablet.startGame(table.roomId, 20260826);
@@ -282,6 +310,7 @@ describe('an evening of several rounds', () => {
     const clock = new FakeClock();
 
     for (let round = 1; round <= 3; round++) {
+      if (round > 1) await table.tablet.prepareNextRound(table.roomId);
       await table.tablet.startGame(table.roomId, 100 + round);
       await play(clock, runGame({
         backend: table.tablet,
@@ -306,6 +335,7 @@ describe('an evening of several rounds', () => {
     const clock = new FakeClock();
 
     for (let round = 1; round <= 2; round++) {
+      if (round > 1) await table.tablet.prepareNextRound(table.roomId);
       await table.tablet.startGame(table.roomId, 200 + round);
       await play(clock, runGame({
         backend: table.tablet,
@@ -335,6 +365,7 @@ describe('an evening of several rounds', () => {
 
     // They sit down for round 3, and only then.
     expect(after.seating).not.toContain('u:Laat');
+    await table.tablet.prepareNextRound(table.roomId);
     await table.tablet.startGame(table.roomId, 999);
     const playing = await readRoomOnce(table.phones[0]!, table.roomId);
     expect(playing.seating).toContain('u:Laat');
@@ -359,6 +390,7 @@ describe('an evening of several rounds', () => {
 
     // The next round simply has one fewer chair, and the ring closes up — a
     // hole in the seating is a hole in the Dorpsgek's rotation.
+    await table.tablet.prepareNextRound(table.roomId);
     await table.tablet.startGame(table.roomId, 2);
     const room = await readRoomOnce(table.phones[0]!, table.roomId);
     expect(room.seating).not.toContain(table.phones[3]!.uid);

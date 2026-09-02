@@ -23,6 +23,7 @@ import {
 import { describeReveal, renderSheet } from './ui/sheet.js';
 import { renderVoting } from './ui/voting.js';
 import { renderResults } from './ui/results.js';
+import { aggregate as aggregatePlayerHistory, renderStats } from './ui/stats.js';
 import { readRoomOnce, runGame, type BotSeats } from './app/refereeRunner.js';
 import { randomBot } from './engine/bot.js';
 import { detectLang, roleName, setLang, t, type Lang } from './ui/i18n.js';
@@ -30,11 +31,12 @@ import {
   DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG, TWO_ROUND_CONFIG,
 } from './engine/presets.js';
 import { mayArrangeSeats, reorderForSwap } from './app/seating.js';
-import { canDeal } from './app/shell.js';
+import { canPrepareNextRound } from './app/shell.js';
 import {
   MAX_DISCUSSION_MS, MIN_DISCUSSION_MS, type Backend, type RoomMode,
 } from './app/backend.js';
 import type { Choice, ResolutionMode, RoleId, SeatIndex } from './engine/types.js';
+import { PausableClock, SystemClock } from './orchestration/clock.js';
 
 /**
  * The app.
@@ -87,6 +89,8 @@ interface Local {
   privateInfoRound: number | null;
   /** True once this device has run the round it is refereeing. */
   refereeRunning: boolean;
+  /** Prevent a failed recovery from retrying on every live snapshot. */
+  resumeAttemptedRound: number | null;
   /** Which human this device is, across evenings. Null until picked. */
   friend: FriendProfile | null;
   friends: FriendProfile[];
@@ -101,6 +105,11 @@ interface Local {
   /** Answers submitted locally in the currently open night window. */
   submittedDecisionKeys: string[];
   decisionWindow: string | null;
+  statsSeat: SeatIndex | null;
+  interactionContext: string | null;
+  decisionSyncMarker: string | null;
+  decisionSyncLoading: boolean;
+  voteSyncMarker: string | null;
 }
 
 const local: Local = {
@@ -130,6 +139,7 @@ const local: Local = {
   acknowledgedPrivateInfo: 0,
   privateInfoRound: null,
   refereeRunning: false,
+  resumeAttemptedRound: null,
   friend: null,
   friends: [],
   friendTyped: '',
@@ -143,6 +153,11 @@ const local: Local = {
   showProfiles: false,
   submittedDecisionKeys: [],
   decisionWindow: null,
+  statsSeat: null,
+  interactionContext: null,
+  decisionSyncMarker: null,
+  decisionSyncLoading: false,
+  voteSyncMarker: null,
 };
 
 const NAME_KEY = 'dageraad.name';
@@ -239,7 +254,21 @@ async function makeBackend(): Promise<Backend> {
     return demo.me;
   }
   const connection = await connect(firebaseConfig);
-  return new FirestoreBackend(connection.db, connection.uid);
+  return new FirestoreBackend(connection.db, connection.uid, reportListenerError);
+}
+
+function firebaseFailure(error: unknown): string {
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? String(error.code)
+    : '';
+  return code === 'permission-denied' || code === 'firestore/permission-denied'
+    ? t(local.lang, 'firebase.permissionDenied')
+    : String(error);
+}
+
+function reportListenerError(error: unknown): void {
+  local.error = firebaseFailure(error);
+  render();
 }
 
 async function start(): Promise<void> {
@@ -255,7 +284,12 @@ async function start(): Promise<void> {
   }
 
   controller = new AppController(backend);
-  controller.onChange(() => render());
+  controller.onChange((state) => {
+    syncInteractionContext(state);
+    void syncPersistedActions();
+    render();
+    void maybeResumeReferee();
+  });
   window.setInterval(refreshDiscussionTimer, 250);
 
   // The group, rather than one evening: both span every room, so both are
@@ -281,6 +315,57 @@ async function start(): Promise<void> {
   render();
 }
 
+async function syncPersistedActions(): Promise<void> {
+  const state = controller.current();
+  const room = state.room;
+  if (!state.roomId || !room) return;
+
+  if (room.phase === 'night') {
+    const marker = `${state.roomId}:${room.round}:${room.nightWindowIndex}`;
+    if (local.decisionSyncMarker !== marker) {
+      local.decisionSyncMarker = marker;
+      local.decisionSyncLoading = true;
+      try {
+        const keys = await backend.submittedKeys(
+          state.roomId,
+          room.round,
+          room.nightWindowIndex,
+        );
+        if (local.decisionSyncMarker === marker) local.submittedDecisionKeys = keys;
+      } catch (error) {
+        if (local.decisionSyncMarker === marker) local.decisionSyncMarker = null;
+        reportListenerError(error);
+      } finally {
+        if (local.decisionSyncMarker === marker) local.decisionSyncLoading = false;
+        render();
+      }
+    }
+  }
+
+  if (room.phase === 'day' || room.phase === 'voting') {
+    const marker = `${state.roomId}:${room.round}`;
+    if (local.voteSyncMarker !== marker) {
+      local.voteSyncMarker = marker;
+      try {
+        const saved = await backend.ownVote(state.roomId);
+        if (local.voteSyncMarker !== marker || saved?.round !== room.round) return;
+        local.abstaining = saved.abstain;
+        local.readyToVote = saved.readyToVote;
+        if (saved.target !== null) {
+          const seat = room.seating.indexOf(saved.target);
+          local.voteTarget = seat < 0 ? null : seat as SeatIndex;
+          local.finalVoteRound = room.round;
+        }
+      } catch (error) {
+        if (local.voteSyncMarker === marker) local.voteSyncMarker = null;
+        reportListenerError(error);
+      } finally {
+        render();
+      }
+    }
+  }
+}
+
 function fatal(message: string): HTMLElement {
   const el = document.createElement('div');
   el.className = 'join';
@@ -303,12 +388,8 @@ async function attempt(fn: () => Promise<void>, onFail?: string): Promise<boolea
     await fn();
     return true;
   } catch (err) {
-    const code = typeof err === 'object' && err !== null && 'code' in err
-      ? String(err.code)
-      : '';
-    local.error = code === 'permission-denied' || code === 'firestore/permission-denied'
-      ? t(local.lang, 'firebase.permissionDenied')
-      : onFail ?? String(err);
+    const mapped = firebaseFailure(err);
+    local.error = mapped === String(err) && onFail ? onFail : mapped;
     return false;
   } finally {
     local.busy = false;
@@ -414,39 +495,24 @@ const actions: AppActions = {
     // A fresh seed per round, so two rounds of one evening are not the same
     // deal. The engine's shuffle is seeded so a round stays replayable.
     const dealSeed = seedFromUrl();
-    const dealt = await attempt(() => backend.startGame(roomId, dealSeed));
-    if (!dealt) return;
-
     local.refereeRunning = true;
     render();
     try {
-      // Everything after this — windows, reveals, the vote, publishing the
-      // result and recording the round — is the existing referee path. This
-      // file does not reimplement any of it; it presses start and follows
-      // along through onPhase so the tablet redraws as the night moves.
-      const room = await readRoomOnce(backend, roomId);
-      const bots = demo
-        ? botSeatsFor(demo, room.seating, dealSeed ^ 0x51f15e)
-        : botSeatsForPlayers(room, controller.current().players, dealSeed ^ 0x51f15e);
-      const durations = fastDurations();
-      const dayConfig = fastDayConfig();
-      await runGame({
-        backend,
-        roomId,
-        onPhase: () => render(),
-        onWindowOpen: () => render(),
-        ...(durations ? { durations } : {}),
-        ...(dayConfig ? { dayConfig } : {}),
-        // Demo bots have their own simulated devices. Real practice bots have
-        // no login, so the referee receives only the narrow bot-seat capability.
-        ...(bots ? { bots } : {}),
-      });
+      const dealt = await attempt(() => backend.startGame(roomId, dealSeed));
+      if (!dealt) return;
+      await runRefereeRound(roomId, dealSeed);
     } catch (err) {
       local.error = String(err);
     } finally {
       local.refereeRunning = false;
       render();
     }
+  },
+
+  async onPrepareNextRound() {
+    const roomId = controller.current().roomId;
+    if (!roomId) return;
+    await attempt(() => backend.prepareNextRound(roomId));
   },
 
   /**
@@ -523,7 +589,10 @@ const actions: AppActions = {
     }
   },
 
-  onNameTap() { /* stats-on-tap arrives with the profile sheet */ },
+  onNameTap(seat) {
+    local.statsSeat = seat;
+    render();
+  },
 
   /**
    * Add one AI player to a practice lobby.
@@ -546,12 +615,72 @@ const actions: AppActions = {
     void attempt(() => backend.removeBot(roomId, uid));
   },
 
+  onRemovePlayer(uid: string) {
+    const state = controller.current();
+    if (!state.roomId) return;
+    const name = state.players.find((player) => player.uid === uid)?.displayName ?? uid;
+    const message = local.lang === 'nl'
+      ? `${name} uit deze sessie laten vertrekken?`
+      : `Mark ${name} as having left this session?`;
+    if (!window.confirm(message)) return;
+    void attempt(() => backend.removePlayer(state.roomId!, uid));
+  },
+
   onRolesChange(roles: RoleId[]) {
     const state = controller.current();
     if (!state.roomId || !state.room) return;
     void attempt(() => backend.setActiveRoles(state.roomId!, roles, state.room!.config));
   },
 };
+
+async function runRefereeRound(roomId: string, seed: number): Promise<void> {
+  const room = await readRoomOnce(backend, roomId);
+  const bots = demo
+    ? botSeatsFor(demo, room.seating, seed ^ 0x51f15e)
+    : botSeats(await backend.refereeBotSeats(roomId), seed ^ 0x51f15e);
+  const durations = fastDurations();
+  const dayConfig = fastDayConfig();
+  const clock = new PausableClock(new SystemClock());
+  const stopPause = backend.watchRoom(roomId, (liveRoom) => {
+    if (liveRoom?.pausedAt === null) clock.resume();
+    else if (liveRoom?.pausedAt != null) clock.pause();
+  });
+  try {
+    await runGame({
+      backend,
+      roomId,
+      clock,
+      onPhase: () => render(),
+      onWindowOpen: () => render(),
+      ...(durations ? { durations } : {}),
+      ...(dayConfig ? { dayConfig } : {}),
+      ...(bots ? { bots } : {}),
+    });
+  } finally {
+    stopPause();
+  }
+}
+
+/** A refreshed or replacement controller resumes the active round once. */
+async function maybeResumeReferee(): Promise<void> {
+  const state = controller.current();
+  const room = state.room;
+  if (!state.roomId || !room || !['night', 'day', 'voting'].includes(room.phase)
+    || room.refereeUid !== state.uid || local.refereeRunning
+    || local.resumeAttemptedRound === room.round) return;
+
+  local.resumeAttemptedRound = room.round;
+  local.refereeRunning = true;
+  render();
+  try {
+    await runRefereeRound(state.roomId, room.round ^ 0x4f1bbcdc);
+  } catch (err) {
+    local.error = String(err);
+  } finally {
+    local.refereeRunning = false;
+    render();
+  }
+}
 
 /** Return this browser to the start screen without removing it from the room. */
 function returnHome(): void {
@@ -586,16 +715,8 @@ function defaultName(mode: ControllerMode): string {
 }
 
 /** Real Firebase bots have no login; the referee uses the narrow bot methods. */
-function botSeatsForPlayers(
-  room: { seating: string[] },
-  players: Array<{ uid: string; isBot?: boolean }>,
-  seed: number,
-): BotSeats | undefined {
-  const bots = new Set(players.filter((player) => player.isBot).map((player) => player.uid));
-  const seats = new Set<SeatIndex>();
-  room.seating.forEach((uid, seat) => {
-    if (bots.has(uid)) seats.add(seat as SeatIndex);
-  });
+function botSeats(botSeatList: SeatIndex[], seed: number): BotSeats | undefined {
+  const seats = new Set(botSeatList);
   return seats.size === 0 ? undefined : { seats, bot: randomBot(seed) };
 }
 
@@ -607,6 +728,7 @@ function render(): void {
   app.replaceChildren();
 
   const state = controller.current();
+  syncInteractionContext(state);
   const screen = controller.screen();
   const pendingPrompt = firstPending();
 
@@ -711,8 +833,10 @@ function render(): void {
   }
 
   if (state.roomId) app.append(bottomBar(true));
+  if (local.error) app.append(inRoomError(local.error));
   if (local.showAllTime) app.append(allTimeSheet());
   if (local.showProfiles) app.append(profileSheet());
+  if (local.statsSeat !== null) app.append(playerStatsSheet(local.statsSeat));
 
   // Drawn OVER the table, never instead of it (§13.1): from across the room,
   // deciding and idly browsing have to look the same.
@@ -723,6 +847,43 @@ function render(): void {
   if (local.emergencyMenuOpen) app.append(emergencyMenu());
   if (local.emergencyVoteOpen) app.append(emergencyVoteSheet());
   if (local.recovering) app.append(recoverySheet());
+}
+
+function syncInteractionContext(state: ReturnType<AppController['current']>): void {
+  const context = state.roomId && state.room ? `${state.roomId}:${state.room.round}` : null;
+  if (context === local.interactionContext) return;
+  local.interactionContext = context;
+  local.pendingSwap = null;
+  local.picked = [];
+  local.pickedCenters = [];
+  local.voteTarget = null;
+  local.abstaining = false;
+  local.readyToVote = false;
+  local.votePanelOpen = false;
+  local.finalVoteRound = null;
+  local.acknowledgedPrivateInfo = 0;
+  local.privateInfoRound = state.room?.round ?? null;
+  local.submittedDecisionKeys = [];
+  local.decisionWindow = null;
+  local.decisionSyncMarker = null;
+  local.decisionSyncLoading = false;
+  local.voteSyncMarker = null;
+  local.statsSeat = null;
+}
+
+function inRoomError(message: string): HTMLElement {
+  const alert = document.createElement('div');
+  alert.className = 'app-error';
+  alert.setAttribute('role', 'alert');
+  const text = document.createElement('span');
+  text.textContent = message;
+  const close = button('×', () => {
+    local.error = null;
+    render();
+  });
+  close.setAttribute('aria-label', t(local.lang, 'action.close'));
+  alert.append(text, close);
+  return alert;
 }
 
 function nameField(): HTMLElement {
@@ -894,6 +1055,18 @@ function menu(): HTMLElement {
   sheet.append(profiles);
 
   const room = controller.current().room;
+  if (code && room && (room.hostUid === backend.uid || room.refereeUid === backend.uid)
+    && ['night', 'day', 'voting'].includes(room.phase)) {
+    const pause = button(
+      t(local.lang, room.pausedAt === null ? 'action.pause' : 'action.resume'),
+      () => {
+        local.menuOpen = false;
+        void attempt(() => backend.setPaused(code, room.pausedAt === null));
+      },
+    );
+    pause.classList.add('menu__item');
+    sheet.append(pause);
+  }
   if (code && room?.mode === 'practice' && room.refereeUid === backend.uid && room.phase === 'day') {
     const force = button(t(local.lang, 'menu.forceVote'), () => {
       local.menuOpen = false;
@@ -1166,19 +1339,22 @@ function discussionMsFromInput(value: string): number | null {
     : null;
 }
 
-function discussionTimerText(room: { phase: string; discussionEndsAt?: number | null }): string | null {
+function discussionTimerText(room: {
+  phase: string; discussionEndsAt?: number | null; pausedAt?: number | null;
+}): string | null {
   if (room.phase !== 'day' || room.discussionEndsAt == null) return null;
-  const seconds = Math.max(0, Math.ceil((room.discussionEndsAt - Date.now()) / 1_000));
+  const now = room.pausedAt ?? Date.now();
+  const seconds = Math.max(0, Math.ceil((room.discussionEndsAt - now) / 1_000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 function setTimerUrgency(
   element: HTMLElement,
-  room: { phase: string; discussionEndsAt?: number | null },
+  room: { phase: string; discussionEndsAt?: number | null; pausedAt?: number | null },
 ): void {
   const remaining = room.discussionEndsAt == null
     ? Number.POSITIVE_INFINITY
-    : room.discussionEndsAt - Date.now();
+    : room.discussionEndsAt - (room.pausedAt ?? Date.now());
   element.classList.toggle(
     'discussiontimer--urgent',
     room.phase === 'day' && remaining > 0 && remaining <= 2 * 60_000,
@@ -1214,7 +1390,11 @@ function tableOverlay(): HTMLElement | null {
   if (!room) return null;
 
   const ownSeat = room.seating.indexOf(state.uid);
-  if (ownSeat < 0) return null;                 // not in this round
+  if (ownSeat < 0) {
+    return room.phase === 'results' && room.finalRoles && room.refereeUid === state.uid
+      ? resultSheet(null)
+      : null;
+  }
 
   const request = firstPending();
   if (request) return promptSheet(request, ownSeat as SeatIndex);
@@ -1331,7 +1511,10 @@ function firstPending() {
   if (local.decisionWindow !== marker) {
     local.decisionWindow = marker;
     local.submittedDecisionKeys = [];
+    local.picked = [];
+    local.pickedCenters = [];
   }
+  if (local.decisionSyncLoading) return undefined;
   return nextPendingRequest(
     state.own.pending,
     local.submittedDecisionKeys,
@@ -1421,7 +1604,7 @@ function votePanel(ownSeat: SeatIndex): HTMLElement {
  * the main event, and the explanation belongs beside them rather than over
  * them.
  */
-function resultSheet(ownSeat: SeatIndex): HTMLElement {
+function resultSheet(ownSeat: SeatIndex | null): HTMLElement {
   const room = controller.current().room!;
   const state = controller.current();
   return renderResults({
@@ -1435,7 +1618,36 @@ function resultSheet(ownSeat: SeatIndex): HTMLElement {
     ...(room.finalVotes ? { finalVotes: room.finalVotes } : {}),
     ...(room.discardedVotes ? { discardedVotes: room.discardedVotes } : {}),
     ...(room.finalTally ? { finalTally: room.finalTally } : {}),
-    ...(state.room && canDeal(state.room, state.uid) ? { onNextRound: actions.onDeal } : {}),
+    ...(state.room && canPrepareNextRound(state.room, state.uid)
+      && actions.onPrepareNextRound
+      ? { onNextRound: actions.onPrepareNextRound }
+      : {}),
+  });
+}
+
+function playerStatsSheet(seat: SeatIndex): HTMLElement {
+  const state = controller.current();
+  const uid = state.room?.seating[seat] ?? '';
+  const player = state.players.find((entry) => entry.uid === uid);
+  const member = state.room?.members.find((entry) => entry.uid === uid);
+  const friendId = member?.friendId;
+  const name = player?.displayName ?? member?.friendName ?? String(seat + 1);
+  const rows = friendId
+    ? local.history.filter((entry) => entry.friendId === friendId)
+    : [];
+  return renderSheet({
+    title: name,
+    variant: 'receipt',
+    body: renderStats(aggregatePlayerHistory(name, rows), local.lang),
+    actions: [{
+      label: t(local.lang, 'action.close'),
+      primary: true,
+      onSelect: () => {
+        local.statsSeat = null;
+        render();
+      },
+    }],
+    passiveScrim: true,
   });
 }
 

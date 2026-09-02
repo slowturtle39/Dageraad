@@ -55,8 +55,22 @@ describe('the shared discussion timer', () => {
     const run = runDay({ state, store, clock, config: FAST });
     await drive(clock, 2_000);
     await run;
-    expect(store.phases).toEqual(['day', 'voting', 'results']);
+    expect(store.phases).toEqual(['day', 'voting']);
     expect(store.deadlines).toEqual([10_000, null]);
+  });
+
+  it('resumes an open ballot without replaying or resetting the discussion', async () => {
+    const store = new TestDayStore();
+    castAll(store);
+    const clock = new FakeClock();
+
+    const out = await runDay({
+      state, store, clock, config: FAST, resumeAt: 'voting',
+    });
+
+    expect(out.missingVotes).toEqual([]);
+    expect(store.phases).toEqual(['voting']);
+    expect(store.deadlines).toEqual([null]);
   });
 });
 
@@ -337,7 +351,7 @@ describe('voting is mandatory (Milan, 2026-08-26)', () => {
     const run = runDay({ state, store, clock, config: FAST });
     await drive(clock, 40_000);
     await run;
-    expect(store.phases).toEqual(['day', 'voting', 'results']);
+    expect(store.phases).toEqual(['day', 'voting']);
   });
 
   it('returns per-seat vote outcomes for the stats', async () => {

@@ -223,3 +223,55 @@ describe('host pause', () => {
     expect(clock.consumeDirty()).toBe(false);
   });
 });
+
+describe('durable night recovery', () => {
+  it('continues after the last completed window without duplicating releases', async () => {
+    class CrashAfterCheckpointStore extends InMemoryRoomStore {
+      crash = true;
+      override async saveNightCheckpoint(checkpoint: Parameters<InMemoryRoomStore['saveNightCheckpoint']>[0]) {
+        await super.saveNightCheckpoint(checkpoint);
+        if (this.crash) {
+          this.crash = false;
+          throw new Error('tab closed after checkpoint');
+        }
+      }
+    }
+
+    const state = standardDeal();
+    const store = new CrashAfterCheckpointStore();
+    const firstClock = new FakeClock();
+    const timeline = buildTimeline(DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG);
+    const first = runNight({
+      state, activeRoles: DEFAULT_ACTIVE_ROLES, config: TWO_ROUND_CONFIG,
+      store, clock: firstClock,
+    });
+    const crashed = expect(first).rejects.toThrow(/tab closed/);
+    for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r));
+    await firstClock.advance(timeline.phases[0]!.endMs - timeline.phases[0]!.startMs + 1);
+    await crashed;
+
+    const releasedBefore = new Map(
+      [...store.released].map(([seat, info]) => [seat, [...info]]),
+    );
+    const eventsBefore = [...store.publicEvents];
+    const opened: number[] = [];
+    const resumeClock = new FakeClock();
+    const resumed = runNight({
+      state, activeRoles: DEFAULT_ACTIVE_ROLES, config: TWO_ROUND_CONFIG,
+      store, clock: resumeClock, onWindowOpen: (window) => opened.push(window.index),
+    });
+    for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r));
+    await resumeClock.advance(
+      timeline.phases[1]!.endMs - timeline.phases[1]!.startMs + 1,
+    );
+    await resumed;
+
+    expect(opened).toEqual([timeline.phases[1]!.index]);
+    for (const [seat, before] of releasedBefore) {
+      const after = store.released.get(seat) ?? [];
+      expect(after.slice(0, before.length)).toEqual(before);
+    }
+    expect(store.publicEvents.slice(0, eventsBefore.length)).toEqual(eventsBefore);
+    expect(store.phase).toBe('day');
+  });
+});

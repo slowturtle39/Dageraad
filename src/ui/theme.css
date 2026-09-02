@@ -740,6 +740,30 @@ body {
   border-top: 1px solid var(--line-soft);
 }
 
+.app-error {
+  position: fixed;
+  z-index: 40;
+  top: 4.75rem;
+  left: 50%;
+  width: min(92vw, 42rem);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .85rem 1rem;
+  color: #fff8ec;
+  background: #7a251e;
+  border: 1px solid #d77565;
+  border-radius: .75rem;
+  box-shadow: 0 .5rem 1.5rem #170b0780;
+}
+
+.app-error .btn {
+  min-width: 2.5rem;
+  padding: .35rem .65rem;
+}
+
 .bottombar .btn {
   width: auto;
   margin-top: 0;

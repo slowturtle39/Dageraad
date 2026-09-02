@@ -1,5 +1,5 @@
-import { ROLES } from '../engine/roles.js';
 import type { RoleId } from '../engine/types.js';
+import { roleName, t, type Lang } from './i18n.js';
 
 /**
  * The stats sheet — what you get when you tap somebody at the table.
@@ -38,7 +38,7 @@ export interface PlayerStats {
 
 const pct = (x: number | null) => (x === null ? '—' : `${Math.round(x * 100)}%`);
 
-export function renderStats(stats: PlayerStats): HTMLElement {
+export function renderStats(stats: PlayerStats, lang: Lang = 'nl'): HTMLElement {
   const el = document.createElement('div');
   el.className = 'stats';
 
@@ -51,7 +51,7 @@ export function renderStats(stats: PlayerStats): HTMLElement {
   // line on a phone.
   const meta = document.createElement('div');
   meta.className = 'stats__meta';
-  meta.textContent = `${stats.gamesPlayed} potjes gespeeld`;
+  meta.textContent = t(lang, 'stats.played', { n: stats.gamesPlayed });
   head.append(avatar, meta);
   el.append(head);
 
@@ -60,10 +60,10 @@ export function renderStats(stats: PlayerStats): HTMLElement {
   grid.append(
     stat(
       stats.gamesPlayed === 0 ? '—' : pct(stats.gamesWon / stats.gamesPlayed),
-      'gewonnen',
+      t(lang, 'stats.won'),
     ),
-    stat(pct(stats.voteAccuracy), 'stem juist'),
-    stat(pct(stats.suspicionAccuracy), 'verdenking'),
+    stat(pct(stats.voteAccuracy), t(lang, 'stats.voteAccuracy')),
+    stat(pct(stats.suspicionAccuracy), t(lang, 'stats.suspicion')),
   );
   el.append(grid);
 
@@ -72,9 +72,7 @@ export function renderStats(stats: PlayerStats): HTMLElement {
   if (stats.votesCausingVillageLoss > 0) {
     const note = document.createElement('p');
     note.className = 'sheet__note';
-    note.textContent =
-      `${stats.votesCausingVillageLoss}× een stem die het dorp de das omdeed ` +
-      `— het doelwit werd echt gelyncht en het dorp verloor.`;
+    note.textContent = t(lang, 'stats.causedLoss', { n: stats.votesCausingVillageLoss });
     el.append(note);
   }
 
@@ -89,7 +87,7 @@ export function renderStats(stats: PlayerStats): HTMLElement {
 
     const label = document.createElement('span');
     label.className = 'rolerow__name';
-    label.textContent = ROLES[r.role]?.nl ?? r.role;
+    label.textContent = roleName(lang, r.role);
 
     const bar = document.createElement('span');
     bar.className = 'rolerow__bar';

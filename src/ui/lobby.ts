@@ -46,6 +46,8 @@ export interface LobbyView {
   canManageBots?: boolean;
   onAddBot?: () => void;
   onRemoveBot?: (uid: string) => void;
+  canManagePlayers?: boolean;
+  onRemovePlayer?: (uid: string) => void;
   activeRoles?: RoleId[];
   canManageRoles?: boolean;
   onRolesChange?: (roles: RoleId[]) => void;
@@ -122,6 +124,7 @@ export function renderLobby(view: LobbyView): HTMLElement {
   el.append(start);
 
   if (view.canManageBots) el.append(botRoster(view, seated));
+  if (view.canManagePlayers) el.append(playerRoster(view, seated));
 
   const note = document.createElement('p');
   note.className = 'sheet__note';
@@ -129,6 +132,30 @@ export function renderLobby(view: LobbyView): HTMLElement {
   el.append(note);
 
   return el;
+}
+
+function playerRoster(view: LobbyView, seated: LobbyPlayer[]): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'lobby__bots';
+  const title = document.createElement('p');
+  title.className = 'sheet__sub';
+  title.textContent = t(view.lang, 'lobby.playersTitle');
+  box.append(title);
+  for (const player of seated.filter((entry) => !entry.isBot)) {
+    const row = document.createElement('div');
+    row.className = 'rolerow';
+    const name = document.createElement('span');
+    name.className = 'rolerow__name';
+    name.textContent = player.displayName;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn';
+    remove.textContent = t(view.lang, 'lobby.removePlayer');
+    remove.addEventListener('click', () => view.onRemovePlayer?.(player.uid));
+    row.append(name, remove);
+    box.append(row);
+  }
+  return box;
 }
 
 function rolePicker(view: LobbyView, playerCount: number): HTMLElement {

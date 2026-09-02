@@ -119,7 +119,11 @@ export function roundsUntilSeated(room: RoomView, joinsAtRound: number): number 
  */
 export function canDeal(room: RoomView, uid: string): boolean {
   if (room.refereeUid !== uid) return false;
-  return room.phase === 'lobby' || room.phase === 'results';
+  return room.phase === 'lobby';
+}
+
+export function canPrepareNextRound(room: RoomView, uid: string): boolean {
+  return room.refereeUid === uid && room.phase === 'results';
 }
 
 /**

@@ -16,10 +16,12 @@ const firestoreSrc = readFileSync('src/firestore/roomstore.ts', 'utf8');
 
 const REQUIRED = [
   'setWindowIndex',
+  'readNightCheckpoint',
+  'saveNightCheckpoint',
   'readSubmissions',
-  'releasePrivateInfo',
+  'setPrivateInfo',
   'releaseDecisions',
-  'appendPublicEvents',
+  'setPublicEvents',
   'publishPublicView',
   'recordLatency',
   'setPhase',

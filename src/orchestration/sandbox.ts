@@ -49,22 +49,29 @@ export class SandboxStore implements RoomStore, DayStore {
 
   /* ----- passed through: the things under test ----- */
 
+  readNightCheckpoint() {
+    return this.inner.readNightCheckpoint();
+  }
+  saveNightCheckpoint(checkpoint: Parameters<RoomStore['saveNightCheckpoint']>[0]) {
+    return this.inner.saveNightCheckpoint(checkpoint);
+  }
+
   setWindowIndex(windowIndex: number) {
     return this.inner.setWindowIndex(windowIndex);
   }
   readSubmissions(windowIndex: number) {
     return this.inner.readSubmissions(windowIndex);
   }
-  releasePrivateInfo(seat: SeatIndex, info: PrivateInfo[]) {
-    return this.inner.releasePrivateInfo(seat, info);
+  setPrivateInfo(seat: SeatIndex, info: PrivateInfo[]) {
+    return this.inner.setPrivateInfo(seat, info);
   }
   // Passed through: a test round still has to ask its bots' seats questions,
   // and a prompt is not a permanent record of anything.
   releaseDecisions(seat: SeatIndex, requests: DecisionRequest[]) {
     return this.inner.releaseDecisions(seat, requests);
   }
-  appendPublicEvents(events: NightEvent[]) {
-    return this.inner.appendPublicEvents(events);
+  setPublicEvents(events: NightEvent[]) {
+    return this.inner.setPublicEvents(events);
   }
   // What the table can see is not a permanent record of anything, so a test
   // round publishes it exactly as a live one does.

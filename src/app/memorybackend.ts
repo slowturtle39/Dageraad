@@ -7,7 +7,7 @@ import type {
   Choice, GameConfig, NightEvent, NightState, PrivateInfo, RoleId, SeatIndex, DecisionRequest,
 } from '../engine/types.js';
 import type { DayStore } from '../orchestration/dayrunner.js';
-import type { RoomStore } from '../orchestration/store.js';
+import type { NightCheckpoint, RoomStore } from '../orchestration/store.js';
 import { newFriendId, normaliseName, type FriendProfile } from './friend.js';
 import type { HistoryRecord } from '../stats/alltime.js';
 import type { PublicNightView } from '../engine/publicview.js';
@@ -139,6 +139,7 @@ export class MemoryWorld {
       rounds: [],
       latency: [],
       state: null,
+      checkpoint: null,
       watchers: {
         room: new Set(), players: new Set(), private: new Map(), rounds: new Set(),
       },
@@ -197,6 +198,7 @@ interface RoomRecord {
   rounds: RoundRecord[];
   latency: LatencySample[];
   state: NightState | null;
+  checkpoint: NightCheckpoint | null;
   watchers: {
     room: Set<(r: RoomView | null) => void>;
     players: Set<(p: PlayerView[]) => void>;
@@ -356,9 +358,7 @@ class MemoryBackend implements Backend {
   async startGame(roomId: string, seed: number): Promise<void> {
     const r = this.world.room(roomId);
     this.requireReferee(r);
-    // A round may start from the lobby or from the results of the last one.
-    // Anything else means a game is already running.
-    if (r.view.phase !== 'lobby' && r.view.phase !== 'results') {
+    if (r.view.phase !== 'lobby') {
       throw new Error('a round is already running');
     }
 
@@ -368,6 +368,7 @@ class MemoryBackend implements Backend {
     // removed, and the ring closes up — a hole in the seating is a hole in the
     // Dorpsgek's rotation (§13).
     r.view.seating = seatingForNextRound(r.view.members, r.view.seating, nextRound);
+    assertUniqueFriendProfiles(r.view.members, r.view.seating);
     r.view.round = nextRound;
 
     // Clear last round's table so nothing bleeds across.
@@ -397,6 +398,7 @@ class MemoryBackend implements Backend {
     const dealt = deal({ cards, seatCount, seed });
 
     r.state = dealt.state;
+    r.checkpoint = null;
     r.view.timeline = buildTimeline(r.view.activeRoles, r.view.config);
     r.view.phase = 'night';
     r.view.nightWindowIndex = 0;
@@ -411,6 +413,19 @@ class MemoryBackend implements Backend {
       });
     });
 
+    this.world.notify(roomId);
+  }
+
+  async prepareNextRound(roomId: string): Promise<void> {
+    const r = this.world.room(roomId);
+    this.requireReferee(r);
+    if (r.view.phase !== 'results') throw new Error('round is not finished');
+    r.view.seating = seatingForNextRound(r.view.members, r.view.seating, r.view.round + 1);
+    r.view.seating.forEach((uid, seat) => {
+      const player = r.players.get(uid);
+      if (player) player.seatIndex = seat;
+    });
+    r.view.phase = 'lobby';
     this.world.notify(roomId);
   }
 
@@ -455,6 +470,13 @@ class MemoryBackend implements Backend {
     });
   }
 
+  async submittedKeys(roomId: string, round: number, windowIndex: number): Promise<string[]> {
+    const r = this.world.room(roomId);
+    if (r.view.round !== round) return [];
+    const submission = r.submissions.get(this.uid);
+    return submission?.windowIndex === windowIndex ? Object.keys(submission.choices) : [];
+  }
+
   async vote(roomId: string, target: string | null, abstain: boolean): Promise<void> {
     const r = this.world.room(roomId);
     if (target === this.uid) throw new Error('no self-votes');
@@ -472,6 +494,20 @@ class MemoryBackend implements Backend {
     }
     r.votes.set(this.uid, { target, abstain, readyToVote: existing?.readyToVote });
     this.world.notify(roomId);
+  }
+
+  async ownVote(roomId: string): Promise<{
+    round: number; target: string | null; abstain: boolean; readyToVote: boolean;
+  } | null> {
+    const r = this.world.room(roomId);
+    const vote = r.votes.get(this.uid);
+    if (!vote) return null;
+    return {
+      round: r.view.round,
+      target: vote.target,
+      abstain: vote.abstain,
+      readyToVote: vote.readyToVote === true,
+    };
   }
 
   async emergencyVote(
@@ -507,9 +543,11 @@ class MemoryBackend implements Backend {
     if (r.view.phase !== 'lobby') throw new Error('bots can only be added in the lobby');
     if (r.view.seating.length >= 12) throw new Error('Maximaal 12 spelers.');
 
-    const existing = [...r.players.values()].filter((p) => p.isBot).length;
-    const uid = `bot:${roomId}:${existing + 1}`;
-    const displayName = BOT_NAMES[existing % BOT_NAMES.length] ?? `AI ${existing + 1}`;
+    const botCount = [...r.players.values()].filter((p) => p.isBot).length;
+    let number = 1;
+    while (r.players.has(`bot-${roomId}-${number}`)) number += 1;
+    const uid = `bot-${roomId}-${number}`;
+    const displayName = BOT_NAMES[botCount % BOT_NAMES.length] ?? `AI ${number}`;
 
     r.players.set(uid, {
       uid, displayName, seatIndex: null, playing: false, departed: false,
@@ -550,6 +588,28 @@ class MemoryBackend implements Backend {
     r.view.members = r.view.members.filter((m) => m.uid !== botUid);
     r.view.seating = r.view.seating.filter((uid) => uid !== botUid);
     this.world.notify(roomId);
+  }
+
+  async removePlayer(roomId: string, playerUid: string): Promise<void> {
+    const r = this.world.room(roomId);
+    this.requireHostOrReferee(r);
+    const player = r.players.get(playerUid);
+    const member = r.view.members.find((entry) => entry.uid === playerUid);
+    if (!player || !member) throw new Error('player not found');
+    if (player.isBot) throw new Error('use removeBot');
+    member.leftAtRound = r.view.round;
+    player.departed = true;
+    if (r.view.phase === 'lobby') {
+      r.view.seating = r.view.seating.filter((uid) => uid !== playerUid);
+    }
+    this.world.notify(roomId);
+  }
+
+  async refereeBotSeats(roomId: string): Promise<SeatIndex[]> {
+    const r = this.world.room(roomId);
+    this.requireReferee(r);
+    return r.view.seating.flatMap((uid, seat) =>
+      r.players.get(uid)?.isBot ? [seat as SeatIndex] : []);
   }
 
   /** A bot's day vote. Never a human's — see Backend.voteAsBot. */
@@ -599,7 +659,15 @@ class MemoryBackend implements Backend {
   async setPaused(roomId: string, paused: boolean): Promise<void> {
     const r = this.world.room(roomId);
     this.requireHostOrReferee(r);
-    r.view.pausedAt = paused ? Date.now() : null;
+    const now = Date.now();
+    if (paused) {
+      if (r.view.pausedAt === null) r.view.pausedAt = now;
+    } else if (r.view.pausedAt !== null) {
+      if (typeof r.view.discussionEndsAt === 'number') {
+        r.view.discussionEndsAt += now - r.view.pausedAt;
+      }
+      r.view.pausedAt = null;
+    }
     this.world.notify(roomId);
   }
 
@@ -638,6 +706,48 @@ class MemoryBackend implements Backend {
       }
     }
     this.world.notify(roomId);
+  }
+
+  async finalizeRound(
+    roomId: string,
+    results: GameResults,
+    record: RoundRecord | null,
+  ): Promise<void> {
+    const r = this.world.room(roomId);
+    this.requireReferee(r);
+    r.view.finalRoles = results.finalRoles;
+    r.view.outcome = results.outcome;
+    r.view.eliminatedSeats = results.eliminatedSeats;
+    r.view.winningTeams = results.winningTeams;
+    r.view.finalVotes = results.finalVotes;
+    r.view.discardedVotes = results.discardedVotes;
+    r.view.finalTally = results.finalTally;
+
+    if (record && !r.rounds.some((entry) => entry.round === record.round)) {
+      r.rounds = [...r.rounds, record];
+    }
+    if (record && r.view.mode === 'official') this.reconcileHistory(r, roomId, record);
+    r.view.phase = 'results';
+    this.world.notify(roomId);
+  }
+
+  private reconcileHistory(r: RoomRecord, roomId: string, record: RoundRecord): void {
+    const byUid = new Map(r.view.members.map((member) => [member.uid, member]));
+    for (const line of record.results) {
+      const member = byUid.get(line.uid);
+      if (!member?.friendId) continue;
+      const exists = this.world.history.some((entry) => entry.roomId === roomId
+        && entry.round === record.round && entry.friendId === member.friendId);
+      if (exists) continue;
+      this.world.history.push({
+        roomId, round: record.round, friendId: member.friendId,
+        name: member.friendName ?? member.friendId, seat: line.seat,
+        originalRole: line.originalRole, finalRole: line.finalRole,
+        won: line.won, voteOutcome: line.voteOutcome,
+        suspicionAccuracy: line.suspicionAccuracy, recordedAt: Date.now(),
+      });
+    }
+    for (const cb of this.world.historyWatchers) cb([...this.world.history]);
   }
 
   /** The all-time record. Aggregated on read; nothing stored is a total. */
@@ -735,6 +845,15 @@ class MemoryRefereeStore implements RoomStore, DayStore {
     return this.r.view.seating[seat];
   }
 
+  async readNightCheckpoint(): Promise<NightCheckpoint | null> {
+    const checkpoint = this.r.checkpoint;
+    return checkpoint ? { ...checkpoint, answers: [...checkpoint.answers] } : null;
+  }
+
+  async saveNightCheckpoint(checkpoint: NightCheckpoint): Promise<void> {
+    this.r.checkpoint = { ...checkpoint, answers: [...checkpoint.answers] };
+  }
+
   async setWindowIndex(windowIndex: number): Promise<void> {
     this.r.view.nightWindowIndex = windowIndex;
     this.world.notify(this.roomId);
@@ -754,13 +873,13 @@ class MemoryRefereeStore implements RoomStore, DayStore {
     return out;
   }
 
-  async releasePrivateInfo(seat: SeatIndex, info: PrivateInfo[]): Promise<void> {
+  async setPrivateInfo(seat: SeatIndex, info: PrivateInfo[]): Promise<void> {
     const uid = this.uidForSeat(seat);
     if (!uid) return;
     const existing = this.r.privates.get(uid) ?? { originalRole: null, privateInfo: [], pending: [] };
     this.r.privates.set(uid, {
       ...existing,
-      privateInfo: [...existing.privateInfo, ...info],
+      privateInfo: [...info],
     });
     this.world.notify(this.roomId);
   }
@@ -774,9 +893,9 @@ class MemoryRefereeStore implements RoomStore, DayStore {
     this.world.notify(this.roomId);
   }
 
-  async appendPublicEvents(events: NightEvent[]): Promise<void> {
+  async setPublicEvents(events: NightEvent[]): Promise<void> {
     const r = this.r;
-    r.view.publicEvents = [...r.view.publicEvents, ...events];
+    r.view.publicEvents = [...events];
     this.world.notify(this.roomId);
   }
 
@@ -843,6 +962,17 @@ class MemoryRefereeStore implements RoomStore, DayStore {
     return this.r.view.practiceSkipDiscussion === true;
   }
 
+}
+
+function assertUniqueFriendProfiles(members: SessionMember[], seating: string[]): void {
+  const byUid = new Map(members.map((member) => [member.uid, member]));
+  const seen = new Set<string>();
+  for (const uid of seating) {
+    const friendId = byUid.get(uid)?.friendId;
+    if (!friendId) continue;
+    if (seen.has(friendId)) throw new Error('Iedere speler moet een ander profiel kiezen.');
+    seen.add(friendId);
+  }
 }
 
 export { MemoryRefereeStore };

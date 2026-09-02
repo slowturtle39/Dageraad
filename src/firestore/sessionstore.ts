@@ -50,6 +50,7 @@ export class FirestoreSessionStore implements SessionStore {
   constructor(
     private readonly db: Firestore,
     private readonly roomId: string,
+    private readonly onListenerError: (error: unknown) => void = () => {},
   ) {}
 
   private room() {
@@ -126,7 +127,7 @@ export class FirestoreSessionStore implements SessionStore {
           ...(data.friendName ? { friendName: data.friendName } : {}),
         };
       }));
-    });
+    }, this.onListenerError);
   }
 
   watchRounds(cb: (rounds: RoundRecord[]) => void): Unsubscribe {
@@ -146,7 +147,7 @@ export class FirestoreSessionStore implements SessionStore {
       // at the round they arrived, which is only right if the rounds before it
       // have already been applied.
       cb(rounds.sort((a, b) => a.round - b.round));
-    });
+    }, this.onListenerError);
   }
 
   /**

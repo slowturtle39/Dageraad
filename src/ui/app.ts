@@ -1,5 +1,7 @@
 import type { AppState } from '../app/controller.js';
-import { canDeal, mayManageBots, nextRoundRoster, type Screen } from '../app/shell.js';
+import {
+  canDeal, canPrepareNextRound, mayManageBots, nextRoundRoster, type Screen,
+} from '../app/shell.js';
 import { mayArrangeSeats } from '../app/seating.js';
 import type { PlayerView, RoomView } from '../app/backend.js';
 import type { RoleId, SeatIndex } from '../engine/types.js';
@@ -50,11 +52,13 @@ export interface AppActions {
   onLeave(): void;
   onRejoin(): void;
   onDeal(): void;
+  onPrepareNextRound?(): void;
   onSeatTap(seat: SeatIndex): void;
   onCardTap(seat: SeatIndex): void;
   onNameTap(seat: SeatIndex): void;
   onAddBot?(): void;
   onRemoveBot?(uid: string): void;
+  onRemovePlayer?(uid: string): void;
   onRolesChange?(roles: RoleId[]): void;
 }
 
@@ -94,8 +98,9 @@ export function renderApp(deps: AppDeps): HTMLElement {
       return renderDeparted({ lang: deps.lang, onRejoin: deps.actions.onRejoin });
 
     case 'tablet':
-      return renderTablet(tabletViewFor(deps), canDeal(deps.state.room!, deps.state.uid)
-        ? { onNextRound: deps.actions.onDeal }
+      return renderTablet(tabletViewFor(deps), canPrepareNextRound(deps.state.room!, deps.state.uid)
+        && deps.actions.onPrepareNextRound
+        ? { onNextRound: deps.actions.onPrepareNextRound }
         : undefined);
 
     case 'lobby':
@@ -167,8 +172,11 @@ function renderLobbyScreen(deps: AppDeps): HTMLElement {
     canManageBots: mayManageBots(room, deps.state.uid),
     ...(deps.actions.onAddBot ? { onAddBot: deps.actions.onAddBot } : {}),
     ...(deps.actions.onRemoveBot ? { onRemoveBot: deps.actions.onRemoveBot } : {}),
+    canManagePlayers: room.phase === 'lobby'
+      && (room.hostUid === deps.state.uid || room.refereeUid === deps.state.uid),
+    ...(deps.actions.onRemovePlayer ? { onRemovePlayer: deps.actions.onRemovePlayer } : {}),
     activeRoles: room.activeRoles,
-    canManageRoles: room.phase === 'lobby'
+    canManageRoles: deps.busy !== true && room.phase === 'lobby'
       && (room.hostUid === deps.state.uid || room.refereeUid === deps.state.uid),
     ...(deps.actions.onRolesChange ? { onRolesChange: deps.actions.onRolesChange } : {}),
   });

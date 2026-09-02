@@ -224,6 +224,9 @@ export interface EngineStateDoc {
    * at dawn.
    */
   assumedRole: Record<number, RoleId>;
+  /** Referee-only recovery data; absent on rooms created before this support. */
+  completedWindowIndex?: number;
+  nightAnswers?: Array<{ key: string; choice: Choice }>;
 }
 
 /** NightState -> document. Sets become arrays; nothing else changes. */

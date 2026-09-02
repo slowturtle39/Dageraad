@@ -13,6 +13,10 @@ import type { LatencySample } from '../engine/telemetry.js';
  * the same discipline that keeps `src/engine/` portable.
  */
 export interface RoomStore {
+  /** Referee-only durable progress used to resume after a tab closes. */
+  readNightCheckpoint(): Promise<NightCheckpoint | null>;
+  saveNightCheckpoint(checkpoint: NightCheckpoint): Promise<void>;
+
   /** Advance the room's window counter. Rejects late submissions server-side. */
   setWindowIndex(windowIndex: number): Promise<void>;
 
@@ -26,7 +30,7 @@ export interface RoomStore {
    * Release private info to one seat. The referee calls this only when the
    * seat's reveal is DUE per the timeline — writing early is the leak.
    */
-  releasePrivateInfo(seat: SeatIndex, info: PrivateInfo[]): Promise<void>;
+  setPrivateInfo(seat: SeatIndex, info: PrivateInfo[]): Promise<void>;
 
   /**
    * Tell one seat what it is being asked, for the window now open.
@@ -44,7 +48,7 @@ export interface RoomStore {
   releaseDecisions(seat: SeatIndex, requests: DecisionRequest[]): Promise<void>;
 
   /** Spoiler-free events for the shared tablet (§12). */
-  appendPublicEvents(events: NightEvent[]): Promise<void>;
+  setPublicEvents(events: NightEvent[]): Promise<void>;
 
   /**
    * Publish what the table can currently SEE, derived fresh from the resolved
@@ -68,6 +72,11 @@ export interface RoomStore {
   setPhase(phase: 'lobby' | 'night' | 'day' | 'voting' | 'results'): Promise<void>;
 }
 
+export interface NightCheckpoint {
+  completedWindowIndex: number;
+  answers: Array<{ key: string; choice: Choice }>;
+}
+
 /** Test/dev implementation. Also what the referee runs against until Firebase exists. */
 export class InMemoryRoomStore implements RoomStore {
   windowIndex = 0;
@@ -76,6 +85,17 @@ export class InMemoryRoomStore implements RoomStore {
   readonly released = new Map<SeatIndex, PrivateInfo[]>();
   readonly publicEvents: NightEvent[] = [];
   readonly latency: LatencySample[] = [];
+  checkpoint: NightCheckpoint | null = null;
+
+  async readNightCheckpoint(): Promise<NightCheckpoint | null> {
+    return this.checkpoint
+      ? { ...this.checkpoint, answers: [...this.checkpoint.answers] }
+      : null;
+  }
+
+  async saveNightCheckpoint(checkpoint: NightCheckpoint): Promise<void> {
+    this.checkpoint = { ...checkpoint, answers: [...checkpoint.answers] };
+  }
 
   async setWindowIndex(windowIndex: number): Promise<void> {
     this.windowIndex = windowIndex;
@@ -85,9 +105,8 @@ export class InMemoryRoomStore implements RoomStore {
     return this.submissions.get(windowIndex) ?? new Map();
   }
 
-  async releasePrivateInfo(seat: SeatIndex, info: PrivateInfo[]): Promise<void> {
-    const existing = this.released.get(seat) ?? [];
-    this.released.set(seat, [...existing, ...info]);
+  async setPrivateInfo(seat: SeatIndex, info: PrivateInfo[]): Promise<void> {
+    this.released.set(seat, [...info]);
   }
 
   published: PublicNightView = { revealed: {}, shielded: [] };
@@ -102,8 +121,8 @@ export class InMemoryRoomStore implements RoomStore {
     this.prompts.set(seat, requests);
   }
 
-  async appendPublicEvents(events: NightEvent[]): Promise<void> {
-    this.publicEvents.push(...events);
+  async setPublicEvents(events: NightEvent[]): Promise<void> {
+    this.publicEvents.splice(0, this.publicEvents.length, ...events);
   }
 
   async recordLatency(samples: LatencySample[]): Promise<void> {

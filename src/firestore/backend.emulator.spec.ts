@@ -8,7 +8,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { TWO_ROUND_CONFIG } from '../engine/presets.js';
 import { createNightState } from '../engine/state.js';
 import type { RoleId } from '../engine/types.js';
-import type { RoomView } from '../app/backend.js';
+import type { GameResults, RoomView } from '../app/backend.js';
 import { FirestoreBackend } from './backend.js';
 import { engineStateToDoc, paths } from './schema.js';
 
@@ -150,6 +150,7 @@ describe('FirestoreBackend through the real emulators', () => {
       .toMatchObject({ leftAtRound: 1 });
 
     await referee.backend.refereeStore(roomId).setPhase('results');
+    await referee.backend.prepareNextRound(roomId);
     await referee.backend.startGame(roomId, 23);
     expect((await readRoom(referee.db, roomId)).seating).not.toContain(players[1]!.uid);
   });
@@ -189,6 +190,53 @@ describe('FirestoreBackend through the real emulators', () => {
     const lateStanding = composed.standings.find((standing) => standing.uid === late.uid);
     expect(lateStanding?.seeded).toBe(1);
   }, 5_000);
+
+  it('atomically finalizes an official round and stays idempotent on retry', async () => {
+    const referee = await client('atomic-finalize');
+    const roomId = await referee.backend.createRoom({
+      ...roomOptions(true, 'Milan'),
+      mode: 'official' as const,
+      friend: { friendId: 'friend-milan', friendName: 'Milan' },
+    });
+    const guests = await Promise.all([client('atomic-a'), client('atomic-b')]);
+    await guests[0]!.backend.joinRoom(roomId, 'A');
+    await guests[1]!.backend.joinRoom(roomId, 'B');
+    await referee.backend.startGame(roomId, 41);
+    const results: GameResults = {
+      outcome: 'eliminated', eliminatedSeats: [0], winningTeams: ['village'],
+      finalVotes: { 0: 1, 1: 2, 2: 0 }, discardedVotes: {},
+      finalTally: { 0: 1, 1: 1, 2: 1 },
+      finalRoles: { 0: 'dorpeling', 1: 'dorpeling', 2: 'dorpeling' },
+      seats: {
+        0: {
+          originalRole: 'dorpeling', finalRole: 'dorpeling', won: true,
+          votedFor: guests[0]!.uid, voteOutcome: 'correct', suspicionAccuracy: null,
+        },
+        1: { originalRole: 'dorpeling', finalRole: 'dorpeling', won: true,
+          votedFor: guests[1]!.uid, voteOutcome: 'correct', suspicionAccuracy: null },
+        2: { originalRole: 'dorpeling', finalRole: 'dorpeling', won: true,
+          votedFor: referee.uid, voteOutcome: 'correct', suspicionAccuracy: null },
+      },
+    };
+    const record = {
+      round: 1, activeRoles: ['weerwolf'] as RoleId[], seatCount: 1,
+      outcome: results.outcome,
+      results: [referee, ...guests].map((player, seat) => ({
+        uid: player.uid, seat, originalRole: 'dorpeling' as RoleId,
+        finalRole: 'dorpeling' as RoleId, won: true,
+        voteOutcome: 'correct' as const, suspicionAccuracy: null,
+      })),
+    };
+
+    await referee.backend.finalizeRound(roomId, results, record);
+    await referee.backend.finalizeRound(roomId, results, record);
+
+    expect(await readRoom(referee.db, roomId)).toMatchObject({
+      phase: 'results', outcome: 'eliminated', finalRoles: { 0: 'dorpeling' },
+    });
+    expect((await getDocs(collection(referee.db, paths.rounds(roomId)))).size).toBe(1);
+    expect((await getDocs(collection(referee.db, paths.history()))).size).toBe(1);
+  });
 
   it('round-trips serialized engine Sets and assumedRole through Firestore', async () => {
     const referee = await client('round-trip');

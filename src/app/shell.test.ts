@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { canDeal, mayManageBots, nextRoundRoster, roundsUntilSeated, screenFor } from './shell.js';
+import {
+  canDeal, canPrepareNextRound, mayManageBots, nextRoundRoster, roundsUntilSeated, screenFor,
+} from './shell.js';
 import type { PlayerView, RoomView } from './backend.js';
 import type { SessionMember } from './session.js';
 
@@ -174,7 +176,8 @@ describe('the lobby and the results', () => {
 describe('who may deal', () => {
   it('is the referee, and only from a settled room', () => {
     expect(canDeal(room({ phase: 'lobby' }), TABLET)).toBe(true);
-    expect(canDeal(room({ phase: 'results' }), TABLET)).toBe(true);
+    expect(canDeal(room({ phase: 'results' }), TABLET)).toBe(false);
+    expect(canPrepareNextRound(room({ phase: 'results' }), TABLET)).toBe(true);
     expect(canDeal(room({ phase: 'night' }), TABLET)).toBe(false);
     expect(canDeal(room({ phase: 'day' }), TABLET)).toBe(false);
   });

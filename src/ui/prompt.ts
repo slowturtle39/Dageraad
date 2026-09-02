@@ -84,6 +84,9 @@ export function choiceFor(view: PromptView): Choice | null {
 /** May this seat be picked for this prompt? */
 export function seatSelectable(request: DecisionRequest, seat: SeatIndex): boolean {
   const { prompt } = request;
+  if (prompt.kind === 'dorpsgek' && prompt.variant === 'designate') {
+    return seat !== request.seat;
+  }
   if (prompt.kind !== 'seat' && prompt.kind !== 'seat-or-center'
     && prompt.kind !== 'two-seats') return false;
   return !prompt.exclude.includes(seat);
@@ -166,7 +169,9 @@ function promptText(view: PromptView): string {
     case 'center':
       return t(lang, 'prompt.pickCenter', { n: request.prompt.count });
     case 'dorpsgek':
-      return t(lang, 'prompt.dorpsgek');
+      return t(lang, request.prompt.variant === 'designate'
+        ? 'prompt.dorpsgekDesignate'
+        : 'prompt.dorpsgek');
     case 'confirm':
       return t(lang, 'prompt.confirm');
   }
@@ -208,6 +213,10 @@ function directionRow(view: PromptView): HTMLElement {
     b.type = 'button';
     b.className = 'btn btn--primary';
     b.dataset.direction = direction;
+    b.disabled = direction !== 'none'
+      && view.request.prompt.kind === 'dorpsgek'
+      && view.request.prompt.variant === 'designate'
+      && view.picked[0] === undefined;
     b.addEventListener('click', () => {
       const choice: Choice = { kind: 'dorpsgek', direction };
       const designated = view.picked[0];

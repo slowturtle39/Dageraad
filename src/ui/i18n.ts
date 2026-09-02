@@ -130,7 +130,7 @@ const nl: Dict = {
   'join.open': 'Doe mee met een bestaande kamer',
   'join.instructions': 'Open bij voorkeur de link die de host deelt. Heb je alleen de code, vul die dan hieronder in.',
   'join.noSuchRoom': 'Die kamer bestaat niet. Klopt de code?',
-  'firebase.permissionDenied': 'Firebase weigert deze browsersessie. Ververs de pagina; de app herstelt dan automatisch een verlopen anonieme aanmelding. Blijft dit terugkomen, controleer dan of de browser Google/Firebase-verkeer blokkeert.',
+  'firebase.permissionDenied': 'Firebase heeft deze actie of live verbinding geweigerd. Ververs eenmaal. Blijft dit terugkomen: schakel VPN/adblocker uit, sta cookies en Google/Firebase-verkeer toe, of probeer een ander netwerk. Meld daarna de browser, het kamernummer en deze fout aan de host.',
   'join.refereeCannotPlay':
     'Dit apparaat leidt het spel en speelt niet mee — het kan alle kaarten ' +
     'inzien. Doe mee op je eigen telefoon.',
@@ -167,6 +167,8 @@ const nl: Dict = {
   'lobby.botsTitle': 'AI-spelers',
   'lobby.botsNote': 'Alleen om te oefenen. Een potje met AI-spelers telt nooit mee voor de statistieken.',
   'lobby.botTag': 'AI',
+  'lobby.playersTitle': 'Spelers beheren',
+  'lobby.removePlayer': 'Laten vertrekken',
   'lobby.rolesTitle': 'Kaarten in dit potje',
   'lobby.rolesReady': '{selected} kaarten voor {players} spelers en 3 middenkaarten — klaar om te delen.',
   'lobby.rolesMissing': 'Voeg nog {n} kaart(en) toe ({selected} van {needed}).',
@@ -204,6 +206,7 @@ const nl: Dict = {
   // Only the Dorpsgek ever sees a direction. Niemand anders hoort welke kant
   // de kaarten op gingen, dus dit is het enige scherm dat er een noemt.
   'prompt.dorpsgek': 'Welke kant schuiven de kaarten op? Alleen jij weet dit.',
+  'prompt.dorpsgekDesignate': 'Kies eerst één andere speler wiens kaart blijft liggen. Kies daarna de draairichting.',
   'prompt.shiftLeft': 'Naar links',
   'prompt.shiftRight': 'Naar rechts',
   'prompt.dontTurn': 'Niet draaien',
@@ -390,7 +393,7 @@ const en: Dict = {
   'join.open': 'Join an existing room',
   'join.instructions': 'Prefer opening the link shared by the host. If you only have the code, enter it below.',
   'join.noSuchRoom': 'No such room. Is the code right?',
-  'firebase.permissionDenied': 'Firebase refused this browser session. Refresh the page; the app will then automatically repair an expired anonymous sign-in. If this keeps happening, check whether the browser blocks Google/Firebase traffic.',
+  'firebase.permissionDenied': 'Firebase refused this action or live connection. Refresh once. If it continues: disable VPN/ad blocking, allow cookies and Google/Firebase traffic, or try another network. Then tell the host the browser, room code, and this error.',
   'join.refereeCannotPlay':
     'This device runs the game and does not play — it can see every card. ' +
     'Join on your own phone instead.',
@@ -427,6 +430,8 @@ const en: Dict = {
   'lobby.botsTitle': 'AI players',
   'lobby.botsNote': 'For practice only. A game with AI players never counts towards the statistics.',
   'lobby.botTag': 'AI',
+  'lobby.playersTitle': 'Manage players',
+  'lobby.removePlayer': 'Mark as left',
   'lobby.rolesTitle': 'Cards in this game',
   'lobby.rolesReady': '{selected} cards for {players} players and 3 centre cards — ready to deal.',
   'lobby.rolesMissing': 'Add {n} more card(s) ({selected} of {needed}).',
@@ -460,6 +465,7 @@ const en: Dict = {
     'Choose who will receive the card first. Then choose a centre card; you will see what it was after the night.',
   'prompt.confirm': 'Confirm your action.',
   'prompt.dorpsgek': 'Which way do the cards shift? Only you know this.',
+  'prompt.dorpsgekDesignate': 'First choose one other player whose card stays put, then choose the direction.',
   'prompt.shiftLeft': 'To the left',
   'prompt.shiftRight': 'To the right',
   'prompt.dontTurn': 'Do not turn',
