@@ -63,7 +63,7 @@ def header_footer(canvas, doc):
     canvas.drawString(20 * mm, A4[1] - 12 * mm, "DAGERAAD")
     canvas.setFont("Helvetica", 8.5)
     canvas.drawRightString(A4[0] - 20 * mm, A4[1] - 12 * mm,
-                           "Projectstatus · 1 september 2026 · live")
+                           "Projectstatus · 3 september 2026 · live")
     canvas.setStrokeColor(RULE)
     canvas.setLineWidth(0.5)
     canvas.line(20 * mm, A4[1] - 15 * mm, A4[0] - 20 * mm, A4[1] - 15 * mm)
@@ -198,10 +198,11 @@ story.append(PageBreak())
 story.append(Paragraph("Stand van zaken — de app is live", H1))
 
 story.append(Paragraph(
-    "De app staat online en is klaar voor verder playtesten. De eerste ronde "
-    "thuis heeft al verbeteringen opgeleverd voor nachtkeuzes, vertaling, "
-    "stemmen, bots en de indeling op telefoon en laptop. Eén link delen is "
-    "genoeg: geen app-store, geen installatie, geen lokaal netwerk.",
+    "De app staat online en is klaar voor verder playtesten. Na de eerste "
+    "thuisrondes is de hele spelketen opnieuw gecontroleerd: nachtkeuzes, "
+    "vertaling, stemmen, bots, herstel na verversen en de indeling op telefoon "
+    "en laptop. Eén link delen is genoeg: geen app-store, geen installatie, "
+    "geen lokaal netwerk.",
     LEAD))
 
 story.append(panel([
@@ -234,7 +235,7 @@ story.append(panel([
 
 story.append(Paragraph("Drie dingen om aan tafel te weten", H2))
 story.append(panel([
-    ["Laat het tabblad open", "Het apparaat dat het spel leidt rekent de nacht uit. <b>Laat dat tabblad de hele avond openstaan en ververs het niet halverwege een nacht.</b> Vergrendel het scherm niet en zet het apparaat aan de lader."],
+    ["Houd de spelleider bij de hand", "Het apparaat dat het spel leidt rekent de nacht uit. Open laten en aan de lader houden blijft het prettigst. Na verversen of een overname hervat de app nu de nacht, dag of stemming vanuit opgeslagen controlepunten; een lopende nachtstap kan daarbij opnieuw beginnen."],
     ["Kies je eigen naam", "Kies bij het meedoen je eigen naam uit de lijst. Dan blijft je geschiedenis van jou, ook als je later op een andere telefoon speelt."],
     ["Noodbediening", "Valt een telefoon uit tijdens het stemmen, dan kan de spelleider via <b>Menu &gt; Noodbediening &gt; Stem overnemen</b> met <font face='Courier'>takeover</font> één ontbrekende definitieve stem vastleggen. Een bestaande stem wordt nooit overschreven. Met <font face='Courier'>referee</font> kan een aanwezige speler bewust de hele spelleiding overnemen."],
 ], [34 * mm, 122 * mm]))
@@ -383,13 +384,13 @@ story.append(panel([
     ["Nachtmotor (alle rollen, volgorde, resolutie)", "Af · getest"],
     ["Dagfase (klok, vroeg stemmen, definitieve stemmen, noodstem)", "Af · getest"],
     ["Tijdlijn + zelfkalibrerende venstertijden", "Af · getest"],
-    ["Scheidsrechter-lus, host-pauze, bots", "Af · getest"],
+    ["Scheidsrechter-lus, herstelpunten, host-pauze, bots", "Af · getest"],
     ["Testmodus (bots spelen, geen stats, geen kalibratie)", "Af · getest"],
     ["Firestore-schema + beveiligingsregels", "Af · uitgerold en live"],
     ["UI: tafel, statistieken, stemmen, lobby, tablet", "Af · telefoon en laptop getest"],
     ["Scherm: wie leidt het spel (tafelapparaat of eigen telefoon)", "Af · getest"],
     ["Avond als reeks potjes: aanschuiven en weggaan tussendoor", "Af · getest"],
-    ["Firestore-laag (kamer, leden, potjes, de verdeling)", "Af · getest"],
+    ["Firestore-laag (kamer, leden, potjes, de verdeling)", "Af · echte emulator getest"],
     ["Rolplaatjes", "Tijdelijke eigen tekeningen"],
     ["Firebase-project", "Af · dageraad-fdb2d, europe-west4"],
     ["Schermen aan echte gegevens", "Af · een heel potje speelt door"],
@@ -402,11 +403,11 @@ story.append(Paragraph("De beveiligingsregels zijn echt getest", H2))
 story.append(Paragraph(
     "De regels zijn geschreven als <i>aanvallen</i>, niet als gelukkige paden: "
     "elke test is iets wat een van ons met de ontwikkelaarsconsole open zou "
-    "kunnen proberen. Op 1 september zijn <b>148 emulatorcontroles</b> geslaagd. "
+    "kunnen proberen. Op 3 september zijn <b>154 emulatorcontroles</b> geslaagd. "
     "Daaronder zitten aanvallen op het wijzigen van een definitieve stem, "
     "stemmen voor een mens via de botroute, een verkeerde noodcode en het "
     "overschrijven van een al uitgebrachte stem. Geen van die aanvallen kwam "
-    "door.", BODY))
+    "door. Daarnaast zijn <b>674 app- en speltests</b> geslaagd.", BODY))
 story.append(Paragraph(
     "Wat op het gratis plan onvermijdelijk blijft: het apparaat dat de nacht "
     "uitrekent heeft alle kaarten in het geheugen. Dat valt niet weg te "
@@ -445,8 +446,9 @@ story.append(PageBreak())
 # ---------------------------------------------------------------- todo
 story.append(Paragraph("Wat er nu gebeurt", H1))
 story.append(Paragraph(
-    "De app en beveiligingsregels zijn opnieuw gecontroleerd. Wat nu volgt is "
-    "verder oefenen met echte telefoons: de softwaretests zijn groen, maar een "
+    "De app en beveiligingsregels zijn opnieuw gecontroleerd en op 3 september "
+    "opnieuw gepubliceerd. Wat nu volgt is verder oefenen met echte telefoons: "
+    "de softwaretests zijn groen, maar een "
     "avond aan tafel blijft de beste manier om onduidelijke bediening te vinden.", LEAD))
 
 story.append(panel([
@@ -459,7 +461,7 @@ story.append(panel([
     ["✓", "Online zetten",
      "<i>Gedaan.</i> <font face='Courier' size='9'>https://dageraad-fdb2d.web.app</font>"],
     ["1", "Een oefenavond",
-     "Maak een kamer aan als <b>Oefenen</b> en speel er een paar potjes mee, eerst thuis en daarna met meerdere echte telefoons. Controleer vooral nachtresultaten, vroeg stemmen, bots en de noodbediening. Alles werkt, niets telt mee."],
+     "Maak een kamer aan als <b>Oefenen</b> en speel er een paar potjes mee, eerst thuis en daarna met meerdere echte telefoons. Controleer vooral nachtresultaten, vroeg stemmen, bots, verversen/overnemen en de noodbediening. Alles werkt, niets telt mee."],
     ["2", "De eerste echte avond",
      "Maak hem aan als <b>Officieel</b>. Vanaf dat moment loopt de eeuwige stand."],
 ], [8 * mm, 44 * mm, 102 * mm]))
