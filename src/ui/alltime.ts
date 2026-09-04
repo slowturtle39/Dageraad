@@ -77,7 +77,7 @@ export function renderFriendPicker(view: FriendPickerView): HTMLElement {
   create.className = 'btn btn--primary';
   create.textContent = t(lang, 'friend.create');
   create.disabled = view.busy === true || view.typed.trim().length === 0;
-  create.addEventListener('click', () => view.onCreate?.(view.typed.trim()));
+  create.addEventListener('click', () => view.onCreate?.(field.value.trim()));
   // Replacing the whole app on every key loses focus after the first letter.
   // Keep this field and its button in sync locally instead.
   field.addEventListener('input', () => {

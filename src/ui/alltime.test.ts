@@ -77,6 +77,19 @@ describe('picking who you are', () => {
     expect(create.disabled).toBe(false);
   });
 
+  it('creates from what was typed after render, not the captured initial value', () => {
+    let created = '';
+    const el = picker({ onCreate: (name) => { created = name; } });
+    const field = el.querySelector<HTMLInputElement>('.join__name')!;
+    const create = el.querySelector<HTMLButtonElement>('.btn--primary')!;
+
+    field.value = '  Joris  ';
+    field.dispatchEvent(new Event('input'));
+    create.click();
+
+    expect(created).toBe('Joris');
+  });
+
   it('trims the new name before creating it', () => {
     let created = '';
     const el = picker({ typed: '  Joris ', onCreate: (n) => { created = n; } });
