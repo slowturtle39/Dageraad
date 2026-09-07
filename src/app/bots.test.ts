@@ -210,9 +210,9 @@ describe('a mixed table plays a whole round', () => {
 
     await tablet.startGame(roomId, 20260827);
 
-    // Humans and bots both have to answer. The humans here answer by not
-    // answering: the day still has to end, which is what makes a half-empty
-    // playtest table useful rather than a hang.
+    // Bots answer normally. The humans deliberately do not, so this also
+    // exercises the referee's explicit recovery control without reviving the
+    // old automatic timeout.
     const clock = new FakeClock();
     const run = runGame({
       backend: tablet,
@@ -237,7 +237,11 @@ describe('a mixed table plays a whole round', () => {
     });
     let done = false;
     const settled = run.then((v) => { done = true; return v; }, (e) => { done = true; throw e; });
-    for (let i = 0; i < 5_000 && !done; i++) await clock.advance(1_000);
+    for (let i = 0; i < 5_000 && !done; i++) {
+      await clock.advance(1_000);
+      const current = await room(tablet, roomId);
+      if (current.phase === 'night') await tablet.forceNightWindow(roomId);
+    }
     const result = await settled;
 
     expect(result.outcome).toBeTruthy();

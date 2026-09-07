@@ -4,7 +4,7 @@ import { FakeClock } from '../orchestration/clock.js';
 import { botSeatsFor, demoTable, seatDemoBots } from './demoworld.js';
 import { readRoomOnce, runGame } from './refereeRunner.js';
 import { screenFor } from './shell.js';
-import type { PrivateView } from './backend.js';
+import type { Backend, PrivateView } from './backend.js';
 import type { SeatIndex } from '../engine/types.js';
 
 /**
@@ -38,14 +38,24 @@ const FAST = {
 const FAST_DAY = { discussionMs: 500, voteWaitTimeoutMs: 2_000, abstainPollMs: 100 };
 
 /** Drive the fake clock until the round finishes. */
-async function play<T>(clock: FakeClock, running: Promise<T>): Promise<T> {
+async function play<T>(
+  clock: FakeClock,
+  running: Promise<T>,
+  referee: { backend: Backend; roomId: string },
+): Promise<T> {
   let done = false;
+  let phase = 'night';
+  const stop = referee.backend.watchRoom(referee.roomId, (next) => {
+    if (next) phase = next.phase;
+  });
   const settled = running.then((v) => { done = true; return v; });
   for (let i = 0; i < 4000 && !done; i++) {
     clock.advance(200);
     await Promise.resolve();
+    if (phase === 'night') await referee.backend.forceNightWindow(referee.roomId);
     await new Promise((r) => setTimeout(r, 0));
   }
+  stop();
   return settled;
 }
 
@@ -89,7 +99,7 @@ describe('the app can play a whole round', () => {
           void table.me.vote(roomId, dealt.seating[(mySeat + 1) % dealt.seating.length]!, false);
         }
       },
-    }));
+    }), { backend: table.me, roomId });
 
     expect(outcome.outcome).toBeTruthy();
     expect(Object.keys(outcome.finalRoles)).toHaveLength(8);
@@ -117,7 +127,7 @@ describe('the app can play a whole round', () => {
           void table.me.vote(roomId, dealt.seating[(mySeat + 1) % dealt.seating.length]!, false);
         }
       },
-    }));
+    }), { backend: table.me, roomId });
 
     const room = await readRoomOnce(table.me, roomId);
     // Everybody played one round, and the scoreboard is rebuilt from it.
@@ -155,7 +165,7 @@ describe('a player is told what it is being asked', () => {
           );
         }
       },
-    }));
+    }), { backend: table.me, roomId });
 
     const everyRequest = seen.flatMap((v) => v.pending);
     expect(everyRequest.length).toBeGreaterThan(0);
@@ -186,7 +196,7 @@ describe('a player is told what it is being asked', () => {
           );
         }
       },
-    }));
+    }), { backend: table.me, roomId });
 
     expect(lengths.some((n) => n === 0)).toBe(true);
   }, 30_000);
@@ -212,7 +222,7 @@ describe('the screen follows the round', () => {
           void table.me.vote(roomId, during.seating[(mySeat + 1) % during.seating.length]!, false);
         }
       },
-    }));
+    }), { backend: table.me, roomId });
 
     const ended = await readRoomOnce(table.me, roomId);
     expect(screenFor({ uid: table.me.uid, room: ended, players: [] }).kind).toBe('results');

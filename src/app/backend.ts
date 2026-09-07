@@ -54,6 +54,8 @@ export interface RoomView {
    */
   round: number;
   nightWindowIndex: number;
+  /** Set only when the referee deliberately skips the current unanswered step. */
+  nightForceAdvanceIndex?: number | null;
   activeRoles: RoleId[];
   config: GameConfig;
   timeline: Timeline | null;
@@ -106,6 +108,9 @@ export interface RoomView {
   discardedVotes?: Partial<Record<SeatIndex, DiscardReason>>;
   /** Final count after Looier and Bodyguard effects. */
   finalTally?: Record<SeatIndex, number>;
+  /** Test/audit detail that becomes public only with the result. */
+  finalCenterRoles?: RoleId[];
+  nightInfo?: Record<SeatIndex, PrivateInfo[]>;
 }
 
 export type RoomPhase = 'lobby' | 'night' | 'day' | 'voting' | 'results';
@@ -179,6 +184,10 @@ export interface GameResults {
   finalTally: Record<SeatIndex, number>;
   /** Every seat's card at dawn (§6.0) — what the win condition is judged on. */
   finalRoles: Record<SeatIndex, RoleId>;
+  /** The three ordinary centre cards at dawn, published only with the result. */
+  finalCenterRoles?: RoleId[];
+  /** Every private receipt, made public only after the game is over. */
+  nightInfo?: Record<SeatIndex, PrivateInfo[]>;
   seats: Record<SeatIndex, SeatResult>;
 }
 
@@ -313,6 +322,9 @@ export interface Backend {
    * published — who asked is a fact about how confident somebody is.
    */
   requestEarlyVote(roomId: string, requested: boolean): Promise<void>;
+
+  /** Referee-only: consciously skip unanswered actions in the current night step. */
+  forceNightWindow(roomId: string): Promise<void>;
 
   /** Open the ballot immediately. Referee-only and practice-only. */
   forcePracticeVote(roomId: string): Promise<void>;

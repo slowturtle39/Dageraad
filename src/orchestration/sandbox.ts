@@ -59,6 +59,9 @@ export class SandboxStore implements RoomStore, DayStore {
   setWindowIndex(windowIndex: number) {
     return this.inner.setWindowIndex(windowIndex);
   }
+  forceAdvanceRequested(windowIndex: number) {
+    return this.inner.forceAdvanceRequested(windowIndex);
+  }
   readSubmissions(windowIndex: number) {
     return this.inner.readSubmissions(windowIndex);
   }

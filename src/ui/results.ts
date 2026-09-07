@@ -1,7 +1,8 @@
 import { teamOf } from '../engine/roles.js';
-import type { RoleId, SeatIndex, Team } from '../engine/types.js';
+import type { PrivateInfo, RoleId, SeatIndex, Team } from '../engine/types.js';
 import type { DiscardReason } from '../engine/dayphase.js';
 import { roleName, t, type Lang } from './i18n.js';
+import { describeReveal } from './sheet.js';
 
 export interface ResultsView {
   lang: Lang;
@@ -14,6 +15,8 @@ export interface ResultsView {
   finalVotes?: Record<SeatIndex, SeatIndex | null>;
   discardedVotes?: Partial<Record<SeatIndex, DiscardReason>>;
   finalTally?: Record<SeatIndex, number>;
+  finalCenterRoles?: RoleId[];
+  nightInfo?: Record<SeatIndex, PrivateInfo[]>;
   onNextRound?: () => void;
 }
 
@@ -37,10 +40,22 @@ function outcomeText(view: ResultsView): string {
   return t(view.lang, 'results.tieEliminated', { who: names });
 }
 
-function winnersText(lang: Lang, teams: Team[] | undefined): string | null {
+function winnersText(view: ResultsView): string | null {
+  const { lang, winningTeams: teams } = view;
   if (!teams) return null;
   if (teams.length === 0) return t(lang, 'results.winner.none');
-  if (teams.length === 1) return t(lang, `results.winner.${teams[0]}`);
+  if (teams.length === 1) {
+    if (teams[0] === 'wolf') {
+      const winners = Object.entries(view.finalRoles)
+        .filter(([, role]) => teamOf(role) === 'wolf')
+        .map(([seat, role]) =>
+          `${seatName(view, Number(seat) as SeatIndex)} (${roleName(lang, role)})`);
+      if (winners.length > 0) {
+        return t(lang, 'results.winner.wolvesNamed', { who: winners.join(', ') });
+      }
+    }
+    return t(lang, `results.winner.${teams[0]}`);
+  }
   const labels = teams.map((team) => t(lang, `results.team.${team}`));
   return t(lang, 'results.winner.many', {
     who: labels.join(', '),
@@ -87,7 +102,7 @@ export function renderResults(view: ResultsView): HTMLElement {
   outcome.textContent = outcomeText(view);
   panel.append(outcome);
 
-  const winners = winnersText(view.lang, view.winningTeams);
+  const winners = winnersText(view);
   if (winners) {
     const winner = document.createElement('p');
     winner.className = 'resultpanel__winner';
@@ -149,6 +164,48 @@ export function renderResults(view: ResultsView): HTMLElement {
     roles.append(row);
   }
   panel.append(roles);
+
+  if (view.finalCenterRoles?.length) {
+    const centerHeading = document.createElement('h3');
+    centerHeading.className = 'resultpanel__heading';
+    centerHeading.textContent = t(view.lang, 'results.centerCards');
+    panel.append(centerHeading);
+    const centers = document.createElement('div');
+    centers.className = 'results__seats';
+    view.finalCenterRoles.forEach((role, index) => {
+      const row = document.createElement('p');
+      row.className = 'results__row';
+      row.textContent = `${index + 1}: ${roleName(view.lang, role)}`;
+      centers.append(row);
+    });
+    panel.append(centers);
+  }
+
+  const nightEntries = Object.entries(view.nightInfo ?? {})
+    .filter(([, info]) => info.length > 0);
+  if (nightEntries.length > 0) {
+    const nightHeading = document.createElement('h3');
+    nightHeading.className = 'resultpanel__heading';
+    nightHeading.textContent = t(view.lang, 'results.nightLog');
+    panel.append(nightHeading);
+    const log = document.createElement('div');
+    log.className = 'results__votes';
+    for (const [seatKey, info] of nightEntries) {
+      const seat = Number(seatKey) as SeatIndex;
+      for (const item of info) {
+        const row = document.createElement('p');
+        row.className = 'results__vote';
+        row.textContent = `${seatName(view, seat)}: ${describeReveal(
+          view.lang,
+          item,
+          (target) => seatName(view, target as SeatIndex),
+          (role) => roleName(view.lang, role as RoleId),
+        )}`;
+        log.append(row);
+      }
+    }
+    panel.append(log);
+  }
 
   if (view.onNextRound) {
     const next = document.createElement('button');

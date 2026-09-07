@@ -84,7 +84,11 @@ service cloud.firestore {
     function ordinaryVoteFields() {
       return request.resource.data.keys().hasOnly(
         ['round', 'target', 'abstain', 'readyToVote', 'castAt']
-      );
+      )
+      && !(('abstain' in request.resource.data)
+           && request.resource.data.abstain == true
+           && ('readyToVote' in request.resource.data)
+           && request.resource.data.readyToVote == true);
     }
     function currentVoteIsFinal(roomId) {
       return ('round' in resource.data)
@@ -200,6 +204,15 @@ service cloud.firestore {
         && !changed('discussionMs')
         && (!changed('discussionEndsAt') || isReferee(roomId)
             || (isHost(roomId) && changed('pausedAt')))
+        // A slow player's action never expires. Only the referee may
+        // deliberately skip the CURRENT night step; stale/future indices are
+        // refused so this cannot pre-authorise later missing actions.
+        && (!changed('nightForceAdvanceIndex')
+            || (isReferee(roomId)
+                && inPhase(roomId, 'night')
+                && (request.resource.data.nightForceAdvanceIndex == null
+                    || request.resource.data.nightForceAdvanceIndex
+                       == resource.data.nightWindowIndex)))
         // The practice shortcut is never accepted in an official room.
         && (!changed('practiceSkipDiscussion')
             || (isReferee(roomId) && (

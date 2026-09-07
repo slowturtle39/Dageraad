@@ -29,12 +29,17 @@ function seeded(seed: number): () => number {
 const FAST = { openWindowMs: 200, resolvePadMs: 50, followupMs: {}, defaultFollowupMs: 200 };
 const FAST_DAY = { discussionMs: 300, voteWaitTimeoutMs: 1_000, abstainPollMs: 50 };
 
-async function play<T>(clock: FakeClock, running: Promise<T>): Promise<T> {
+async function play<T>(
+  clock: FakeClock,
+  running: Promise<T>,
+  tick?: () => Promise<void>,
+): Promise<T> {
   let done = false;
   const settled = running.then((v) => { done = true; return v; });
   for (let i = 0; i < 4000 && !done; i++) {
     clock.advance(200);
     await Promise.resolve();
+    if (tick) await tick();
     await new Promise((r) => setTimeout(r, 0));
   }
   return settled;
@@ -88,6 +93,8 @@ async function evening(
   const bots = botSeatsFor(table as ReturnType<typeof demoTable>, dealt.seating, 3);
   const mySeat = dealt.seating.indexOf(me.uid) as SeatIndex;
 
+  let phase = dealt.phase;
+  const stop = me.watchRoom(roomId, (next) => { if (next) phase = next.phase; });
   await play(clock, runGame({
     backend: me, roomId, clock, durations: FAST, dayConfig: FAST_DAY,
     bots,
@@ -97,7 +104,10 @@ async function evening(
         void me.vote(roomId, dealt.seating[(mySeat + 1) % dealt.seating.length]!, false);
       }
     },
-  }));
+  }), async () => {
+    if (phase === 'night') await me.forceNightWindow(roomId);
+  });
+  stop();
   return roomId;
 }
 

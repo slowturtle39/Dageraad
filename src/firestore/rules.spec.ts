@@ -50,6 +50,7 @@ async function seed(phase = 'night', nightWindowIndex = 0, currentRound = 1,
       refereeUid: REF,
       phase,
       nightWindowIndex,
+      nightForceAdvanceIndex: null,
       currentRound,
       mode,
       config: {},
@@ -173,6 +174,38 @@ describe('the shared discussion timer and practice shortcut', () => {
     await assertFails(updateDoc(doc(as(ALICE), 'rooms', ROOM), {
       pausedAt: 1000,
       discussionEndsAt: 999_000,
+    }));
+  });
+});
+
+describe('a night action waits unless the referee consciously skips it', () => {
+  it('lets only the referee skip the currently open night step', async () => {
+    await seed('night', 3);
+    await assertSucceeds(updateDoc(doc(as(REF), 'rooms', ROOM), {
+      nightForceAdvanceIndex: 3,
+    }));
+  });
+
+  it('refuses players, the host, and stale or future step numbers', async () => {
+    await seed('night', 3);
+    await assertFails(updateDoc(doc(as(ALICE), 'rooms', ROOM), {
+      nightForceAdvanceIndex: 3,
+    }));
+    await assertFails(updateDoc(doc(as(HOST), 'rooms', ROOM), {
+      nightForceAdvanceIndex: 3,
+    }));
+    await assertFails(updateDoc(doc(as(REF), 'rooms', ROOM), {
+      nightForceAdvanceIndex: 2,
+    }));
+    await assertFails(updateDoc(doc(as(REF), 'rooms', ROOM), {
+      nightForceAdvanceIndex: 4,
+    }));
+  });
+
+  it('cannot be armed outside the night', async () => {
+    await seed('day', 3);
+    await assertFails(updateDoc(doc(as(REF), 'rooms', ROOM), {
+      nightForceAdvanceIndex: 3,
     }));
   });
 });
@@ -1238,6 +1271,15 @@ describe('asking to open the ballot early', () => {
   // A decision about the CLOCK rather than the outcome. It rides on the vote
   // document, so the properties to prove are that it inherits a vote's privacy
   // and cannot be used to smuggle a target in before voting opens.
+
+  it('refuses asking to vote and abstaining at the same time', async () => {
+    await seed('day');
+    await assertFails(
+      setDoc(doc(as(ALICE), 'rooms', ROOM, 'votes', ALICE), {
+        round: 1, target: null, abstain: true, readyToVote: true,
+      }),
+    );
+  });
 
   it('is accepted during the discussion', async () => {
     await seed('day');

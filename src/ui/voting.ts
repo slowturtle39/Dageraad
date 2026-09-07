@@ -100,6 +100,11 @@ export function renderVoting(view: VotingView): HTMLElement {
 
   const needed = Math.floor(view.seatCount / 2) + 1;
   if (!view.votingOpen) {
+    const timerExplain = document.createElement('p');
+    timerExplain.className = 'sheet__note';
+    timerExplain.textContent = t(view.lang, 'day.timerExplain');
+    el.append(timerExplain);
+
     const abstain = document.createElement('button');
     abstain.type = 'button';
     abstain.className = view.abstain ? 'btn btn--primary' : 'btn';

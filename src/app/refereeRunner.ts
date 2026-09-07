@@ -1,4 +1,4 @@
-import { finalRoleOf } from '../engine/state.js';
+import { centerSlot, finalRoleOf, roleAt } from '../engine/state.js';
 import type { Bot } from '../engine/bot.js';
 import type { DayOptions } from '../engine/dayphase.js';
 import type { Durations } from '../engine/timeline.js';
@@ -285,6 +285,13 @@ async function buildResults(
     ),
     finalTally: { ...day.result.tally },
     finalRoles,
+    finalCenterRoles: Array.from(
+      { length: state.centerCount },
+      (_, index) => roleAt(state, centerSlot(state, index)),
+    ),
+    nightInfo: Object.fromEntries(
+      Object.entries(night.result.privateInfo).map(([seat, info]) => [seat, [...info]]),
+    ) as GameResults['nightInfo'],
     seats,
   };
 }
@@ -312,6 +319,7 @@ function withPhaseHook(
     readNightCheckpoint: () => inner.readNightCheckpoint(),
     saveNightCheckpoint: (checkpoint) => inner.saveNightCheckpoint(checkpoint),
     setWindowIndex: (i) => inner.setWindowIndex(i),
+    forceAdvanceRequested: (i) => inner.forceAdvanceRequested(i),
     readSubmissions: (i) => inner.readSubmissions(i),
     setPrivateInfo: (seat, info) => inner.setPrivateInfo(seat, info),
     releaseDecisions: (seat, requests) => inner.releaseDecisions(seat, requests),

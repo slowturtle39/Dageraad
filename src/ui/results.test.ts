@@ -22,12 +22,42 @@ describe('the public result panel', () => {
     });
 
     expect(panel.textContent).toContain('Gelijkspel: AI Bram, AI Fleur zijn gelyncht.');
-    expect(panel.textContent).toContain('De wolven winnen.');
+    expect(panel.textContent).toContain('De wolven winnen: AI Bram (Alfawolf).');
     expect(panel.textContent).toContain('Speler stemt op AI Bram');
     expect(panel.textContent).toContain('AI Bram stemt op AI Fleur');
     expect(panel.textContent).toContain('Eindtelling: Speler 1 · AI Bram 2 · AI Fleur 2');
     expect(panel.textContent).toContain('AI Bram: Alfawolf · gelyncht · gewonnen');
     expect(panel.textContent).toContain('AI Fleur: Medium · gelyncht · verloren');
+  });
+
+  it('shows one lynched player in the singular', () => {
+    const panel = renderResults({
+      lang: 'nl', outcome: 'eliminated', ownSeat: 0,
+      names: { 0: 'Milan', 1: 'Noor' },
+      finalRoles: { 0: 'dorpeling', 1: 'weerwolf' },
+      eliminatedSeats: [1], winningTeams: ['village'],
+    });
+    expect(panel.textContent).toContain('Noor is gelyncht.');
+    expect(panel.textContent).not.toContain('Noor zijn gelyncht.');
+  });
+
+  it('shows centre cards and the full night log only on the result panel', () => {
+    const panel = renderResults({
+      lang: 'nl', outcome: 'eliminated', ownSeat: 0,
+      names: { 0: 'Milan', 1: 'Noor' },
+      finalRoles: { 0: 'leerlingziener', 1: 'medium' },
+      finalCenterRoles: ['jager', 'looier', 'dorpeling'],
+      nightInfo: {
+        0: [{ kind: 'saw-center', step: 1, centerIndex: 1, role: 'looier' }],
+        1: [{ kind: 'saw-card', step: 2, slot: 0, role: 'leerlingziener' }],
+      },
+    });
+    expect(panel.textContent).toContain('Middenkaarten bij zonsopgang');
+    expect(panel.textContent).toContain('1: Jager');
+    expect(panel.textContent).toContain('2: Looier');
+    expect(panel.textContent).toContain('Wat er in de nacht gebeurde');
+    expect(panel.textContent).toContain('Milan: Bij jouw beurt lag de Looier op middenkaart 2.');
+    expect(panel.textContent).toContain('Noor: Bij jouw beurt had Milan de Leerlingziener.');
   });
 
   it('makes the Bodyguard and Tanner exceptions visible', () => {

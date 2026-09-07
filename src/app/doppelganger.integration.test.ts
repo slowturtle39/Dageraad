@@ -137,6 +137,14 @@ function slowHuman(me: Backend, roomId: string, clock: FakeClock) {
   };
 }
 
+function refereeSkipsMissing(me: Backend, roomId: string): () => Promise<void> {
+  let phase = 'night';
+  me.watchRoom(roomId, (next) => { if (next) phase = next.phase; });
+  return async () => {
+    if (phase === 'night') await me.forceNightWindow(roomId);
+  };
+}
+
 describe('a human Dubbelganger is asked, and has time to answer', () => {
   it('gets the copy prompt and then the copied role\'s own prompt', async () => {
     const { me, roomId } = await practiceTable(6);
@@ -226,7 +234,7 @@ describe('a human Dubbelganger is asked, and has time to answer', () => {
           void me.vote(roomId, room.seating[(room.seating.indexOf(me.uid) + 1) % room.seating.length]!, false);
         }
       },
-    }));
+    }), refereeSkipsMissing(me, roomId));
 
     expect(visibleMs).toBeGreaterThanOrEqual(5_000);
   }, 60_000);
@@ -253,7 +261,7 @@ describe('a human Dubbelganger is asked, and has time to answer', () => {
           void me.vote(roomId, room.seating[(room.seating.indexOf(me.uid) + 1) % room.seating.length]!, false);
         }
       },
-    }));
+    }), refereeSkipsMissing(me, roomId));
 
     expect(result.resultsPersisted).toBe(false);
   }, 60_000);

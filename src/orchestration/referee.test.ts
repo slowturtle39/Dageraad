@@ -33,7 +33,12 @@ async function play(
 
   const running = runNight({
     state, activeRoles: DEFAULT_ACTIVE_ROLES, config, store, clock,
-    onWindowOpen: (w) => script(w, store),
+    onWindowOpen: (w) => {
+      script(w, store);
+      // Most tests below are about resolution, not waiting. Deliberately skip
+      // anything their script did not answer so the helper can finish.
+      store.forceAdvance(w.index);
+    },
   });
 
   // Let the referee reach its first sleep before moving time, then step the
@@ -159,11 +164,49 @@ describe('submissions', () => {
     expect(store.latency.every((x) => x.sessionId === 'local')).toBe(true);
   });
 
-  it('marks unsubmitted decisions as timed-out rather than wrong', async () => {
+  it('records only a deliberate referee skip as an unanswered action', async () => {
     const { out, store } = await play(standardDeal(), TWO_ROUND_CONFIG);
-    expect(out.timedOut.length).toBeGreaterThan(0);
-    // Timed-out samples are recorded but must never feed calibration as latency.
-    expect(store.latency.some((s) => s.outcome === 'timed-out')).toBe(true);
+    expect(out.skipped.length).toBeGreaterThan(0);
+    expect(store.latency.some((s) => s.outcome === 'referee-skipped')).toBe(true);
+  });
+
+  it('never expires a real player action when the minimum window ends', async () => {
+    const state = createNightState({
+      seatCount: 1,
+      seatRoles: ['leerlingziener'],
+      centerRoles: ['dorpeling', 'looier', 'jager'],
+    });
+    const store = new InMemoryRoomStore();
+    const clock = new FakeClock();
+    const timeline = buildTimeline(['leerlingziener'], TWO_ROUND_CONFIG);
+    let finished = false;
+    const running = runNight({
+      state,
+      activeRoles: ['leerlingziener'],
+      config: TWO_ROUND_CONFIG,
+      store,
+      clock,
+    }).then((result) => {
+      finished = true;
+      return result;
+    });
+
+    for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r));
+    await clock.advance(timeline.phases[0]!.endMs + 30_000);
+    for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r));
+    expect(finished).toBe(false);
+    expect(store.phase).toBe('night');
+
+    store.submit(0, 0, {
+      'apprentice-center': { kind: 'center', centerIndices: [1] },
+    });
+    await clock.advance(500);
+    for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r));
+    const result = await running;
+    expect(result.skipped).toEqual([]);
+    expect(result.result.privateInfo[0]).toContainEqual(
+      expect.objectContaining({ kind: 'saw-center', centerIndex: 1, role: 'looier' }),
+    );
   });
 
   it('rejects a submission for a window that has already closed', async () => {
@@ -247,6 +290,7 @@ describe('durable night recovery', () => {
     });
     const crashed = expect(first).rejects.toThrow(/tab closed/);
     for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r));
+    store.forceAdvance(0);
     await firstClock.advance(timeline.phases[0]!.endMs - timeline.phases[0]!.startMs + 1);
     await crashed;
 
@@ -261,6 +305,7 @@ describe('durable night recovery', () => {
       store, clock: resumeClock, onWindowOpen: (window) => opened.push(window.index),
     });
     for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r));
+    store.forceAdvance(1);
     await resumeClock.advance(
       timeline.phases[1]!.endMs - timeline.phases[1]!.startMs + 1,
     );

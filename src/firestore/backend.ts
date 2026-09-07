@@ -98,6 +98,7 @@ export class FirestoreBackend implements Backend {
       // mid-evening rather than a special case.
       currentRound: 0,
       nightWindowIndex: 0,
+      nightForceAdvanceIndex: null,
       activeRoles: options.activeRoles,
       nightOrder: [],
       config: options.config,
@@ -326,6 +327,7 @@ export class FirestoreBackend implements Backend {
       seating,
       phase: 'night',
       nightWindowIndex: 0,
+      nightForceAdvanceIndex: null,
       timeline: buildTimeline(room.activeRoles, room.config),
       // Clear last round's table so nothing bleeds across.
       publicEvents: [],
@@ -345,6 +347,8 @@ export class FirestoreBackend implements Backend {
       finalVotes: deleteField(),
       discardedVotes: deleteField(),
       finalTally: deleteField(),
+      finalCenterRoles: deleteField(),
+      nightInfo: deleteField(),
     });
 
     batch.set(doc(this.db, paths.engineState(roomId)), engineStateToDoc(dealt.state));
@@ -426,6 +430,7 @@ export class FirestoreBackend implements Backend {
       discussionEndsAt: room.discussionEndsAt ?? null,
       practiceSkipDiscussion: room.practiceSkipDiscussion ?? false,
       nightWindowIndex: room.nightWindowIndex ?? 0,
+      nightForceAdvanceIndex: room.nightForceAdvanceIndex ?? null,
       activeRoles: room.activeRoles ?? [],
       config: room.config,
       timeline: room.timeline ?? null,
@@ -447,6 +452,8 @@ export class FirestoreBackend implements Backend {
       ...(room.finalVotes ? { finalVotes: room.finalVotes } : {}),
       ...(room.discardedVotes ? { discardedVotes: room.discardedVotes } : {}),
       ...(room.finalTally ? { finalTally: room.finalTally } : {}),
+      ...(room.finalCenterRoles ? { finalCenterRoles: room.finalCenterRoles } : {}),
+      ...(room.nightInfo ? { nightInfo: room.nightInfo } : {}),
     };
   }
 
@@ -621,7 +628,9 @@ export class FirestoreBackend implements Backend {
       abstain,
       // A player can ask to open the ballot, then choose a target when it opens.
       // Preserve that request only from this round; last round's document is stale.
-      readyToVote: existing?.round === room.currentRound && existing.readyToVote === true,
+      readyToVote: abstain
+        ? false
+        : existing?.round === room.currentRound && existing.readyToVote === true,
       castAt: Date.now(),
     });
   }
@@ -685,9 +694,18 @@ export class FirestoreBackend implements Backend {
     await setDoc(ref, {
       round: room.currentRound,
       target: current?.target ?? null,
-      abstain: current?.abstain === true,
+      abstain: requested ? false : current?.abstain === true,
       readyToVote: requested,
       castAt: Date.now(),
+    });
+  }
+
+  async forceNightWindow(roomId: string): Promise<void> {
+    const room = await this.room(roomId);
+    if (room.refereeUid !== this.uid) throw new Error('referee only');
+    if (room.phase !== 'night') throw new Error('night is not running');
+    await updateDoc(this.roomRef(roomId), {
+      nightForceAdvanceIndex: room.nightWindowIndex,
     });
   }
 
@@ -868,6 +886,8 @@ export class FirestoreBackend implements Backend {
       finalVotes: results.finalVotes,
       discardedVotes: results.discardedVotes,
       finalTally: results.finalTally,
+      finalCenterRoles: results.finalCenterRoles ?? [],
+      nightInfo: results.nightInfo ?? {},
     });
   }
 
@@ -932,6 +952,8 @@ export class FirestoreBackend implements Backend {
       finalVotes: results.finalVotes,
       discardedVotes: results.discardedVotes,
       finalTally: results.finalTally,
+      finalCenterRoles: results.finalCenterRoles ?? [],
+      nightInfo: results.nightInfo ?? {},
     });
     await batch.commit();
   }

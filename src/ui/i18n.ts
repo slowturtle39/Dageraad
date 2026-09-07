@@ -150,6 +150,9 @@ const nl: Dict = {
   'menu.title': 'Menu',
   'menu.forceVote': 'Open nu de stemming',
   'menu.forceVoteNote': 'Alleen voor oefenpotjes. AI-spelers stemmen daarna automatisch willekeurig.',
+  'menu.forceNight': 'Sla ontbrekende nachtactie over',
+  'menu.forceNightNote':
+    'Alleen gebruiken als een speler niet meer kan antwoorden. De ontbrekende actie wordt definitief niet uitgevoerd; dit kan niet ongedaan.',
   'menu.close': 'Sluiten',
   'menu.share': 'Deel de link',
   'menu.copied': 'Gekopieerd',
@@ -212,6 +215,7 @@ const nl: Dict = {
   'prompt.dontTurn': 'Niet draaien',
   'prompt.waiting': 'Wacht op de anderen…',
   'prompt.nothingToDo': 'Je hoeft nu niets te doen.',
+  'prompt.noDeadline': 'Neem de tijd: deze actie verloopt niet automatisch.',
 
   'day.voteNow': 'Stemmen',
   // A decision about the CLOCK, not the uitslag. Het scherm zegt dat erbij,
@@ -222,6 +226,8 @@ const nl: Dict = {
     'Dit is niet hetzelfde als afzien van stemmen. Zodra meer dan de helft ' +
     'dit tegelijk aan heeft, gaat de stemming meteen open.',
   'day.discussing': 'Overleg',
+  'day.timerExplain':
+    'Als de overlegtimer afloopt, opent de stemming. Je hoeft tijdens het overleg nog niet op iemand te stemmen. Daarna wacht het spel zonder deadline tot iedereen één definitieve stem heeft uitgebracht.',
   'results.title': 'Uitslag',
   'results.nextRound': 'Volgende ronde',
   'results.finished': 'De stemming is afgerond.',
@@ -232,6 +238,7 @@ const nl: Dict = {
   'results.winner.none': 'Niemand wint.',
   'results.winner.village': 'Het dorp wint.',
   'results.winner.wolf': 'De wolven winnen.',
+  'results.winner.wolvesNamed': 'De wolven winnen: {who}.',
   'results.winner.solo': 'De Looier wint alleen.',
   'results.winner.many': '{who} winnen.',
   'results.team.village': 'Het dorp',
@@ -247,6 +254,8 @@ const nl: Dict = {
   'results.tally': 'Eindtelling: {tally}',
   'results.tally.empty': 'Geen enkele stem telde mee.',
   'results.finalCards': 'Kaarten bij zonsopgang',
+  'results.centerCards': 'Middenkaarten bij zonsopgang',
+  'results.nightLog': 'Wat er in de nacht gebeurde',
   'results.eliminatedMark': 'gelyncht',
   'results.playerWon': 'gewonnen',
   'results.playerLost': 'verloren',
@@ -413,6 +422,9 @@ const en: Dict = {
   'menu.title': 'Menu',
   'menu.forceVote': 'Open voting now',
   'menu.forceVoteNote': 'Practice rooms only. AI players then vote randomly automatically.',
+  'menu.forceNight': 'Skip missing night action',
+  'menu.forceNightNote':
+    'Only use this when a player can no longer answer. The missing action is permanently not performed; this cannot be undone.',
   'menu.close': 'Close',
   'menu.share': 'Share the link',
   'menu.copied': 'Copied',
@@ -471,6 +483,7 @@ const en: Dict = {
   'prompt.dontTurn': 'Do not turn',
   'prompt.waiting': 'Waiting for the others\u2026',
   'prompt.nothingToDo': 'Nothing for you to do right now.',
+  'prompt.noDeadline': 'Take your time: this action does not expire automatically.',
 
   'day.voteNow': 'Vote',
   'day.readyToVote': 'I\u2019m ready \u2014 let\u2019s vote',
@@ -479,6 +492,8 @@ const en: Dict = {
     'This is not the same as voting not to vote. The moment more than half ' +
     'hold this at once, the ballot opens.',
   'day.discussing': 'Discussion',
+  'day.timerExplain':
+    'When the discussion timer ends, the ballot opens. You do not need to vote for somebody during discussion. The game then waits without a deadline until everyone has cast one final vote.',
   'results.title': 'Result',
   'results.nextRound': 'Next round',
   'results.finished': 'Voting is complete.',
@@ -489,6 +504,7 @@ const en: Dict = {
   'results.winner.none': 'Nobody wins.',
   'results.winner.village': 'The village wins.',
   'results.winner.wolf': 'The wolves win.',
+  'results.winner.wolvesNamed': 'The wolves win: {who}.',
   'results.winner.solo': 'The Tanner wins alone.',
   'results.winner.many': '{who} win.',
   'results.team.village': 'The village',
@@ -504,6 +520,8 @@ const en: Dict = {
   'results.tally': 'Final tally: {tally}',
   'results.tally.empty': 'No vote counted.',
   'results.finalCards': 'Cards at dawn',
+  'results.centerCards': 'Centre cards at dawn',
+  'results.nightLog': 'What happened during the night',
   'results.eliminatedMark': 'lynched',
   'results.playerWon': 'won',
   'results.playerLost': 'lost',

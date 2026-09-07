@@ -20,6 +20,9 @@ export interface RoomStore {
   /** Advance the room's window counter. Rejects late submissions server-side. */
   setWindowIndex(windowIndex: number): Promise<void>;
 
+  /** Referee-only escape hatch for a player/device that cannot answer. */
+  forceAdvanceRequested(windowIndex: number): Promise<boolean>;
+
   /**
    * Submissions for a window, keyed by seat then by decision key.
    * Only ever read by the referee.
@@ -86,6 +89,7 @@ export class InMemoryRoomStore implements RoomStore {
   readonly publicEvents: NightEvent[] = [];
   readonly latency: LatencySample[] = [];
   checkpoint: NightCheckpoint | null = null;
+  forcedWindowIndex: number | null = null;
 
   async readNightCheckpoint(): Promise<NightCheckpoint | null> {
     return this.checkpoint
@@ -99,6 +103,16 @@ export class InMemoryRoomStore implements RoomStore {
 
   async setWindowIndex(windowIndex: number): Promise<void> {
     this.windowIndex = windowIndex;
+    this.forcedWindowIndex = null;
+  }
+
+  async forceAdvanceRequested(windowIndex: number): Promise<boolean> {
+    return this.forcedWindowIndex === windowIndex;
+  }
+
+  /** Test helper standing in for the referee's explicit menu action. */
+  forceAdvance(windowIndex = this.windowIndex): void {
+    this.forcedWindowIndex = windowIndex;
   }
 
   async readSubmissions(windowIndex: number) {

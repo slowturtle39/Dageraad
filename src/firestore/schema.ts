@@ -84,6 +84,8 @@ export interface RoomDoc {
    * seeing a reveal without having to trust any client's clock.
    */
   nightWindowIndex: number;
+  /** Current night step the referee explicitly chose to finish without all answers. */
+  nightForceAdvanceIndex: number | null;
   /** PUBLIC by design — the host picks these at setup and everyone sees them. */
   activeRoles: RoleId[];
   nightOrder: RoleId[];
@@ -139,6 +141,9 @@ export interface RoomDoc {
   finalVotes?: Record<number, number | null>;
   discardedVotes?: Partial<Record<number, DiscardReason>>;
   finalTally?: Record<number, number>;
+  /** Published only in the result phase for playtest verification. */
+  finalCenterRoles?: RoleId[];
+  nightInfo?: Record<number, PrivateInfo[]>;
   /**
    * SLOT -> the role lying face up there right now (§12).
    *
@@ -430,7 +435,7 @@ export interface CalibrationDoc {
   role: RoleId;
   key: string;
   latencyMs: number;
-  outcome: 'submitted' | 'timed-out';
+  outcome: 'submitted' | 'timed-out' | 'referee-skipped';
   paused: boolean;
   sessionId: string;
   createdAt: number;

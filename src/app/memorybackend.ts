@@ -103,6 +103,7 @@ export class MemoryWorld {
         practiceSkipDiscussion: false,
         round: 0,
         nightWindowIndex: 0,
+        nightForceAdvanceIndex: null,
         activeRoles: options.activeRoles,
         config: options.config,
         timeline: null,
@@ -392,6 +393,8 @@ class MemoryBackend implements Backend {
     delete r.view.finalVotes;
     delete r.view.discardedVotes;
     delete r.view.finalTally;
+    delete r.view.finalCenterRoles;
+    delete r.view.nightInfo;
 
     const seatCount = r.view.seating.length;
     const cards = cardsForRoles(r.view.activeRoles, seatCount);
@@ -402,6 +405,7 @@ class MemoryBackend implements Backend {
     r.view.timeline = buildTimeline(r.view.activeRoles, r.view.config);
     r.view.phase = 'night';
     r.view.nightWindowIndex = 0;
+    r.view.nightForceAdvanceIndex = null;
 
     // Each seat learns its own dealt role and nothing else. This is the only
     // moment the referee writes a role anywhere, and it writes one per device.
@@ -492,7 +496,11 @@ class MemoryBackend implements Backend {
     if (phase === 'voting' && existing?.target !== null && existing?.target !== undefined) {
       throw new Error('vote is final');
     }
-    r.votes.set(this.uid, { target, abstain, readyToVote: existing?.readyToVote });
+    r.votes.set(this.uid, {
+      target,
+      abstain,
+      readyToVote: abstain ? false : existing?.readyToVote,
+    });
     this.world.notify(roomId);
   }
 
@@ -643,7 +651,19 @@ class MemoryBackend implements Backend {
       throw new Error(`cannot ask to vote in phase ${phase}`);
     }
     const existing = r.votes.get(this.uid) ?? { target: null, abstain: false };
-    r.votes.set(this.uid, { ...existing, readyToVote: requested });
+    r.votes.set(this.uid, {
+      ...existing,
+      abstain: requested ? false : existing.abstain,
+      readyToVote: requested,
+    });
+    this.world.notify(roomId);
+  }
+
+  async forceNightWindow(roomId: string): Promise<void> {
+    const r = this.world.room(roomId);
+    this.requireReferee(r);
+    if (r.view.phase !== 'night') throw new Error('night is not running');
+    r.view.nightForceAdvanceIndex = r.view.nightWindowIndex;
     this.world.notify(roomId);
   }
 
@@ -697,6 +717,8 @@ class MemoryBackend implements Backend {
     r.view.finalVotes = results.finalVotes;
     r.view.discardedVotes = results.discardedVotes;
     r.view.finalTally = results.finalTally;
+    r.view.finalCenterRoles = results.finalCenterRoles ?? [];
+    r.view.nightInfo = results.nightInfo ?? {};
     // Only a live game leaves a permanent record. See the note on the
     // interface: these documents are append-only and there is no delete path.
     if (persist) {
@@ -722,6 +744,8 @@ class MemoryBackend implements Backend {
     r.view.finalVotes = results.finalVotes;
     r.view.discardedVotes = results.discardedVotes;
     r.view.finalTally = results.finalTally;
+    r.view.finalCenterRoles = results.finalCenterRoles ?? [];
+    r.view.nightInfo = results.nightInfo ?? {};
 
     if (record && !r.rounds.some((entry) => entry.round === record.round)) {
       r.rounds = [...r.rounds, record];
@@ -856,7 +880,12 @@ class MemoryRefereeStore implements RoomStore, DayStore {
 
   async setWindowIndex(windowIndex: number): Promise<void> {
     this.r.view.nightWindowIndex = windowIndex;
+    this.r.view.nightForceAdvanceIndex = null;
     this.world.notify(this.roomId);
+  }
+
+  async forceAdvanceRequested(windowIndex: number): Promise<boolean> {
+    return this.r.view.nightForceAdvanceIndex === windowIndex;
   }
 
   async readSubmissions(windowIndex: number) {

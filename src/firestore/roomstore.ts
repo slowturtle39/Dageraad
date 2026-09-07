@@ -61,10 +61,17 @@ export class FirestoreRoomStore implements RoomStore, DayStore {
   }
 
   async setWindowIndex(windowIndex: number): Promise<void> {
-    // This is what actually enforces the submission deadline: the rules only
-    // accept a write whose windowIndex matches this value, so advancing it
-    // closes the window server-side without trusting any client's clock.
-    await updateDoc(this.room(), { nightWindowIndex: windowIndex });
+    // The rules only accept a write whose windowIndex matches this value.
+    // Advancing it closes the completed step server-side; elapsed time alone
+    // never advances it or discards a player's answer.
+    await updateDoc(this.room(), { nightWindowIndex: windowIndex, nightForceAdvanceIndex: null });
+  }
+
+  async forceAdvanceRequested(windowIndex: number): Promise<boolean> {
+    const data = (await getDoc(this.room())).data() as {
+      nightForceAdvanceIndex?: number | null;
+    } | undefined;
+    return data?.nightForceAdvanceIndex === windowIndex;
   }
 
   async setPhase(phase: RoomPhase): Promise<void> {

@@ -40,6 +40,7 @@ async function playTestGame(botSeats: SeatIndex[]) {
   };
   for (const phase of timeline.phases) {
     await tick();
+    inner.forceAdvance(phase.index);
     await clock.advance(phase.endMs - phase.startMs + 1);
   }
   await tick();
@@ -87,10 +88,10 @@ describe('test mode cannot touch anything permanent', () => {
 
 describe('bots', () => {
   it('play every seat except the ones you keep', async () => {
-    // Seat 0 is you: nothing is generated for it, so its decisions time out
-    // rather than being answered on your behalf.
+    // Seat 0 is you: nothing is generated for it, so only the referee's
+    // explicit test skip moves it on rather than answering on your behalf.
     const { out } = await playTestGame([1, 2, 3, 4, 5, 6, 7]);
-    expect(out.timedOut.every((r) => r.seat === 0)).toBe(true);
+    expect(out.skipped.every((r) => r.seat === 0)).toBe(true);
   });
 
   it('do not shorten their window by answering instantly', async () => {
@@ -99,6 +100,7 @@ describe('bots', () => {
     const { out } = await playTestGame([0, 1, 2, 3, 4, 5, 6, 7]);
     const expected = buildTimeline(DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG);
     expect(out.timeline.totalMs).toBe(expected.totalMs);
+    expect(out.skipped).toEqual([]);
   });
 
   it('are reproducible from a seed, so a bug found can be chased', async () => {

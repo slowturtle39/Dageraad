@@ -79,6 +79,7 @@ async function night(config = DEPENDENCY_CONFIG) {
   };
   for (const phase of timeline.phases) {
     await tick();
+    store.forceAdvance(phase.index);
     await clock.advance(phase.endMs - phase.startMs + 1);
   }
   await tick();

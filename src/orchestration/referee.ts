@@ -20,9 +20,9 @@ import type { NightCheckpoint, RoomStore } from './store.js';
  * so it is also the thing that must be careful about WHEN it writes. The two
  * rules it exists to enforce:
  *
- *  1. **Every window runs for its full fixed duration**, whether or not anybody
- *     in it has an action. A window that ends early because nobody was playing
- *     that role tells the table exactly where that card is.
+ *  1. **Every window runs for its full fixed minimum duration**, whether or not
+ *     anybody in it has an action. After that minimum it waits for every real
+ *     player, unless the referee consciously skips the unanswered actions.
  *
  *  2. **A seat's private info is written only when its reveal is due**, per the
  *     timeline. Writing a reveal early is the same leak by a different route.
@@ -67,8 +67,8 @@ export interface NightRunResult {
   timeline: Timeline;
   /** Latency samples gathered, for calibration between sessions. */
   samples: LatencySample[];
-  /** Decisions that were never submitted and defaulted to no action. */
-  timedOut: DecisionRequest[];
+  /** Decisions the referee consciously skipped and defaulted to no action. */
+  skipped: DecisionRequest[];
 }
 
 /**
@@ -89,7 +89,7 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
     checkpoint?.answers.map(({ key, choice }) => [key, choice]) ?? [],
   );
   const samples: LatencySample[] = [];
-  const timedOut: DecisionRequest[] = [];
+  const skipped: DecisionRequest[] = [];
   const releasedSoFar = releasedAtCheckpoint(
     checkpoint, state, nightOrder, config, timeline, answers,
   );
@@ -127,13 +127,18 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
 
     const openedAt = clock.now();
 
-    // RULE 1. Sleep the window's full duration unconditionally. Not "until
-    // everyone has submitted" — an empty window and a busy one must look
-    // identical from outside, and an empty one happens whenever the role for
-    // this window turned out to be sitting in the centre.
+    // RULE 1. Keep the fixed public minimum even when every answer is already
+    // in. After it, never discard a slow player's action merely because a
+    // clock expired: wait until all humans have answered or the referee uses
+    // the explicit recovery control.
     await clock.sleep(phase.endMs - phase.startMs);
 
-    const submitted = await store.readSubmissions(phase.index);
+    let submitted = await store.readSubmissions(phase.index);
+    while (!windowAnswered(requests, submitted, opts.bots?.seats)) {
+      if (await store.forceAdvanceRequested(phase.index)) break;
+      await clock.sleep(500);
+      submitted = await store.readSubmissions(phase.index);
+    }
     const paused = clock instanceof PausableClock ? clock.consumeDirty() : false;
 
     for (const request of requests) {
@@ -151,15 +156,14 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
       const latencyMs = clock.now() - openedAt;
 
       if (choice === undefined) {
-        timedOut.push(request);
+        skipped.push(request);
         samples.push({
           role: request.actingAs, key: request.key, latencyMs,
-          outcome: 'timed-out', paused, sessionId: 'local',
+          outcome: 'referee-skipped', paused, sessionId: 'local',
         });
-        // A missed deadline is a DECIDED decline, not a pending decision. Record
-        // it as an answer, or the seat stays permanently "unsettled" and never
-        // receives any of its reveals — one slow tap would black out a player's
-        // whole night.
+        // A deliberate referee skip is a decided decline, not a pending
+        // decision. Recording it is what lets recovery and later reveals
+        // continue deterministically.
         answers.set(answerKey(request), { kind: 'none' });
         continue;
       }
@@ -207,7 +211,7 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
 
   await store.recordLatency(samples);
   // The last scheduled window has no next window to clear its questions.
-  // Clear every human explicitly before opening the day; otherwise a timed-out
+  // Clear every human explicitly before opening the day; otherwise a skipped
   // final prompt remains over the table and hides the private no-action/result
   // receipt that explains how the night actually resolved.
   for (const seat of everySeat(state)) {
@@ -216,7 +220,16 @@ export async function runNight(opts: RefereeOptions): Promise<NightRunResult> {
   }
   if (opts.advanceToDay !== false) await store.setPhase('day');
 
-  return { result: final.result, timeline, samples, timedOut };
+  return { result: final.result, timeline, samples, skipped };
+}
+
+function windowAnswered(
+  requests: readonly DecisionRequest[],
+  submitted: ReadonlyMap<SeatIndex, Record<string, Choice>>,
+  bots: ReadonlySet<SeatIndex> | undefined,
+): boolean {
+  return requests.every((request) =>
+    bots?.has(request.seat) || submitted.get(request.seat)?.[request.key] !== undefined);
 }
 
 /**

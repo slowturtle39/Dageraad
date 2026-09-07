@@ -5,6 +5,7 @@ import { resolveDay, voteOutcomes } from '../engine/dayphase.js';
 import type { RoleId } from '../engine/types.js';
 
 const src = readFileSync('src/ui/voting.ts', 'utf8');
+const mainSrc = readFileSync('src/main.ts', 'utf8');
 
 function table(seatRoles: RoleId[]) {
   return createNightState({
@@ -39,6 +40,13 @@ describe('the voting sheet', () => {
 
   it('needs strictly more than half to end the vote', () => {
     expect(src).toMatch(/Math\.floor\(view\.seatCount \/ 2\) \+ 1/);
+  });
+
+  it('explains what the timer does and makes the two discussion intents exclusive', () => {
+    expect(src).toMatch(/day\.timerExplain/);
+    expect(mainSrc).toMatch(/if \(next\) local\.readyToVote = false/);
+    expect(mainSrc).toMatch(/if \(next\) local\.abstaining = false/);
+    expect(mainSrc).toMatch(/requestEarlyVote\(roomId, false\)/);
   });
 });
 

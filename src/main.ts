@@ -1067,6 +1067,18 @@ function menu(): HTMLElement {
     pause.classList.add('menu__item');
     sheet.append(pause);
   }
+  if (code && room?.refereeUid === backend.uid && room.phase === 'night') {
+    const advance = button(t(local.lang, 'menu.forceNight'), () => {
+      local.menuOpen = false;
+      void attempt(() => backend.forceNightWindow(code));
+    });
+    advance.classList.add('menu__item', 'menu__item--danger');
+    sheet.append(advance);
+    const note = document.createElement('p');
+    note.className = 'sheet__note';
+    note.textContent = t(local.lang, 'menu.forceNightNote');
+    sheet.append(note);
+  }
   if (code && room?.mode === 'practice' && room.refereeUid === backend.uid && room.phase === 'day') {
     const force = button(t(local.lang, 'menu.forceVote'), () => {
       local.menuOpen = false;
@@ -1498,7 +1510,7 @@ function promptSheet(
       },
       onConfirm: send,
     }),
-    note: t(local.lang, 'reveal.staleWarning'),
+    note: `${t(local.lang, 'prompt.noDeadline')} ${t(local.lang, 'reveal.staleWarning')}`,
     passiveScrim: true,
   });
 }
@@ -1563,7 +1575,11 @@ function votePanel(ownSeat: SeatIndex): HTMLElement {
       onAbstain: (next) => {
         if (room.phase !== 'day') return;
         local.abstaining = next;
-        void cast(null, next);
+        if (next) local.readyToVote = false;
+        void (async () => {
+          if (next) await attempt(() => backend.requestEarlyVote(roomId, false));
+          await cast(null, next);
+        })();
         render();
       },
       onConfirm: () => {
@@ -1584,7 +1600,11 @@ function votePanel(ownSeat: SeatIndex): HTMLElement {
       onReadyToVote: (next) => {
         if (room.phase !== 'day') return;
         local.readyToVote = next;
-        void attempt(() => backend.requestEarlyVote(roomId, next));
+        if (next) local.abstaining = false;
+        void (async () => {
+          if (next) await cast(null, false);
+          await attempt(() => backend.requestEarlyVote(roomId, next));
+        })();
         render();
       },
       onCollapse: () => {
@@ -1618,6 +1638,8 @@ function resultSheet(ownSeat: SeatIndex | null): HTMLElement {
     ...(room.finalVotes ? { finalVotes: room.finalVotes } : {}),
     ...(room.discardedVotes ? { discardedVotes: room.discardedVotes } : {}),
     ...(room.finalTally ? { finalTally: room.finalTally } : {}),
+    ...(room.finalCenterRoles ? { finalCenterRoles: room.finalCenterRoles } : {}),
+    ...(room.nightInfo ? { nightInfo: room.nightInfo } : {}),
     ...(state.room && canPrepareNextRound(state.room, state.uid)
       && actions.onPrepareNextRound
       ? { onNextRound: actions.onPrepareNextRound }
