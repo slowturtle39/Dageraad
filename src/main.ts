@@ -4,6 +4,7 @@ import { FirestoreBackend } from './firestore/backend.js';
 import { botSeatsFor, demoTable, seatDemoBots, type DemoTable } from './app/demoworld.js';
 import { AppController } from './app/controller.js';
 import { homeUrl, roomCodeFromUrl, roomUrl } from './app/roomlink.js';
+import { rememberedRoom, rememberRoom } from './app/recentroom.js';
 import { renderApp, type AppActions } from './ui/app.js';
 import { renderRecovery } from './ui/recovery.js';
 import {
@@ -438,6 +439,7 @@ const actions: AppActions = {
           : {}),
       });
       local.code = roomId;
+      rememberRoom(roomId);
       // In demo mode the rest of the table sits down immediately, so one tab
       // has enough people to deal a round.
       if (demo) await seatDemoBots(demo, roomId);
@@ -467,6 +469,7 @@ const actions: AppActions = {
       t(local.lang, 'join.noSuchRoom'),
     );
     if (!ok) return;
+    rememberRoom(code);
     history.replaceState(null, '', roomUrl(location.href, code));
     controller.watch(code);
   },
@@ -763,6 +766,16 @@ function render(): void {
         render();
       },
     }));
+    const recent = rememberedRoom();
+    if (recent) {
+      const reopen = button(t(local.lang, 'home.returnToRoom', { code: recent }), () => {
+        local.code = recent;
+        history.replaceState(null, '', roomUrl(location.href, recent));
+        controller.watch(recent);
+      });
+      reopen.classList.add('btn--secondary');
+      app.append(reopen);
+    }
     app.append(renderResolutionPicker({
       lang: local.lang,
       mode: local.resolutionMode,

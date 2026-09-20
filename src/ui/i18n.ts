@@ -157,6 +157,7 @@ const nl: Dict = {
   'menu.share': 'Deel de link',
   'menu.copied': 'Gekopieerd',
   'menu.home': 'Naar beginscherm',
+  'home.returnToRoom': 'Terug naar tafel {code}',
   'menu.leave': 'Weggaan',
   'menu.recover': 'Spelleiding overnemen',
 
@@ -431,6 +432,7 @@ const en: Dict = {
   'menu.share': 'Share the link',
   'menu.copied': 'Copied',
   'menu.home': 'Home',
+  'home.returnToRoom': 'Return to table {code}',
   'menu.leave': 'Leave',
   'menu.recover': 'Take over running the game',
 
