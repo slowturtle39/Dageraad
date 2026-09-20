@@ -464,6 +464,11 @@ const dubbelganger: Applier = function* (ctx) {
 
   ctx.info(ctx.actor, { kind: 'copied-role', step: ctx.step, fromSeat: seat, role: copied });
 
+  // A Doppelganger does not merely borrow the night action: they become the
+  // copied role for team and win checks. Card movement later in the night does
+  // not undo that identity. Copying another Doppelganger is the sole no-op.
+  if (copied !== 'dubbelganger') ctx.state.assumedRole[ctx.actor] = copied;
+
   // No chaining, and nothing to do for roles that never wake.
   if (copied === 'dubbelganger' || !roleDef(copied).hasNightAction) return;
 

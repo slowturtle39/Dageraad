@@ -115,6 +115,17 @@ describe('the AI roster', () => {
 });
 
 describe('the lobby deck picker', () => {
+  it('never offers the retired plain Werewolf for a new game', () => {
+    const el = renderLobby({
+      lang: 'nl', players, canArrange: true, pendingSwap: null, canStart: false,
+      activeRoles: [], canManageRoles: true,
+    });
+    const choices = Array.from(el.querySelectorAll<HTMLButtonElement>('.rolepicker__role'))
+      .map((button) => button.textContent);
+    expect(choices).not.toContain('Weerwolf');
+    expect(choices).toEqual(expect.arrayContaining(['Alfawolf', 'Mystieke Wolf', 'Droomwolf']));
+  });
+
   it('says exactly how many cards a table still needs', () => {
     const el = renderLobby({
       lang: 'en', players, canArrange: true, pendingSwap: null, canStart: false,

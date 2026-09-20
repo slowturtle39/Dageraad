@@ -134,6 +134,8 @@ export interface RoomDoc {
    * the single moment roles become public, and until then it is null.
    */
   finalRoles: Record<number, RoleId> | null;
+  /** Dealt roles, revealed only once the room reaches results. */
+  originalRoles?: Record<number, RoleId>;
   outcome: string | null;
   /** Full public result, added after the first real playtest exposed raw `tie`. */
   eliminatedSeats?: number[];

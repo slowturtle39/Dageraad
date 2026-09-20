@@ -8,6 +8,7 @@ export interface ResultsView {
   lang: Lang;
   outcome: string;
   finalRoles: Record<SeatIndex, RoleId>;
+  originalRoles?: Record<SeatIndex, RoleId>;
   names: Record<SeatIndex, string>;
   ownSeat: SeatIndex | null;
   eliminatedSeats?: SeatIndex[];
@@ -33,6 +34,7 @@ function outcomeText(view: ResultsView): string {
         : t(view.lang, 'results.finished');
   }
   const names = view.eliminatedSeats.map((seat) => seatName(view, seat)).join(', ');
+  if (view.winningTeams?.length === 0) return t(view.lang, 'results.everyoneLost');
   if (view.eliminatedSeats.length === 0) return t(view.lang, 'results.noneEliminated');
   if (view.eliminatedSeats.length === 1) {
     return t(view.lang, 'results.oneEliminated', { who: names });
@@ -160,7 +162,13 @@ export function renderResults(view: ResultsView): HTMLElement {
         ? 'results.playerWon'
         : 'results.playerLost')}`
       : '';
-    row.textContent = `${seatName(view, seat)}: ${roleName(view.lang, role)}${status}${won}`;
+    const original = view.originalRoles?.[seat];
+    const roleText = original
+      ? t(view.lang, 'results.roleJourney', {
+          original: roleName(view.lang, original), final: roleName(view.lang, role),
+        })
+      : roleName(view.lang, role);
+    row.textContent = `${seatName(view, seat)}: ${roleText}${status}${won}`;
     roles.append(row);
   }
   panel.append(roles);
@@ -182,7 +190,10 @@ export function renderResults(view: ResultsView): HTMLElement {
   }
 
   const nightEntries = Object.entries(view.nightInfo ?? {})
-    .filter(([, info]) => info.length > 0);
+    .flatMap(([seat, info]) => info.map((item, order) => ({
+      seat: Number(seat) as SeatIndex, item, order,
+    })))
+    .sort((a, b) => a.item.step - b.item.step || a.order - b.order || a.seat - b.seat);
   if (nightEntries.length > 0) {
     const nightHeading = document.createElement('h3');
     nightHeading.className = 'resultpanel__heading';
@@ -190,19 +201,16 @@ export function renderResults(view: ResultsView): HTMLElement {
     panel.append(nightHeading);
     const log = document.createElement('div');
     log.className = 'results__votes';
-    for (const [seatKey, info] of nightEntries) {
-      const seat = Number(seatKey) as SeatIndex;
-      for (const item of info) {
-        const row = document.createElement('p');
-        row.className = 'results__vote';
-        row.textContent = `${seatName(view, seat)}: ${describeReveal(
-          view.lang,
-          item,
-          (target) => seatName(view, target as SeatIndex),
-          (role) => roleName(view.lang, role as RoleId),
-        )}`;
-        log.append(row);
-      }
+    for (const { seat, item } of nightEntries) {
+      const row = document.createElement('p');
+      row.className = 'results__vote';
+      row.textContent = `${seatName(view, seat)}: ${describeReveal(
+        view.lang,
+        item,
+        (target) => seatName(view, target as SeatIndex),
+        (role) => roleName(view.lang, role as RoleId),
+      )}`;
+      log.append(row);
     }
     panel.append(log);
   }

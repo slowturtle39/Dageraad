@@ -110,6 +110,8 @@ interface Local {
   decisionSyncMarker: string | null;
   decisionSyncLoading: boolean;
   voteSyncMarker: string | null;
+  /** Opens the ballot once on the transition to voting, but still permits collapse. */
+  observedVotingRound: string | null;
 }
 
 const local: Local = {
@@ -158,6 +160,7 @@ const local: Local = {
   decisionSyncMarker: null,
   decisionSyncLoading: false,
   voteSyncMarker: null,
+  observedVotingRound: null,
 };
 
 const NAME_KEY = 'dageraad.name';
@@ -285,6 +288,13 @@ async function start(): Promise<void> {
 
   controller = new AppController(backend);
   controller.onChange((state) => {
+    if (state.roomId && state.room?.phase === 'voting') {
+      const votingRound = `${state.roomId}:${state.room.round}`;
+      if (local.observedVotingRound !== votingRound) {
+        local.observedVotingRound = votingRound;
+        local.votePanelOpen = true;
+      }
+    }
     syncInteractionContext(state);
     void syncPersistedActions();
     render();
@@ -1631,6 +1641,7 @@ function resultSheet(ownSeat: SeatIndex | null): HTMLElement {
     lang: local.lang,
     outcome: room.outcome ?? '',
     finalRoles: room.finalRoles ?? {},
+    ...(room.originalRoles ? { originalRoles: room.originalRoles } : {}),
     names: seatNames(),
     ownSeat,
     ...(room.eliminatedSeats ? { eliminatedSeats: room.eliminatedSeats } : {}),

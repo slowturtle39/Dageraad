@@ -20,7 +20,7 @@ export const DEFAULT_ACTIVE_ROLES: RoleId[] = [
 
 /** Everything else in the library, offered as "add a role". */
 export const OPTIONAL_ROLES: RoleId[] = [
-  'schildwacht', 'weerwolf', 'volgeling', 'vrijmetselaar', 'ziener',
+  'schildwacht', 'volgeling', 'vrijmetselaar', 'ziener',
   'rechter', 'onrustoker', 'dronkaard', 'slapeloze', 'schoneslaapster',
   'bodyguard', 'jager', 'dorpeling', 'looier', 'onderzoeker',
 ];

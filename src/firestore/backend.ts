@@ -341,6 +341,7 @@ export class FirestoreBackend implements Backend {
       discussionEndsAt: null,
       practiceSkipDiscussion: false,
       finalRoles: null,
+      originalRoles: deleteField(),
       outcome: null,
       eliminatedSeats: deleteField(),
       winningTeams: deleteField(),
@@ -446,6 +447,7 @@ export class FirestoreBackend implements Backend {
       pausedAt: room.pausedAt ?? null,
       discussionExtendedByMs: room.discussionExtendedByMs ?? 0,
       finalRoles: room.finalRoles ?? null,
+      ...(room.originalRoles ? { originalRoles: room.originalRoles } : {}),
       outcome: room.outcome ?? null,
       ...(room.eliminatedSeats ? { eliminatedSeats: room.eliminatedSeats } : {}),
       ...(room.winningTeams ? { winningTeams: room.winningTeams } : {}),
@@ -880,6 +882,9 @@ export class FirestoreBackend implements Backend {
 
     await updateDoc(this.roomRef(roomId), {
       finalRoles: results.finalRoles,
+      originalRoles: results.originalRoles ?? Object.fromEntries(
+        Object.entries(results.seats).map(([seat, result]) => [seat, result.originalRole]),
+      ),
       outcome: results.outcome,
       eliminatedSeats: results.eliminatedSeats,
       winningTeams: results.winningTeams,
@@ -946,6 +951,9 @@ export class FirestoreBackend implements Backend {
     batch.update(this.roomRef(roomId), {
       phase: 'results',
       finalRoles: results.finalRoles,
+      originalRoles: results.originalRoles ?? Object.fromEntries(
+        Object.entries(results.seats).map(([seat, result]) => [seat, result.originalRole]),
+      ),
       outcome: results.outcome,
       eliminatedSeats: results.eliminatedSeats,
       winningTeams: results.winningTeams,

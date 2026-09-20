@@ -387,6 +387,7 @@ class MemoryBackend implements Backend {
     r.view.discussionEndsAt = null;
     r.view.practiceSkipDiscussion = false;
     r.view.finalRoles = null;
+    delete r.view.originalRoles;
     r.view.outcome = null;
     delete r.view.eliminatedSeats;
     delete r.view.winningTeams;
@@ -711,6 +712,9 @@ class MemoryBackend implements Backend {
     const r = this.world.room(roomId);
     this.requireReferee(r);
     r.view.finalRoles = results.finalRoles;
+    r.view.originalRoles = results.originalRoles ?? Object.fromEntries(
+      Object.entries(results.seats).map(([seat, result]) => [seat, result.originalRole]),
+    );
     r.view.outcome = results.outcome;
     r.view.eliminatedSeats = results.eliminatedSeats;
     r.view.winningTeams = results.winningTeams;
@@ -738,6 +742,9 @@ class MemoryBackend implements Backend {
     const r = this.world.room(roomId);
     this.requireReferee(r);
     r.view.finalRoles = results.finalRoles;
+    r.view.originalRoles = results.originalRoles ?? Object.fromEntries(
+      Object.entries(results.seats).map(([seat, result]) => [seat, result.originalRole]),
+    );
     r.view.outcome = results.outcome;
     r.view.eliminatedSeats = results.eliminatedSeats;
     r.view.winningTeams = results.winningTeams;

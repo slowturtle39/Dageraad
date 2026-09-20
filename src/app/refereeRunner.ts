@@ -249,12 +249,14 @@ async function buildResults(
   const votes = await store.readVotes();
 
   const finalRoles: Record<SeatIndex, RoleId> = {};
+  const originalRoles: Record<SeatIndex, RoleId> = {};
   const seats: Record<SeatIndex, SeatResult> = {};
   const finalVotes: Record<SeatIndex, SeatIndex | null> = {};
 
   for (let seat = 0; seat < state.seatCount; seat++) {
     const finalRole = finalRoleOf(state, seat);
     finalRoles[seat] = finalRole;
+    originalRoles[seat] = state.originalRole[seat]!;
 
     const vote = votes.get(seat);
     const targetSeat = vote?.target ?? null;
@@ -285,6 +287,7 @@ async function buildResults(
     ),
     finalTally: { ...day.result.tally },
     finalRoles,
+    originalRoles,
     finalCenterRoles: Array.from(
       { length: state.centerCount },
       (_, index) => roleAt(state, centerSlot(state, index)),

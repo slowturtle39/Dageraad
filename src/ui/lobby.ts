@@ -182,7 +182,11 @@ function rolePicker(view: LobbyView, playerCount: number): HTMLElement {
   const grid = document.createElement('div');
   grid.className = 'rolepicker';
   const ordered = Object.values(ROLES).sort((a, b) => a.defaultOrder - b.defaultOrder);
-  for (const role of ordered.filter((entry) => entry.id !== 'dorpeling')) {
+  // The plain Werewolf is retained only for reading old practice records. New
+  // games use the three named wolf variants, including on the Alpha Wolf spot.
+  for (const role of ordered.filter(
+    (entry) => entry.id !== 'dorpeling' && entry.id !== 'weerwolf',
+  )) {
     const chosen = roles.includes(role.id);
     const toggle = document.createElement('button');
     toggle.type = 'button';

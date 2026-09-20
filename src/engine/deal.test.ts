@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { cardsForRoles, deal, DealError, seededShuffle, validateCards } from './deal.js';
+import {
+  ALPHA_WOLF_CARD_ROLES, alphaWolfCardForSeed, cardsForRoles, deal, DealError,
+  seededShuffle, validateCards,
+} from './deal.js';
 import { DEFAULT_ACTIVE_ROLES } from './presets.js';
 import { roleAt } from './state.js';
 import type { RoleId } from './types.js';
@@ -38,6 +41,23 @@ describe('the deal', () => {
     });
     // Otherwise it sits there unreachable and quietly inflates the centre.
     expect(withoutHer.state.alphaWolfSlot).toBeNull();
+  });
+
+  it('randomly reserves a named wolf variant, never a plain Werewolf', () => {
+    const seen = new Set(Array.from({ length: 60 }, (_, seed) => alphaWolfCardForSeed(seed + 1)));
+    expect(seen).toEqual(new Set(ALPHA_WOLF_CARD_ROLES));
+    expect(seen.has('weerwolf')).toBe(false);
+
+    for (let seed = 1; seed <= 30; seed++) {
+      const game = deal({
+        cards: cardsForRoles(['alphawolf', 'mystiekewolf', 'droomwolf'], 4),
+        seatCount: 4,
+        seed,
+      });
+      expect(game.state.alphaWolfSlot).not.toBeNull();
+      expect(game.state.cardRole[game.state.slots[game.state.alphaWolfSlot!]!])
+        .toBe(alphaWolfCardForSeed(seed));
+    }
   });
 
   it('is reproducible from its seed, so a disputed night can be replayed', () => {

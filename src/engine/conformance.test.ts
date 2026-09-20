@@ -59,6 +59,7 @@ describe('written house-rule conformance', () => {
     expect(copiedMedium.privateInfo[0]).toContainEqual(
       expect.objectContaining({ kind: 'saw-card', slot: 2, role: 'ziener' }),
     );
+    expect(copiedMedium.state.assumedRole[0]).toBe('medium');
 
     const noChain = night(
       state(['dubbelganger', 'dubbelganger', 'ziener'], ['jager', 'jager', 'jager']),
@@ -72,6 +73,7 @@ describe('written house-rule conformance', () => {
         [0, 'dubbelganger', 'doppel-view'],
         [1, 'dubbelganger', 'doppel-view'],
       ]);
+    expect(noChain.state.assumedRole[0]).toBeUndefined();
   });
 
   it('house rule Alpha Wolf / Drunk: both swaps confirm execution without revealing the displaced card', () => {
@@ -90,6 +92,26 @@ describe('written house-rule conformance', () => {
       expect(info).toContainEqual(expect.objectContaining({ kind: 'action-confirmed' }));
       expect(info?.some((i) => i.kind === 'saw-card' || i.kind === 'saw-center')).toBe(false);
     }
+  });
+
+  it('a Doppelganger who copies the Alpha Wolf is a wolf for the win condition', () => {
+    const result = night(
+      state(['dubbelganger', 'alphawolf', 'dorpeling'], ['ziener', 'jager', 'heks'], 'droomwolf'),
+      ['dubbelganger', 'alphawolf'],
+      answers({
+        '0:doppel-view': seat(1),
+        '0:alpha-target': seat(2),
+        '1:alpha-target': seat(2),
+      }),
+    );
+    expect(finalRoleOf(result.state, 0)).toBe('alphawolf');
+    const day = resolveDay(result.state, [
+      { voter: 0, target: 2, abstain: false },
+      { voter: 1, target: 2, abstain: false },
+      { voter: 2, target: 1, abstain: false },
+    ]);
+    expect(day.teamsWon.wolf).toBe(true);
+    expect(day.seatWon[0]).toBe(true);
   });
 
   it('house rule Heks: she can see and exchange only one of the three centre cards, including the Looier branch', () => {

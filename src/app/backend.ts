@@ -97,6 +97,8 @@ export interface RoomView {
   discussionExtendedByMs: number;
   /** Set when the game is over, so every device can show the same result. */
   finalRoles: Record<SeatIndex, RoleId> | null;
+  /** Roles dealt at the start, published only together with the result. */
+  originalRoles?: Record<SeatIndex, RoleId>;
   outcome: string | null;
   /** Public dawn summary. Missing only on rooms finished by an older build. */
   eliminatedSeats?: SeatIndex[];
@@ -184,6 +186,8 @@ export interface GameResults {
   finalTally: Record<SeatIndex, number>;
   /** Every seat's card at dawn (§6.0) — what the win condition is judged on. */
   finalRoles: Record<SeatIndex, RoleId>;
+  /** Every seat's role at the start, before copying and card movement. */
+  originalRoles?: Record<SeatIndex, RoleId>;
   /** The three ordinary centre cards at dawn, published only with the result. */
   finalCenterRoles?: RoleId[];
   /** Every private receipt, made public only after the game is over. */

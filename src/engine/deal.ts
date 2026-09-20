@@ -83,6 +83,19 @@ export interface DealtGame {
   centerRoles: RoleId[];
 }
 
+/**
+ * The face-down card on the Alpha Wolf spot is a wolf variant, never the
+ * retired plain Werewolf. It is derived from the deal seed so the referee
+ * cannot choose it and a disputed game remains exactly replayable.
+ */
+export const ALPHA_WOLF_CARD_ROLES: readonly RoleId[] = [
+  'alphawolf', 'mystiekewolf', 'droomwolf',
+];
+
+export function alphaWolfCardForSeed(seed: number): RoleId {
+  return seededShuffle(ALPHA_WOLF_CARD_ROLES, seed ^ 0xa17fa17f)[0]!;
+}
+
 export function deal(options: DealOptions): DealtGame {
   const problems = validateCards(options.cards, options.seatCount);
   const fatal = problems.filter((p) => !p.startsWith('Let op'));
@@ -101,7 +114,7 @@ export function deal(options: DealOptions): DealtGame {
     seatCount: options.seatCount,
     seatRoles,
     centerRoles,
-    ...(hasAlphaWolf ? { alphaWolfCardRole: 'weerwolf' as RoleId } : {}),
+    ...(hasAlphaWolf ? { alphaWolfCardRole: alphaWolfCardForSeed(options.seed) } : {}),
   };
 
   return {

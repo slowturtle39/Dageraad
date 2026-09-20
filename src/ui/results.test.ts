@@ -14,6 +14,9 @@ describe('the public result panel', () => {
       finalRoles: {
         0: 'leerlingziener', 1: 'alphawolf', 2: 'medium', 3: 'dorpsgek', 4: 'heks',
       },
+      originalRoles: {
+        0: 'leerlingziener', 1: 'dubbelganger', 2: 'medium', 3: 'dorpsgek', 4: 'heks',
+      },
       finalVotes: { 0: 1, 1: 2, 2: 1, 3: 2, 4: 0 },
       discardedVotes: {},
       finalTally: { 0: 1, 1: 2, 2: 2, 3: 0, 4: 0 },
@@ -26,8 +29,12 @@ describe('the public result panel', () => {
     expect(panel.textContent).toContain('Speler stemt op AI Bram');
     expect(panel.textContent).toContain('AI Bram stemt op AI Fleur');
     expect(panel.textContent).toContain('Eindtelling: Speler 1 · AI Bram 2 · AI Fleur 2');
-    expect(panel.textContent).toContain('AI Bram: Alfawolf · gelyncht · gewonnen');
-    expect(panel.textContent).toContain('AI Fleur: Medium · gelyncht · verloren');
+    expect(panel.textContent).toContain(
+      'AI Bram: begon als Dubbelganger · eindigde als Alfawolf · gelyncht · gewonnen',
+    );
+    expect(panel.textContent).toContain(
+      'AI Fleur: begon als Medium · eindigde als Medium · gelyncht · verloren',
+    );
   });
 
   it('shows one lynched player in the singular', () => {
@@ -58,6 +65,32 @@ describe('the public result panel', () => {
     expect(panel.textContent).toContain('Wat er in de nacht gebeurde');
     expect(panel.textContent).toContain('Milan: Bij jouw beurt lag de Looier op middenkaart 2.');
     expect(panel.textContent).toContain('Noor: Bij jouw beurt had Milan de Leerlingziener.');
+  });
+
+  it('orders the public night account chronologically rather than by seat', () => {
+    const panel = renderResults({
+      lang: 'nl', outcome: 'eliminated', ownSeat: 0,
+      names: { 0: 'Laat', 1: 'Vroeg' },
+      finalRoles: { 0: 'medium', 1: 'ziener' },
+      nightInfo: {
+        0: [{ kind: 'no-action', step: 9 }],
+        1: [{ kind: 'no-action', step: 2 }],
+      },
+    });
+    const log = Array.from(panel.querySelectorAll('.results__vote')).map((row) => row.textContent);
+    expect(log[0]).toMatch(/^Vroeg:/);
+    expect(log[1]).toMatch(/^Laat:/);
+  });
+
+  it('says everyone loses instead of calling a no-winner result a tie', () => {
+    const panel = renderResults({
+      lang: 'nl', outcome: 'tie', ownSeat: 0,
+      names: { 0: 'A', 1: 'B' },
+      finalRoles: { 0: 'dorpeling', 1: 'ziener' },
+      eliminatedSeats: [0, 1], winningTeams: [],
+    });
+    expect(panel.textContent).toContain('Iedereen verliest.');
+    expect(panel.textContent).not.toContain('Gelijkspel');
   });
 
   it('makes the Bodyguard and Tanner exceptions visible', () => {
