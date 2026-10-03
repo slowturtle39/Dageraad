@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG } from '../engine/presets.js';
+import { cardsForRoles } from '../engine/deal.js';
 import type { Backend, PlayerView, RoomView } from './backend.js';
 import { MemoryWorld } from './memorybackend.js';
 import { readRoomOnce } from './refereeRunner.js';
@@ -51,7 +52,7 @@ async function table(playing = false) {
   const tablet = world.device('tablet');
   const roomId = await tablet.createRoom({
     displayName: 'Tafel',
-    activeRoles: DEFAULT_ACTIVE_ROLES,
+    activeRoles: cardsForRoles(DEFAULT_ACTIVE_ROLES, NAMES.length + (playing ? 1 : 0)),
     config: TWO_ROUND_CONFIG,
     playing,
   });
@@ -126,6 +127,9 @@ describe('somebody arrives after the deal', () => {
     expect(roster.map((p) => p.uid)).toContain(late.uid);
 
     await endRound(tablet, roomId);
+    await tablet.setActiveRoles(
+      roomId, cardsForRoles(DEFAULT_ACTIVE_ROLES, NAMES.length + 1), TWO_ROUND_CONFIG,
+    );
     await tablet.startGame(roomId, 2);
     const after = await readRoomOnce(phones[0]!, roomId);
     expect(after.seating).toContain(late.uid);
@@ -149,6 +153,9 @@ describe('somebody goes home', () => {
 
     // Gone at the boundary, and the ring closed up behind them.
     await endRound(tablet, roomId);
+    await tablet.setActiveRoles(
+      roomId, cardsForRoles(DEFAULT_ACTIVE_ROLES, NAMES.length - 1), TWO_ROUND_CONFIG,
+    );
     await tablet.startGame(roomId, 4);
     const after = await readRoomOnce(phones[0]!, roomId);
     expect(after.seating).not.toContain(leaver.uid);
@@ -162,6 +169,9 @@ describe('somebody goes home', () => {
     await tablet.startGame(roomId, 5);
     await phones[1]!.leaveRoom(roomId);
     await endRound(tablet, roomId);
+    await tablet.setActiveRoles(
+      roomId, cardsForRoles(DEFAULT_ACTIVE_ROLES, NAMES.length - 1), TWO_ROUND_CONFIG,
+    );
     await tablet.startGame(roomId, 6);
     await endRound(tablet, roomId);
     await tablet.startGame(roomId, 7);

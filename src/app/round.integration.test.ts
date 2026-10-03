@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG } from '../engine/presets.js';
+import { cardsForRoles } from '../engine/deal.js';
 import { FakeClock } from '../orchestration/clock.js';
 import { botSeatsFor, demoTable, seatDemoBots } from './demoworld.js';
 import { readRoomOnce, runGame } from './refereeRunner.js';
@@ -63,7 +64,7 @@ async function dealtTable() {
   const table = demoTable(seeded(5), 7);
   const roomId = await table.me.createRoom({
     displayName: 'Milan',
-    activeRoles: DEFAULT_ACTIVE_ROLES,
+    activeRoles: cardsForRoles(DEFAULT_ACTIVE_ROLES, 8),
     config: TWO_ROUND_CONFIG,
     playing: true,
   });

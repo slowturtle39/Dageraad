@@ -100,6 +100,15 @@ describe('the deal', () => {
       .toEqual([...cards, 'dorpeling' as RoleId].sort());
   });
 
+  it('reserves an Alpha Wolf before dealing and never deals that same card twice', () => {
+    const cards: RoleId[] = [
+      'alphawolf', 'dorpeling', 'dorpeling', 'dorpeling', 'dorpeling', 'dorpeling',
+    ];
+    const game = deal({ cards, seatCount: 3, seed: 7 });
+    expect(game.state.cardRole[game.state.slots[game.state.alphaWolfSlot!]!]).toBe('alphawolf');
+    expect([...game.seatRoles, ...game.centerRoles]).not.toContain('alphawolf');
+  });
+
   it('deals every card to a real slot', () => {
     const g = deal({ cards: cardsForRoles(DEFAULT_ACTIVE_ROLES, 5), seatCount: 5, seed: 3 });
     for (let seat = 0; seat < 5; seat++) {

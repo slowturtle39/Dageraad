@@ -5,7 +5,8 @@ import {
   setDoc, type Firestore,
 } from 'firebase/firestore';
 import { afterAll, describe, expect, it } from 'vitest';
-import { TWO_ROUND_CONFIG } from '../engine/presets.js';
+import { cardsForRoles } from '../engine/deal.js';
+import { DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG } from '../engine/presets.js';
 import { createNightState } from '../engine/state.js';
 import type { RoleId } from '../engine/types.js';
 import type { GameResults, RoomView } from '../app/backend.js';
@@ -45,7 +46,7 @@ afterAll(async () => { await Promise.all(apps.map((app) => deleteApp(app))); });
 const roomOptions = (playing: boolean, displayName = 'player') => ({
   playing,
   displayName,
-  activeRoles: ['weerwolf'] as RoleId[],
+  activeRoles: cardsForRoles(DEFAULT_ACTIVE_ROLES, 3),
   config: TWO_ROUND_CONFIG,
 });
 
@@ -142,6 +143,9 @@ describe('FirestoreBackend through the real emulators', () => {
       ['departure-a', 'departure-b', 'departure-c', 'departure-d'].map(client),
     );
     for (const player of players) await player.backend.joinRoom(roomId, 'Player');
+    await referee.backend.setActiveRoles(
+      roomId, cardsForRoles(DEFAULT_ACTIVE_ROLES, 4), TWO_ROUND_CONFIG,
+    );
     await referee.backend.startGame(roomId, 22);
 
     await players[1]!.backend.leaveRoom(roomId);
@@ -151,6 +155,9 @@ describe('FirestoreBackend through the real emulators', () => {
 
     await referee.backend.refereeStore(roomId).setPhase('results');
     await referee.backend.prepareNextRound(roomId);
+    await referee.backend.setActiveRoles(
+      roomId, cardsForRoles(DEFAULT_ACTIVE_ROLES, 3), TWO_ROUND_CONFIG,
+    );
     await referee.backend.startGame(roomId, 23);
     expect((await readRoom(referee.db, roomId)).seating).not.toContain(players[1]!.uid);
   });

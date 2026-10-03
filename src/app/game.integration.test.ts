@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { randomBot } from '../engine/bot.js';
+import { cardsForRoles } from '../engine/deal.js';
 import { DEFAULT_ACTIVE_ROLES, DEPENDENCY_CONFIG, TWO_ROUND_CONFIG } from '../engine/presets.js';
 import type { GameConfig, RoleId, SeatIndex } from '../engine/types.js';
 import { FakeClock } from '../orchestration/clock.js';
@@ -36,7 +37,7 @@ async function seatTable(config: GameConfig = TWO_ROUND_CONFIG): Promise<Table> 
   const tablet = world.device('tablet');
   const roomId = await tablet.createRoom({
     displayName: 'Tafel',
-    activeRoles: DEFAULT_ACTIVE_ROLES,
+    activeRoles: cardsForRoles(DEFAULT_ACTIVE_ROLES, NAMES.length),
     config,
     playing: false,
   });
@@ -366,6 +367,11 @@ describe('an evening of several rounds', () => {
     // They sit down for round 3, and only then.
     expect(after.seating).not.toContain('u:Laat');
     await table.tablet.prepareNextRound(table.roomId);
+    await table.tablet.setActiveRoles(
+      table.roomId,
+      cardsForRoles(DEFAULT_ACTIVE_ROLES, NAMES.length + 1),
+      TWO_ROUND_CONFIG,
+    );
     await table.tablet.startGame(table.roomId, 999);
     const playing = await readRoomOnce(table.phones[0]!, table.roomId);
     expect(playing.seating).toContain('u:Laat');
@@ -391,6 +397,11 @@ describe('an evening of several rounds', () => {
     // The next round simply has one fewer chair, and the ring closes up — a
     // hole in the seating is a hole in the Dorpsgek's rotation.
     await table.tablet.prepareNextRound(table.roomId);
+    await table.tablet.setActiveRoles(
+      table.roomId,
+      cardsForRoles(DEFAULT_ACTIVE_ROLES, NAMES.length - 1),
+      TWO_ROUND_CONFIG,
+    );
     await table.tablet.startGame(table.roomId, 2);
     const room = await readRoomOnce(table.phones[0]!, table.roomId);
     expect(room.seating).not.toContain(table.phones[3]!.uid);

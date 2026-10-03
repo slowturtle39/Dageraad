@@ -97,6 +97,15 @@ describe('picking who you are', () => {
     expect(created).toBe('Joris');
   });
 
+  it('offers a room-only guest without creating a permanent profile', () => {
+    let guest = false;
+    const el = picker({ onGuest: () => { guest = true; } });
+    el.querySelector<HTMLButtonElement>('.friends__guest')!.click();
+    expect(guest).toBe(true);
+    expect(el.textContent).toContain('Gast voor vanavond');
+    expect(el.textContent).toContain('niet in de eeuwige stand');
+  });
+
   it('explains why it is asking, so it does not read as a signup', () => {
     for (const lang of ['nl', 'en'] as const) {
       const sub = t(lang, 'friend.sub').toLowerCase();

@@ -25,6 +25,7 @@ export interface FriendPickerView {
   onTyped?: (value: string) => void;
   onPick?: (profile: FriendProfile) => void;
   onCreate?: (displayName: string) => void;
+  onGuest?: () => void;
 }
 
 export function renderFriendPicker(view: FriendPickerView): HTMLElement {
@@ -85,6 +86,19 @@ export function renderFriendPicker(view: FriendPickerView): HTMLElement {
     create.disabled = view.busy === true || field.value.trim().length === 0;
   });
   el.append(create);
+
+  const guest = document.createElement('button');
+  guest.type = 'button';
+  guest.className = 'btn btn--secondary friends__guest';
+  guest.textContent = t(lang, 'friend.guest');
+  guest.disabled = view.busy === true;
+  guest.addEventListener('click', () => view.onGuest?.());
+  el.append(guest);
+
+  const guestNote = document.createElement('p');
+  guestNote.className = 'sheet__sub';
+  guestNote.textContent = t(lang, 'friend.guestExplain');
+  el.append(guestNote);
 
   return el;
 }

@@ -94,6 +94,7 @@ interface Local {
   resumeAttemptedRound: number | null;
   /** Which human this device is, across evenings. Null until picked. */
   friend: FriendProfile | null;
+  identityKind: 'unselected' | 'profile' | 'guest';
   friends: FriendProfile[];
   friendTyped: string;
   /** Whether the room this device is about to create will count. */
@@ -144,6 +145,7 @@ const local: Local = {
   refereeRunning: false,
   resumeAttemptedRound: null,
   friend: null,
+  identityKind: 'unselected',
   friends: [],
   friendTyped: '',
   // Practice unless somebody deliberately says otherwise. A test evening in
@@ -308,8 +310,9 @@ async function start(): Promise<void> {
   backend.watchFriends((friends) => {
     local.friends = friends;
     const remembered = rememberedFriendId();
-    if (!local.friend && remembered) {
+    if (local.identityKind === 'unselected' && remembered) {
       local.friend = friends.find((f) => f.id === remembered) ?? null;
+      if (local.friend) local.identityKind = 'profile';
     }
     render();
   });
@@ -750,7 +753,7 @@ function render(): void {
   if (screen.kind === 'setup') {
     // Who you are comes first. Everything after it is about this evening; this
     // is the one question whose answer outlives it.
-    if (!local.friend && !demo) {
+    if (local.identityKind === 'unselected' && !demo) {
       app.append(friendPicker());
       app.append(joinExistingButton());
       app.append(bottomBar(false));
@@ -808,7 +811,7 @@ function render(): void {
   // A shared-link visitor chooses who they are before joining. Without this,
   // joining from the link skipped the profile picker entirely and the round
   // could never be attributed to the friend in all-time history.
-  if (screen.kind === 'join' && !local.friend && !demo) {
+  if (screen.kind === 'join' && local.identityKind === 'unselected' && !demo) {
     app.append(friendPicker(), bottomBar(false));
     if (local.error) app.append(fatal(local.error));
     return;
@@ -1719,6 +1722,9 @@ function friendPicker(onPicked?: () => void): HTMLElement {
         await selectFriend(profile, onPicked);
       });
     },
+    onGuest: () => {
+      void attempt(() => selectGuest(onPicked));
+    },
   });
 }
 
@@ -1732,11 +1738,26 @@ async function selectFriend(profile: FriendProfile, onPicked?: () => void): Prom
     });
   }
   local.friend = profile;
+  local.identityKind = 'profile';
   // Remembered so the common case is one tap next time. Losing it costs
   // nothing: the list is shared, so picking the same name gets the SAME
   // profile — which is the whole difference from keying off the uid.
   rememberFriendId(profile.id);
   if (!local.displayName) local.displayName = profile.displayName;
+  onPicked?.();
+}
+
+async function selectGuest(onPicked?: () => void): Promise<void> {
+  const state = controller.current();
+  const isMember = state.room?.members.some((member) => member.uid === state.uid) === true;
+  if (state.roomId && isMember) {
+    await backend.setFriendProfile(state.roomId, {
+      friendId: '',
+      friendName: local.displayName.trim() || t(local.lang, 'friend.guest'),
+    });
+  }
+  local.friend = null;
+  local.identityKind = 'guest';
   onPicked?.();
 }
 

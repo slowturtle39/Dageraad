@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG } from '../engine/presets.js';
+import { cardsForRoles } from '../engine/deal.js';
 import { FakeClock } from '../orchestration/clock.js';
 import { MemoryWorld } from './memorybackend.js';
 import { botSeatsFor, demoTable, seatDemoBots } from './demoworld.js';
@@ -71,7 +72,7 @@ async function evening(
   const me: Backend = world.device(opts.hostUid ?? `dev:${opts.friendId}`);
   const roomId = await me.createRoom({
     displayName: opts.friendName ?? 'Milan',
-    activeRoles: DEFAULT_ACTIVE_ROLES,
+    activeRoles: cardsForRoles(DEFAULT_ACTIVE_ROLES, 7),
     config: TWO_ROUND_CONFIG,
     playing: true,
     mode: opts.mode,

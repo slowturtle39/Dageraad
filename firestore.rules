@@ -525,7 +525,6 @@ service cloud.firestore {
           && request.resource.data.joinedAtRound == resource.data.joinedAtRound
           && request.resource.data.leftAtRound == resource.data.leftAtRound
           && request.resource.data.friendId is string
-          && request.resource.data.friendId.size() > 0
           && request.resource.data.friendName is string
           && request.resource.data.friendName.size() > 0;
 

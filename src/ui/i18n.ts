@@ -286,6 +286,8 @@ const nl: Dict = {
   'friend.create': 'Voeg mijn naam toe',
   'friend.continueAs': 'Ga door als {name}',
   'friend.profiles': 'Profielen',
+  'friend.guest': 'Gast voor vanavond',
+  'friend.guestExplain': 'Je speelt volledig mee, maar verschijnt niet in de eeuwige stand.',
 
   'alltime.title': 'Eeuwige stand',
   'alltime.empty': 'Nog geen enkele avond die meetelt.',
@@ -554,6 +556,8 @@ const en: Dict = {
   'friend.create': 'Add my name',
   'friend.continueAs': 'Continue as {name}',
   'friend.profiles': 'Profiles',
+  'friend.guest': 'Guest for tonight',
+  'friend.guestExplain': 'You play normally, but do not appear in the all-time standings.',
 
   'alltime.title': 'All-time',
   'alltime.empty': 'No evening has counted yet.',

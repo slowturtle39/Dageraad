@@ -323,6 +323,7 @@ export class FirestoreBackend implements Backend {
     const members = await this.readMembers(roomId);
     const seating = seatingForNextRound(members, room.seating, nextRound);
     assertUniqueFriendProfiles(members, seating);
+    assertExactRoleCount(room.activeRoles, seating.length);
 
     const tooSmall = canStartRound(seating.length);
     if (tooSmall) throw new Error(tooSmall);
@@ -1108,11 +1109,18 @@ function assertUniqueFriendProfiles(members: SessionMember[], seating: string[])
 function assertFriendProfileAvailable(
   members: SessionMember[], seating: string[], ownUid: string, friendId: string,
 ): void {
-  if (!friendId) throw new Error('Kies een geldig profiel.');
+  if (!friendId) return;
   const seated = new Set(seating);
   const duplicate = members.find((member) => member.uid !== ownUid
     && seated.has(member.uid) && member.leftAtRound === null && member.friendId === friendId);
   if (duplicate) throw duplicateFriendProfileError(duplicate.friendName);
+}
+
+function assertExactRoleCount(roles: RoleId[], seatCount: number): void {
+  const needed = seatCount + 3;
+  if (roles.length !== needed) {
+    throw new Error(`${seatCount} spelers hebben precies ${needed} kaarten nodig; er zijn er ${roles.length}.`);
+  }
 }
 
 function duplicateFriendProfileError(name?: string): Error {

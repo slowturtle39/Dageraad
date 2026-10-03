@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG } from '../engine/presets.js';
+import { cardsForRoles } from '../engine/deal.js';
 import type { RoomView, PlayerView, PrivateView } from './backend.js';
 import { generateRoomCode, isValidRoomCode, normaliseRoomCode } from './backend.js';
 import { MemoryWorld } from './memorybackend.js';
@@ -21,7 +22,7 @@ async function lobbyOfEight() {
   const tablet = world.device('tablet');
   const roomId = await tablet.createRoom({
     displayName: 'Tafel',
-    activeRoles: DEFAULT_ACTIVE_ROLES,
+    activeRoles: cardsForRoles(DEFAULT_ACTIVE_ROLES, NAMES.length),
     config: TWO_ROUND_CONFIG,
     // The shape of a real evening: the tablet is the referee and takes no
     // seat, and the eight humans fill seats 0..7 from their own phones.
@@ -289,6 +290,38 @@ describe('starting a game', () => {
     await expect(b.setFriendProfile(roomId, {
       friendId: 'friend-paul', friendName: 'Paul',
     })).rejects.toThrow(/Paul.*al door een andere speler/);
+  });
+
+  it('lets a lobby player become a guest without an all-time profile', async () => {
+    const world = new MemoryWorld(seededRandom(20));
+    const tablet = world.device('tablet');
+    const roomId = await tablet.createRoom({
+      displayName: 'Tafel', activeRoles: DEFAULT_ACTIVE_ROLES,
+      config: TWO_ROUND_CONFIG, playing: false,
+    });
+    const phone = world.device('phone-guest');
+    await phone.joinRoom(roomId, 'Bezoeker', {
+      friendId: 'friend-visitor', friendName: 'Bezoeker',
+    });
+    await phone.setFriendProfile(roomId, { friendId: '', friendName: 'Bezoeker' });
+
+    const room = await readRoomOnce(phone, roomId);
+    expect(room.members.find((member) => member.uid === 'phone-guest')).toMatchObject({
+      friendId: '', friendName: 'Bezoeker',
+    });
+  });
+
+  it('refuses to start when the selected deck is not players plus three', async () => {
+    const world = new MemoryWorld(seededRandom(21));
+    const host = world.device('host');
+    const roomId = await host.createRoom({
+      displayName: 'Host', activeRoles: ['alphawolf', 'mystiekewolf', 'droomwolf'],
+      config: TWO_ROUND_CONFIG, playing: true,
+    });
+    await world.device('a').joinRoom(roomId, 'A');
+    await world.device('b').joinRoom(roomId, 'B');
+
+    await expect(host.startGame(roomId, 1)).rejects.toThrow(/precies 6 kaarten/);
   });
 
   it('lets a latecomer join mid-round and seats them in the NEXT one', async () => {

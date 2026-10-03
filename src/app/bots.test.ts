@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { randomBot } from '../engine/bot.js';
+import { cardsForRoles } from '../engine/deal.js';
 import { DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG } from '../engine/presets.js';
 import type { SeatIndex } from '../engine/types.js';
 import { FakeClock } from '../orchestration/clock.js';
@@ -62,6 +63,15 @@ function players(backend: Backend, roomId: string): Promise<PlayerView[]> {
       resolve(p);
     });
   });
+}
+
+async function fitRoles(backend: Backend, roomId: string): Promise<void> {
+  const view = await room(backend, roomId);
+  await backend.setActiveRoles(
+    roomId,
+    cardsForRoles(DEFAULT_ACTIVE_ROLES, view.seating.length),
+    view.config,
+  );
 }
 
 describe('adding and removing AI players', () => {
@@ -152,6 +162,7 @@ describe('where a bot may not exist', () => {
   it('refuses a bot added after the deal', async () => {
     const { world, tablet, roomId } = await practiceRoom();
     for (const n of ['A', 'B', 'C']) await world.device(`u:${n}`).joinRoom(roomId, n);
+    await fitRoles(tablet, roomId);
     await tablet.startGame(roomId, 1);
     await expect(tablet.addBot(roomId)).rejects.toThrow(/lobby/);
   });
@@ -183,6 +194,7 @@ describe('voting for a bot is a capability, not a loophole', () => {
     for (const n of ['A', 'B'] as const) await world.device(`u:${n}`).joinRoom(roomId, n);
     await tablet.addBot(roomId);
     const bot = (await players(tablet, roomId)).find((p) => p.isBot)!.uid;
+    await fitRoles(tablet, roomId);
     await tablet.startGame(roomId, 1);
     // Still 'night'. A vote locked in before the ballot opens would turn a
     // simultaneous vote into a first-mover one.
@@ -208,6 +220,7 @@ describe('a mixed table plays a whole round', () => {
     });
     expect(botSeats.size).toBe(4);
 
+    await fitRoles(tablet, roomId);
     await tablet.startGame(roomId, 20260827);
 
     // Bots answer normally. The humans deliberately do not, so this also

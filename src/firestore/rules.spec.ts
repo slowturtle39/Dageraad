@@ -823,6 +823,13 @@ describe('going home, and coming back', () => {
       friendId: 'friend-alice', friendName: 'Alice',
     }));
   });
+
+  it('lets a player explicitly become a guest in the lobby', async () => {
+    await seed('lobby', 0, 0);
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'rooms', ROOM, 'members', ALICE), {
+      friendId: '', friendName: 'Bezoeker',
+    }));
+  });
 });
 
 describe('round records are the scoreboard, so they are append-only', () => {

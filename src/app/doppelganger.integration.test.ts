@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { randomBot } from '../engine/bot.js';
+import { cardsForRoles } from '../engine/deal.js';
 import { DEFAULT_ACTIVE_ROLES, TWO_ROUND_CONFIG } from '../engine/presets.js';
 import { DEFAULT_DURATIONS } from '../engine/timeline.js';
 import type { DecisionRequest, SeatIndex } from '../engine/types.js';
@@ -41,7 +42,7 @@ async function practiceTable(botCount: number): Promise<{
   const me = world.device('u:Milan');
   const roomId = await me.createRoom({
     displayName: 'Milan',
-    activeRoles: DEFAULT_ACTIVE_ROLES,
+    activeRoles: cardsForRoles(DEFAULT_ACTIVE_ROLES, botCount + 1),
     config: TWO_ROUND_CONFIG,
     // Playing AND resolving: the trusted-host setup, which is the one a
     // practice table uses, because a neutral board is never dealt a card.

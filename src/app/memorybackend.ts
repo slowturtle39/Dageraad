@@ -381,6 +381,7 @@ class MemoryBackend implements Backend {
     // Dorpsgek's rotation (§13).
     r.view.seating = seatingForNextRound(r.view.members, r.view.seating, nextRound);
     assertUniqueFriendProfiles(r.view.members, r.view.seating);
+    assertExactRoleCount(r.view.activeRoles, r.view.seating.length);
     r.view.round = nextRound;
 
     // Clear last round's table so nothing bleeds across.
@@ -1026,11 +1027,20 @@ function assertUniqueFriendProfiles(members: SessionMember[], seating: string[])
 function assertFriendProfileAvailable(
   members: SessionMember[], seating: string[], ownUid: string, friendId: string,
 ): void {
-  if (!friendId) throw new Error('Kies een geldig profiel.');
+  // Empty means "guest for tonight": it deliberately carries no all-time
+  // identity and therefore cannot collide with another guest.
+  if (!friendId) return;
   const seated = new Set(seating);
   const duplicate = members.find((member) => member.uid !== ownUid
     && seated.has(member.uid) && member.leftAtRound === null && member.friendId === friendId);
   if (duplicate) throw duplicateFriendProfileError(duplicate.friendName);
+}
+
+function assertExactRoleCount(roles: RoleId[], seatCount: number): void {
+  const needed = seatCount + 3;
+  if (roles.length !== needed) {
+    throw new Error(`${seatCount} spelers hebben precies ${needed} kaarten nodig; er zijn er ${roles.length}.`);
+  }
 }
 
 function duplicateFriendProfileError(name?: string): Error {
