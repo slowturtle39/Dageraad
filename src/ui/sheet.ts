@@ -132,6 +132,8 @@ export function describeReveal(
         : t(lang, 'reveal.noLegalTarget');
     case 'no-action':
       return t(lang, 'reveal.nothing');
+    case 'did-not-rotate':
+      return t(lang, 'reveal.didNotRotate');
     default:
       return '';
   }

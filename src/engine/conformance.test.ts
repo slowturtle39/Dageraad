@@ -59,7 +59,7 @@ describe('written house-rule conformance', () => {
     expect(copiedMedium.privateInfo[0]).toContainEqual(
       expect.objectContaining({ kind: 'saw-card', slot: 2, role: 'ziener' }),
     );
-    expect(copiedMedium.state.assumedRole[0]).toBe('medium');
+    expect(roleAt(copiedMedium.state, 0)).toBe('medium');
 
     const noChain = night(
       state(['dubbelganger', 'dubbelganger', 'ziener'], ['jager', 'jager', 'jager']),
@@ -112,6 +112,28 @@ describe('written house-rule conformance', () => {
     ]);
     expect(day.teamsWon.wolf).toBe(true);
     expect(day.seatWon[0]).toBe(true);
+  });
+
+  it('the copied Doppelganger role follows its physical card through a later rotation', () => {
+    const result = night(
+      state(
+        ['dorpsgek', 'droomwolf', 'dubbelganger', 'heks', 'mystiekewolf'],
+        ['leerlingziener', 'medium', 'dorpeling'],
+      ),
+      ['dubbelganger', 'dorpsgek'],
+      answers({
+        '2:doppel-view': seat(0),
+        '2:dorpsgek': { kind: 'dorpsgek', direction: 'none' },
+        '0:dorpsgek': { kind: 'dorpsgek', direction: 'left' },
+      }),
+    );
+
+    expect(result.privateInfo[2]).toContainEqual(
+      expect.objectContaining({ kind: 'did-not-rotate' }),
+    );
+    expect(roleAt(result.state, 2)).toBe('heks');
+    expect(roleAt(result.state, 1)).toBe('dorpsgek');
+    expect(finalRoleOf(result.state, 2)).toBe('heks');
   });
 
   it('house rule Heks: she can see and exchange only one of the three centre cards, including the Looier branch', () => {

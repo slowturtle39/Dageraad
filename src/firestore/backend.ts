@@ -212,6 +212,19 @@ export class FirestoreBackend implements Backend {
     });
   }
 
+  async setFriendProfile(roomId: string, friend: FriendLabel): Promise<void> {
+    const room = await this.room(roomId);
+    if (room.phase !== 'lobby') throw new Error('profiles are frozen once the game starts');
+    const members = await this.readMembers(roomId);
+    const own = members.find((member) => member.uid === this.uid);
+    if (!own || own.leftAtRound !== null) throw new Error('active member only');
+    assertFriendProfileAvailable(members, room.seating, this.uid, friend.friendId);
+    await updateDoc(doc(this.db, paths.member(roomId, this.uid)), {
+      friendId: friend.friendId,
+      friendName: friend.friendName,
+    });
+  }
+
   /**
    * Leave without ending the evening for everybody else.
    *
@@ -1082,13 +1095,29 @@ function validateRoleSelection(roles: RoleId[]): void {
 
 function assertUniqueFriendProfiles(members: SessionMember[], seating: string[]): void {
   const byUid = new Map(members.map((member) => [member.uid, member]));
-  const seen = new Set<string>();
+  const seen = new Map<string, SessionMember>();
   for (const uid of seating) {
-    const friendId = byUid.get(uid)?.friendId;
+    const member = byUid.get(uid);
+    const friendId = member?.friendId;
     if (!friendId) continue;
-    if (seen.has(friendId)) throw new Error('Iedere speler moet een ander profiel kiezen.');
-    seen.add(friendId);
+    if (seen.has(friendId)) throw duplicateFriendProfileError(member?.friendName);
+    seen.set(friendId, member!);
   }
+}
+
+function assertFriendProfileAvailable(
+  members: SessionMember[], seating: string[], ownUid: string, friendId: string,
+): void {
+  if (!friendId) throw new Error('Kies een geldig profiel.');
+  const seated = new Set(seating);
+  const duplicate = members.find((member) => member.uid !== ownUid
+    && seated.has(member.uid) && member.leftAtRound === null && member.friendId === friendId);
+  if (duplicate) throw duplicateFriendProfileError(duplicate.friendName);
+}
+
+function duplicateFriendProfileError(name?: string): Error {
+  const profile = name ? ` \u201c${name}\u201d` : '';
+  return new Error(`Profiel${profile} is al door een andere speler gekozen. Kies via Menu > Profielen ieder je eigen naam.`);
 }
 
 /** Names for AI players. Recognisably not people, and short enough to fit. */

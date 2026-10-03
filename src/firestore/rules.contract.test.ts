@@ -105,9 +105,12 @@ describe('the rules refuse to let it be re-added from outside', () => {
     // referee's create of an AI player's membership. Counted rather than
     // hard-coded so a NEW write rule without an allowlist fails here.
     const writes = members.match(/allow (create|update)[^:]*:/g) ?? [];
-    expect(allowlists).toHaveLength(writes.length);
-    expect(allowlists.length).toBeGreaterThanOrEqual(3);
-    for (const list of allowlists) {
+    // The profile correction also has an affectedKeys.hasOnly; only document
+    // allowlists contain uid, joinedAtRound and leftAtRound.
+    const documentAllowlists = allowlists.filter((list) => list.includes("'uid'"));
+    expect(documentAllowlists).toHaveLength(writes.length);
+    expect(documentAllowlists.length).toBeGreaterThanOrEqual(3);
+    for (const list of documentAllowlists) {
       expect(list).toContain("'uid'");
       expect(list).toContain("'joinedAtRound'");
       expect(list).toContain("'leftAtRound'");

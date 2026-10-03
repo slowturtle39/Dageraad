@@ -260,6 +260,9 @@ export interface Backend {
    */
   joinRoom(roomId: string, displayName: string, friend?: FriendLabel): Promise<void>;
 
+  /** Correct this device's all-time identity while the table is still in setup. */
+  setFriendProfile(roomId: string, friend: FriendLabel): Promise<void>;
+
   /**
    * Leave the session without ending it for everybody else.
    *

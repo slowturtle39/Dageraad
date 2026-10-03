@@ -79,6 +79,7 @@ const nl: Dict = {
   'reveal.action.shiftedRight': '{n} kaarten zijn naar rechts geschoven.',
   'reveal.action.tookLooier': 'Je zag de Looier bij {who} en hebt die kaart verplicht overgenomen.',
   'reveal.nothing': 'Je hebt deze nacht niets gedaan.',
+  'reveal.didNotRotate': 'Je hebt gekozen om niet te draaien.',
   'reveal.staleWarning':
     'Let op: dit was zo bij jouw beurt. Kaarten kunnen daarna verschoven zijn.',
 
@@ -357,6 +358,7 @@ const en: Dict = {
   'reveal.action.shiftedRight': '{n} cards shifted to the right.',
   'reveal.action.tookLooier': 'You saw the Tanner with {who} and were forced to take that card.',
   'reveal.nothing': 'You did nothing this night.',
+  'reveal.didNotRotate': 'You chose not to rotate.',
   'reveal.staleWarning':
     'Note: this was true at your turn. Cards may have moved since.',
 

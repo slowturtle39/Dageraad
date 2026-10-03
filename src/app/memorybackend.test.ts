@@ -249,7 +249,46 @@ describe('starting a game', () => {
     await world.device('phone-a').joinRoom(roomId, 'Milan', friend);
     await world.device('phone-b').joinRoom(roomId, 'Milan reserve', friend);
 
-    await expect(tablet.startGame(roomId, 1)).rejects.toThrow(/ander profiel/);
+    await expect(tablet.startGame(roomId, 1)).rejects.toThrow(/al door een andere speler/);
+  });
+
+  it('lets a player repair a duplicate profile from the lobby', async () => {
+    const world = new MemoryWorld(seededRandom(18));
+    const tablet = world.device('tablet');
+    const roomId = await tablet.createRoom({
+      displayName: 'Tafel', activeRoles: DEFAULT_ACTIVE_ROLES,
+      config: TWO_ROUND_CONFIG, playing: false,
+    });
+    const shared = { friendId: 'friend-paul', friendName: 'Paul' };
+    const a = world.device('phone-a');
+    const b = world.device('phone-b');
+    await a.joinRoom(roomId, 'Paul', shared);
+    await b.joinRoom(roomId, 'Ivo', shared);
+
+    await expect(b.setFriendProfile(roomId, {
+      friendId: 'friend-ivo', friendName: 'Ivo',
+    })).resolves.toBeUndefined();
+    const room = await readRoomOnce(b, roomId);
+    expect(room.members.find((member) => member.uid === 'phone-b')).toMatchObject({
+      friendId: 'friend-ivo', friendName: 'Ivo',
+    });
+  });
+
+  it('refuses choosing a profile already used by another seated player', async () => {
+    const world = new MemoryWorld(seededRandom(19));
+    const tablet = world.device('tablet');
+    const roomId = await tablet.createRoom({
+      displayName: 'Tafel', activeRoles: DEFAULT_ACTIVE_ROLES,
+      config: TWO_ROUND_CONFIG, playing: false,
+    });
+    const a = world.device('phone-a');
+    const b = world.device('phone-b');
+    await a.joinRoom(roomId, 'Paul', { friendId: 'friend-paul', friendName: 'Paul' });
+    await b.joinRoom(roomId, 'Ivo', { friendId: 'friend-ivo', friendName: 'Ivo' });
+
+    await expect(b.setFriendProfile(roomId, {
+      friendId: 'friend-paul', friendName: 'Paul',
+    })).rejects.toThrow(/Paul.*al door een andere speler/);
   });
 
   it('lets a latecomer join mid-round and seats them in the NEXT one', async () => {

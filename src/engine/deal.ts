@@ -92,8 +92,13 @@ export const ALPHA_WOLF_CARD_ROLES: readonly RoleId[] = [
   'alphawolf', 'mystiekewolf', 'droomwolf',
 ];
 
-export function alphaWolfCardForSeed(seed: number): RoleId {
-  return seededShuffle(ALPHA_WOLF_CARD_ROLES, seed ^ 0xa17fa17f)[0]!;
+export function alphaWolfCardForSeed(
+  seed: number,
+  available: readonly RoleId[] = ALPHA_WOLF_CARD_ROLES,
+): RoleId {
+  const candidates = available.filter((role) => ALPHA_WOLF_CARD_ROLES.includes(role));
+  if (candidates.length === 0) throw new DealError('Geen wolvenkaart voor de Alfawolfplek.');
+  return seededShuffle(candidates, seed ^ 0xa17fa17f)[0]!;
 }
 
 export function deal(options: DealOptions): DealtGame {
@@ -101,20 +106,28 @@ export function deal(options: DealOptions): DealtGame {
   const fatal = problems.filter((p) => !p.startsWith('Let op'));
   if (fatal.length > 0) throw new DealError(fatal.join(' '));
 
-  const shuffled = seededShuffle(options.cards, options.seed);
+  // Physical setup order matters. One of the selected named wolf cards is
+  // reserved face-down on the Alpha Wolf spot BEFORE dealing. It is the same
+  // card, not a freshly invented duplicate. A Villager fills the ordinary
+  // deck back to players + three centre cards.
+  const hasAlphaWolf = options.cards.includes('alphawolf');
+  const cardsToDeal = [...options.cards];
+  let alphaWolfCardRole: RoleId | undefined;
+  if (hasAlphaWolf) {
+    alphaWolfCardRole = alphaWolfCardForSeed(options.seed, cardsToDeal);
+    cardsToDeal.splice(cardsToDeal.indexOf(alphaWolfCardRole), 1);
+    cardsToDeal.push('dorpeling');
+  }
+
+  const shuffled = seededShuffle(cardsToDeal, options.seed);
   const seatRoles = shuffled.slice(0, options.seatCount);
   const centerRoles = shuffled.slice(options.seatCount);
-
-  // The Alpha Wolf's card exists only when the Alpha Wolf herself is in the
-  // game — she is the only role that can touch it, so otherwise it would sit
-  // there unreachable and inflate the centre.
-  const hasAlphaWolf = options.cards.includes('alphawolf');
 
   const input: DealInput = {
     seatCount: options.seatCount,
     seatRoles,
     centerRoles,
-    ...(hasAlphaWolf ? { alphaWolfCardRole: alphaWolfCardForSeed(options.seed) } : {}),
+    ...(alphaWolfCardRole ? { alphaWolfCardRole } : {}),
   };
 
   return {

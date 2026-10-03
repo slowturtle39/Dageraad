@@ -1710,26 +1710,34 @@ function friendPicker(onPicked?: () => void): HTMLElement {
       local.friendTyped = value;
     },
     onPick: (profile) => {
-      local.friend = profile;
-      // Remembered so the common case is one tap next time. Losing it costs
-      // nothing: the list is shared, so picking the same name gets the SAME
-      // profile — which is the whole difference from keying off the uid.
-      rememberFriendId(profile.id);
-      if (!local.displayName) local.displayName = profile.displayName;
-      onPicked?.();
-      render();
+      void attempt(() => selectFriend(profile, onPicked));
     },
     onCreate: (displayName) => {
       void attempt(async () => {
         const profile = await backend.createFriend(displayName);
-        local.friend = profile;
         local.friendTyped = '';
-        rememberFriendId(profile.id);
-        if (!local.displayName) local.displayName = profile.displayName;
-        onPicked?.();
+        await selectFriend(profile, onPicked);
       });
     },
   });
+}
+
+async function selectFriend(profile: FriendProfile, onPicked?: () => void): Promise<void> {
+  const state = controller.current();
+  const isMember = state.room?.members.some((member) => member.uid === state.uid) === true;
+  if (state.roomId && isMember) {
+    await backend.setFriendProfile(state.roomId, {
+      friendId: profile.id,
+      friendName: profile.displayName,
+    });
+  }
+  local.friend = profile;
+  // Remembered so the common case is one tap next time. Losing it costs
+  // nothing: the list is shared, so picking the same name gets the SAME
+  // profile — which is the whole difference from keying off the uid.
+  rememberFriendId(profile.id);
+  if (!local.displayName) local.displayName = profile.displayName;
+  onPicked?.();
 }
 
 /**

@@ -182,7 +182,9 @@ describe('Dubbelganger copying the Dorpsgek', () => {
     // Second rotation (real Dorpsgek):      exempt {1}; ring [0,2,3] rotates.
     expect(roleAt(res.state, 0)).toBe('dorpeling');
     expect(roleAt(res.state, 1)).toBe('looier');
-    expect(roleAt(res.state, 2)).toBe('dubbelganger');
+    // The copied identity belongs to the physical Doppelganger card. That
+    // card has become a Dorpsgek and carries that role through both rotations.
+    expect(roleAt(res.state, 2)).toBe('dorpsgek');
     expect(roleAt(res.state, 3)).toBe('dorpsgek');
   });
 

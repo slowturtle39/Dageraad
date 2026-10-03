@@ -309,7 +309,7 @@ const dorpsgek: Applier = function* (ctx) {
     kind: 'dorpsgek', variant: ctx.config.dorpsgekVariant,
   });
   if (choice.kind !== 'dorpsgek' || choice.direction === 'none') {
-    ctx.info(ctx.actor, { kind: 'no-action', step: ctx.step });
+    ctx.info(ctx.actor, { kind: 'did-not-rotate', step: ctx.step });
     return;
   }
   const exempt = new Set<SeatIndex>([ctx.actor]);
@@ -464,10 +464,12 @@ const dubbelganger: Applier = function* (ctx) {
 
   ctx.info(ctx.actor, { kind: 'copied-role', step: ctx.step, fromSeat: seat, role: copied });
 
-  // A Doppelganger does not merely borrow the night action: they become the
-  // copied role for team and win checks. Card movement later in the night does
-  // not undo that identity. Copying another Doppelganger is the sole no-op.
-  if (copied !== 'dubbelganger') ctx.state.assumedRole[ctx.actor] = copied;
+  // The physical Doppelganger card becomes the copied role. Keeping this on
+  // the CARD rather than the seat is load-bearing: a later Witch swap or
+  // Village Idiot rotation must move the copied identity with that card.
+  if (copied !== 'dubbelganger') {
+    ctx.state.cardRole[cardAt(ctx.state, ctx.actor)] = copied;
+  }
 
   // No chaining, and nothing to do for roles that never wake.
   if (copied === 'dubbelganger' || !roleDef(copied).hasNightAction) return;

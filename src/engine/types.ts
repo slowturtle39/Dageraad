@@ -84,7 +84,10 @@ export interface NightState {
   centerCount: number;
   /** slot -> card currently physically in that slot */
   slots: CardId[];
-  /** card -> the role printed on it (immutable for the card's lifetime) */
+  /**
+   * card -> its effective role. Normally printed and immutable; the physical
+   * Doppelganger card changes into the copied role and carries it when moved.
+   */
   cardRole: Record<CardId, RoleId>;
   /**
    * seat -> role dealt at the start of the night. NEVER changes. Per §6.0 this
@@ -155,6 +158,7 @@ export type PrivateInfo =
       detail?: string;
     }
   | { kind: 'action-blocked'; step: number; reason: 'shielded' | 'no-legal-target' }
+  | { kind: 'did-not-rotate'; step: number }
   | { kind: 'no-action'; step: number };
 
 /** Structured, localizable confirmation of a blind or completed action. */

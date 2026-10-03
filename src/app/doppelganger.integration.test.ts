@@ -67,6 +67,10 @@ async function dealUntilDoppelganger(
     const seat = room.seating.indexOf(uid) as SeatIndex;
     const state = await me.refereeNightState(roomId);
     if (state?.originalRole[seat] === 'dubbelganger') return seat;
+    // Each seed is a fresh candidate deal. Put this test-only table back in
+    // setup before trying the next one; production never redeals a live round.
+    await me.refereeStore(roomId).setPhase('results');
+    await me.prepareNextRound(roomId);
   }
   throw new Error('never dealt the Dubbelganger — has it left the role list?');
 }

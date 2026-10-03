@@ -60,6 +60,21 @@ describe('the deal', () => {
     }
   });
 
+  it('reserves an existing physical wolf card instead of inventing a duplicate', () => {
+    const selected = cardsForRoles(['alphawolf', 'mystiekewolf', 'droomwolf'], 5);
+    for (let seed = 1; seed <= 40; seed++) {
+      const game = deal({ cards: selected, seatCount: 5, seed });
+      const reserved = game.state.cardRole[game.state.slots[game.state.alphaWolfSlot!]!]!;
+      const allNormal = [...game.seatRoles, ...game.centerRoles];
+      expect(allNormal.filter((role) => role === reserved)).toHaveLength(
+        selected.filter((role) => role === reserved).length - 1,
+      );
+      expect(allNormal.filter((role) => role === 'dorpeling')).toHaveLength(
+        selected.filter((role) => role === 'dorpeling').length + 1,
+      );
+    }
+  });
+
   it('is reproducible from its seed, so a disputed night can be replayed', () => {
     const cards = cardsForRoles(DEFAULT_ACTIVE_ROLES, 5);
     const a = deal({ cards, seatCount: 5, seed: 12345 });
@@ -80,7 +95,9 @@ describe('the deal', () => {
   it('loses no cards and invents none', () => {
     const cards = cardsForRoles(DEFAULT_ACTIVE_ROLES, 6);
     const g = deal({ cards, seatCount: 6, seed: 99 });
-    expect([...g.seatRoles, ...g.centerRoles].sort()).toEqual([...cards].sort());
+    const reserved = g.state.cardRole[g.state.slots[g.state.alphaWolfSlot!]!]!;
+    expect([...g.seatRoles, ...g.centerRoles, reserved].sort())
+      .toEqual([...cards, 'dorpeling' as RoleId].sort());
   });
 
   it('deals every card to a real slot', () => {

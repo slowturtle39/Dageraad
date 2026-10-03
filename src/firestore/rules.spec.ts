@@ -802,6 +802,27 @@ describe('going home, and coming back', () => {
       }));
     }
   });
+
+  it('lets a player correct only their own profile while still in the lobby', async () => {
+    await seed('lobby', 0, 0);
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'rooms', ROOM, 'members', ALICE), {
+      friendId: 'friend-alice', friendName: 'Alice',
+    }));
+  });
+
+  it('does not let another player correct your profile', async () => {
+    await seed('lobby', 0, 0);
+    await assertFails(updateDoc(doc(as(BOB), 'rooms', ROOM, 'members', ALICE), {
+      friendId: 'friend-alice', friendName: 'Alice',
+    }));
+  });
+
+  it('freezes profile identity once the round starts', async () => {
+    await seed('night', 0, 1);
+    await assertFails(updateDoc(doc(as(ALICE), 'rooms', ROOM, 'members', ALICE), {
+      friendId: 'friend-alice', friendName: 'Alice',
+    }));
+  });
 });
 
 describe('round records are the scoreboard, so they are append-only', () => {

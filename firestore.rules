@@ -509,7 +509,27 @@ service cloud.firestore {
           && request.resource.data.joinedAtRound == currentRound(roomId) + 1
           && request.resource.data.leftAtRound == null;
 
-        // The only legitimate update is going home: null -> a round number,
+        // A player may correct their own all-time label while the table is
+        // still in setup. The label grants no game authority, but freezing it
+        // once play starts keeps a completed evening's identity stable.
+        allow update: if signedIn()
+          && memberUid == uid()
+          && inPhase(roomId, 'lobby')
+          && request.resource.data.keys().hasOnly(
+               ['uid', 'joinedAtRound', 'leftAtRound', 'friendId', 'friendName']
+             )
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+               ['friendId', 'friendName']
+             )
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.joinedAtRound == resource.data.joinedAtRound
+          && request.resource.data.leftAtRound == resource.data.leftAtRound
+          && request.resource.data.friendId is string
+          && request.resource.data.friendId.size() > 0
+          && request.resource.data.friendName is string
+          && request.resource.data.friendName.size() > 0;
+
+        // The other legitimate update is going home: null -> a round number,
         // once, and never a round already in the past. Backdating a departure
         // would erase rounds you actually played, and `joinedAtRound` must
         // never move at all — it is the seed.
