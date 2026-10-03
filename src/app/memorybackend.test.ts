@@ -250,7 +250,7 @@ describe('starting a game', () => {
     await world.device('phone-a').joinRoom(roomId, 'Milan', friend);
     await world.device('phone-b').joinRoom(roomId, 'Milan reserve', friend);
 
-    await expect(tablet.startGame(roomId, 1)).rejects.toThrow(/al door een andere speler/);
+    await expect(tablet.startGame(roomId, 1)).rejects.toThrow(/wordt al gebruikt/);
   });
 
   it('lets a player repair a duplicate profile from the lobby', async () => {
@@ -289,7 +289,7 @@ describe('starting a game', () => {
 
     await expect(b.setFriendProfile(roomId, {
       friendId: 'friend-paul', friendName: 'Paul',
-    })).rejects.toThrow(/Paul.*al door een andere speler/);
+    })).rejects.toThrow(/Paul.*wordt al gebruikt.*Eenmalig spelen/);
   });
 
   it('lets a lobby player become a guest without an all-time profile', async () => {

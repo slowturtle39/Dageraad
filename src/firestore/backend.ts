@@ -1125,7 +1125,7 @@ function assertExactRoleCount(roles: RoleId[], seatCount: number): void {
 
 function duplicateFriendProfileError(name?: string): Error {
   const profile = name ? ` \u201c${name}\u201d` : '';
-  return new Error(`Profiel${profile} is al door een andere speler gekozen. Kies via Menu > Profielen ieder je eigen naam.`);
+  return new Error(`Profiel${profile} wordt al gebruikt op een ander apparaat in deze kamer. Verwijder onder Spelers beheren het oude apparaat, of kies via Menu > Profielen voor Eenmalig spelen (geen statistieken).`);
 }
 
 /** Names for AI players. Recognisably not people, and short enough to fit. */

@@ -102,8 +102,8 @@ describe('picking who you are', () => {
     const el = picker({ onGuest: () => { guest = true; } });
     el.querySelector<HTMLButtonElement>('.friends__guest')!.click();
     expect(guest).toBe(true);
-    expect(el.textContent).toContain('Gast voor vanavond');
-    expect(el.textContent).toContain('niet in de eeuwige stand');
+    expect(el.textContent).toContain('Eenmalig spelen (geen statistieken)');
+    expect(el.textContent).toContain('oud apparaat');
   });
 
   it('explains why it is asking, so it does not read as a signup', () => {
