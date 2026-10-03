@@ -454,12 +454,10 @@ const actions: AppActions = {
   onCodeChange(code) {
     local.code = code;
     local.error = null;
-    render();
   },
 
   onNameChange(name) {
     local.displayName = name;
-    render();
   },
 
   async onJoin(code, displayName) {

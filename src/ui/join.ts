@@ -58,14 +58,6 @@ export function renderJoin(view: JoinView): HTMLElement {
   codeField.autocapitalize = 'characters';
   codeField.autocomplete = 'off';
   codeField.spellcheck = false;
-  codeField.addEventListener('input', () => {
-    // Normalise on the way in rather than on submit, so the field always shows
-    // exactly what will be sent. Someone who typed a lower-case o should see
-    // it become an O, not discover at the end that it was never allowed.
-    const cleaned = normaliseRoomCode(codeField.value);
-    codeField.value = cleaned;
-    view.onCodeChange?.(cleaned);
-  });
   el.append(codeField);
 
   const nameField = document.createElement('input');
@@ -75,9 +67,9 @@ export function renderJoin(view: JoinView): HTMLElement {
   nameField.maxLength = 24;
   nameField.placeholder = t(lang, 'join.namePlaceholder');
   nameField.setAttribute('aria-label', t(lang, 'join.name'));
-  nameField.addEventListener('input', () => view.onNameChange?.(nameField.value));
   el.append(nameField);
 
+  let errorNode: HTMLParagraphElement | null = null;
   if (view.error) {
     const err = document.createElement('p');
     err.className = 'join__error';
@@ -85,6 +77,7 @@ export function renderJoin(view: JoinView): HTMLElement {
     // message some people never receive.
     err.setAttribute('role', 'alert');
     err.textContent = view.error;
+    errorNode = err;
     el.append(err);
   }
 
@@ -92,9 +85,29 @@ export function renderJoin(view: JoinView): HTMLElement {
   go.type = 'button';
   go.className = 'btn btn--primary';
   go.textContent = view.busy ? t(lang, 'join.joining') : t(lang, 'join.join');
-  go.disabled = view.busy === true || !joinIsReady(view.code, view.displayName);
+  const syncReady = () => {
+    go.disabled = view.busy === true || !joinIsReady(codeField.value, nameField.value);
+  };
+  syncReady();
+  codeField.addEventListener('input', () => {
+    // Normalise on the way in rather than on submit, so the field always shows
+    // exactly what will be sent. Someone who typed a lower-case o should see
+    // it become an O, not discover at the end that it was never allowed.
+    const cleaned = normaliseRoomCode(codeField.value);
+    codeField.value = cleaned;
+    errorNode?.remove();
+    errorNode = null;
+    view.onCodeChange?.(cleaned);
+    syncReady();
+  });
+  nameField.addEventListener('input', () => {
+    errorNode?.remove();
+    errorNode = null;
+    view.onNameChange?.(nameField.value);
+    syncReady();
+  });
   go.addEventListener('click', () =>
-    view.onJoin?.(normaliseRoomCode(view.code), view.displayName.trim()));
+    view.onJoin?.(normaliseRoomCode(codeField.value), nameField.value.trim()));
   el.append(go);
 
   const back = document.createElement('button');

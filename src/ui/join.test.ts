@@ -14,6 +14,8 @@ const el = (over: Partial<Parameters<typeof renderJoin>[0]> = {}) =>
 
 const codeField = (root: HTMLElement) =>
   root.querySelector<HTMLInputElement>('.join__code')!;
+const nameField = (root: HTMLElement) =>
+  root.querySelector<HTMLInputElement>('.join__name')!;
 const button = (root: HTMLElement) =>
   root.querySelector<HTMLButtonElement>('.btn--primary')!;
 
@@ -84,6 +86,25 @@ describe('when the join button means something', () => {
     });
     button(root).click();
     expect(seen).toEqual(['ABCDE', 'Milan']);
+  });
+
+  it('accepts a whole name without replacing the field after every letter', () => {
+    let seen: [string, string] | null = null;
+    const root = el({
+      code: 'ABCDE',
+      onJoin: (code, name) => { seen = [code, name]; },
+    });
+    document.body.append(root);
+    const field = nameField(root);
+    field.focus();
+    for (const partial of ['J', 'Jo', 'Jor', 'Jori', 'Joris']) type(field, partial);
+
+    expect(field.isConnected).toBe(true);
+    expect(document.activeElement).toBe(field);
+    expect(button(root).disabled).toBe(false);
+    button(root).click();
+    expect(seen).toEqual(['ABCDE', 'Joris']);
+    root.remove();
   });
 });
 
